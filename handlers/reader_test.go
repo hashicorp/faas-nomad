@@ -26,6 +26,19 @@ func setupReader() (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request)
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte("")))
 }
 
+func createAllocation(id string, count int) *api.Allocation {
+	return &api.Allocation{
+		ID: id,
+		Job: &api.Job{TaskGroups: []*api.TaskGroup{&api.TaskGroup{
+			Count: &count,
+			Tasks: []*api.Task{&api.Task{
+				Name:   "Task" + id,
+				Config: map[string]interface{}{"image": "docker"},
+			}},
+		}}},
+	}
+}
+
 func TestHandlerReturns500OnClientListError(t *testing.T) {
 	handler, rw, r := setupReader()
 	mockAllocations.On("List", mock.Anything).Return(make([]*api.AllocationListStub, 0), nil, fmt.Errorf("BOOM"))
@@ -38,10 +51,10 @@ func TestHandlerReturns500OnClientListError(t *testing.T) {
 func TestHandlerReturns500OnClientInfoError(t *testing.T) {
 	handler, rw, r := setupReader()
 
-	a1 := &api.Allocation{ID: "1234", Name: "Test1234"}
+	a1 := createAllocation("1234", 1)
 
 	d := make([]*api.AllocationListStub, 0)
-	d = append(d, &api.AllocationListStub{ID: a1.ID})
+	d = append(d, &api.AllocationListStub{ID: a1.ID, ClientStatus: "running"})
 
 	mockAllocations.On("List", mock.Anything).Return(d, nil, nil)
 	mockAllocations.On("Info", a1.ID, mock.Anything).Return(nil, nil, fmt.Errorf("BOOM"))
@@ -54,20 +67,9 @@ func TestHandlerReturns500OnClientInfoError(t *testing.T) {
 func TestHandlerReturnsDeployments(t *testing.T) {
 	handler, rw, r := setupReader()
 
-	a1Count := 1
-	a1 := &api.Allocation{
-		ID: "1234",
-		Job: &api.Job{TaskGroups: []*api.TaskGroup{&api.TaskGroup{
-			Count: &a1Count,
-			Tasks: []*api.Task{&api.Task{
-				Name:   "Test1234",
-				Config: map[string]interface{}{"image": "docker"},
-			}},
-		}}},
-	}
-
+	a1 := createAllocation("1234", 1)
 	d := make([]*api.AllocationListStub, 0)
-	d = append(d, &api.AllocationListStub{ID: a1.ID})
+	d = append(d, &api.AllocationListStub{ID: a1.ID, ClientStatus: "running"})
 
 	mockAllocations.On("List", mock.Anything).Return(d, nil, nil)
 	mockAllocations.On("Info", a1.ID, mock.Anything).Return(a1, nil, nil)
@@ -85,4 +87,31 @@ func TestHandlerReturnsDeployments(t *testing.T) {
 	assert.Equal(t, a1.Job.TaskGroups[0].Tasks[0].Name, funcs[0].Name)
 	assert.Equal(t, a1.Job.TaskGroups[0].Tasks[0].Config["image"].(string), funcs[0].Image)
 	assert.Equal(t, uint64(*a1.Job.TaskGroups[0].Count), funcs[0].Replicas)
+}
+
+func TestHandlerReturnsRunningDeployments(t *testing.T) {
+	handler, rw, r := setupReader()
+
+	a1 := createAllocation("1234", 1)
+	a2 := createAllocation("4567", 1)
+
+	d := make([]*api.AllocationListStub, 0)
+	d = append(d, &api.AllocationListStub{ID: a1.ID, ClientStatus: "stopped"})
+	d = append(d, &api.AllocationListStub{ID: a2.ID, ClientStatus: "running"})
+
+	mockAllocations.On("List", mock.Anything).Return(d, nil, nil)
+	mockAllocations.On("Info", a1.ID, mock.Anything).Return(a1, nil, nil)
+	mockAllocations.On("Info", a2.ID, mock.Anything).Return(a2, nil, nil)
+
+	handler(rw, r)
+
+	body, err := ioutil.ReadAll(rw.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	funcs := make([]requests.Function, 0)
+	json.Unmarshal(body, &funcs)
+
+	assert.Equal(t, 1, len(funcs))
 }

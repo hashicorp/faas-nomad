@@ -27,19 +27,23 @@ func MakeReader(allocs nomad.Allocations) http.HandlerFunc {
 
 		functions := make([]requests.Function, 0)
 		for _, a := range allocations {
-			allocation, _, err := allocs.Info(a.ID, nil)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(err.Error()))
-				return
+
+			if a.ClientStatus == "running" {
+				allocation, _, err := allocs.Info(a.ID, nil)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte(err.Error()))
+					return
+				}
+
+				functions = append(functions, requests.Function{
+					Name:            allocation.Job.TaskGroups[0].Tasks[0].Name,
+					Image:           allocation.Job.TaskGroups[0].Tasks[0].Config["image"].(string),
+					Replicas:        uint64(*allocation.Job.TaskGroups[0].Count),
+					InvocationCount: 0,
+				})
 			}
 
-			functions = append(functions, requests.Function{
-				Name:            allocation.Job.TaskGroups[0].Tasks[0].Name,
-				Image:           allocation.Job.TaskGroups[0].Tasks[0].Config["image"].(string),
-				Replicas:        uint64(*allocation.Job.TaskGroups[0].Count),
-				InvocationCount: 0,
-			})
 		}
 
 		functionBytes, _ := json.Marshal(functions)

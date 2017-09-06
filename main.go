@@ -23,11 +23,11 @@ func main() {
 
 	handlers := &types.FaaSHandlers{
 		FunctionReader: handlers.MakeReader(client.Allocations()),
-		DeployHandler:  handlers.MakeReader(client.Allocations()),
-		DeleteHandler:  handlers.MakeReader(client.Allocations()),
-		ReplicaReader:  handlers.MakeReader(client.Allocations()),
-		FunctionProxy:  handlers.MakeReader(client.Allocations()),
-		ReplicaUpdater: handlers.MakeReader(client.Allocations()),
+		DeployHandler:  handlers.MakeNull(),
+		DeleteHandler:  handlers.MakeNull(),
+		ReplicaReader:  handlers.MakeNull(),
+		FunctionProxy:  handlers.MakeNull(),
+		ReplicaUpdater: handlers.MakeNull(),
 	}
 	config := &types.FaaSConfig{}
 
