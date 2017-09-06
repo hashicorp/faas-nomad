@@ -1,5 +1,8 @@
 VERSION=0.1
 
+test:
+	go test -v -race $(shell go list ./... | grep -v /vendor/)
+
 build:
 
 build_linux:
