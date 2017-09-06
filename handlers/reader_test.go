@@ -16,19 +16,35 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-var mockDeployments *nomad.MockDeployments
+var mockAllocations *nomad.MockAllocations
 
 func setupReader() (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
-	mockDeployments = &nomad.MockDeployments{}
+	mockAllocations = &nomad.MockAllocations{}
 
-	return MakeReader(mockDeployments),
+	return MakeReader(mockAllocations),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte("")))
 }
 
-func TestHandlerReturns500OnClientError(t *testing.T) {
+func TestHandlerReturns500OnClientListError(t *testing.T) {
 	handler, rw, r := setupReader()
-	mockDeployments.On("List", mock.Anything).Return(make([]*api.Deployment, 0), nil, fmt.Errorf("BOOM"))
+	mockAllocations.On("List", mock.Anything).Return(make([]*api.AllocationListStub, 0), nil, fmt.Errorf("BOOM"))
+
+	handler(rw, r)
+
+	assert.Equal(t, http.StatusInternalServerError, rw.Code)
+}
+
+func TestHandlerReturns500OnClientInfoError(t *testing.T) {
+	handler, rw, r := setupReader()
+
+	a1 := &api.Allocation{ID: "1234", Name: "Test1234"}
+
+	d := make([]*api.AllocationListStub, 0)
+	d = append(d, &api.AllocationListStub{ID: a1.ID})
+
+	mockAllocations.On("List", mock.Anything).Return(d, nil, nil)
+	mockAllocations.On("Info", a1.ID, mock.Anything).Return(nil, nil, fmt.Errorf("BOOM"))
 
 	handler(rw, r)
 
@@ -38,9 +54,21 @@ func TestHandlerReturns500OnClientError(t *testing.T) {
 func TestHandlerReturnsDeployments(t *testing.T) {
 	handler, rw, r := setupReader()
 
-	d := make([]*api.Deployment, 0)
-	d = append(d, &api.Deployment{})
-	mockDeployments.On("List", mock.Anything).Return(d, nil, fmt.Errorf("BOOM"))
+	a1Count := 1
+	a1 := &api.Allocation{
+		ID:   "1234",
+		Name: "Test1234",
+		Job: &api.Job{TaskGroups: []*api.TaskGroup{&api.TaskGroup{
+			Count: &a1Count,
+			Tasks: []*api.Task{&api.Task{Config: map[string]interface{}{"image": "docker"}}},
+		}}},
+	}
+
+	d := make([]*api.AllocationListStub, 0)
+	d = append(d, &api.AllocationListStub{ID: a1.ID})
+
+	mockAllocations.On("List", mock.Anything).Return(d, nil, nil)
+	mockAllocations.On("Info", a1.ID, mock.Anything).Return(a1, nil, nil)
 
 	handler(rw, r)
 
@@ -50,7 +78,9 @@ func TestHandlerReturnsDeployments(t *testing.T) {
 	}
 
 	funcs := make([]requests.Function, 0)
-	json.Unmarshal(body, funcs)
+	json.Unmarshal(body, &funcs)
 
-	assert.True(t, false)
+	assert.Equal(t, a1.Name, funcs[0].Name)
+	assert.Equal(t, a1.Job.TaskGroups[0].Tasks[0].Config["image"].(string), funcs[0].Image)
+	assert.Equal(t, uint64(*a1.Job.TaskGroups[0].Count), funcs[0].Replicas)
 }

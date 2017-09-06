@@ -6,15 +6,20 @@ import (
 	"net/http"
 
 	"github.com/alexellis/faas/gateway/requests"
+	"github.com/hashicorp/nomad/api"
 	"github.com/nicholasjackson/faas-nomad/nomad"
 )
 
 // MakeReader implements the OpenFaaS reader handler
-func MakeReader(client nomad.Deployments) http.HandlerFunc {
+func MakeReader(allocs nomad.Allocations) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("Received request: " + r.URL.RawPath)
 
-		deployments, _, err := client.List(nil)
+		// Not sure if prefix is the right option
+		options := api.QueryOptions{}
+		options.Prefix = "faas_function"
+
+		allocations, _, err := allocs.List(&options)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
@@ -22,9 +27,19 @@ func MakeReader(client nomad.Deployments) http.HandlerFunc {
 		}
 
 		functions := make([]requests.Function, 0)
-		for _, d := range deployments {
+		for _, a := range allocations {
+			allocation, _, err := allocs.Info(a.ID, nil)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error()))
+				return
+			}
+
 			functions = append(functions, requests.Function{
-				Name: d.JobID,
+				Name:            allocation.Name,
+				Image:           allocation.Job.TaskGroups[0].Tasks[0].Config["image"].(string),
+				Replicas:        uint64(*allocation.Job.TaskGroups[0].Count),
+				InvocationCount: 0,
 			})
 		}
 
