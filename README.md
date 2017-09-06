@@ -1,5 +1,7 @@
+[![CircleCI](https://circleci.com/gh/nicholasjackson/faas-nomad.svg?style=svg)](https://circleci.com/gh/nicholasjackson/faas-nomad)
+
 # faas-nomad
-Nomad plugin for OpenFaas
+Nomad plugin for [OpenFaas](https://github.com/alexellis/faas) 
 
 # Running with Docker for Mac
 1. Build the plugin `make build_docker`
