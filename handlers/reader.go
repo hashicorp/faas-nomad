@@ -13,16 +13,15 @@ import (
 // MakeReader implements the OpenFaaS reader handler
 func MakeReader(allocs nomad.Allocations) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Println("Received request: " + r.URL.RawPath)
-
 		// Not sure if prefix is the right option
 		options := api.QueryOptions{}
 		options.Prefix = "faas_function"
 
-		allocations, _, err := allocs.List(&options)
+		allocations, _, err := allocs.List(nil)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
+			log.Println(err)
 			return
 		}
 
@@ -36,7 +35,7 @@ func MakeReader(allocs nomad.Allocations) http.HandlerFunc {
 			}
 
 			functions = append(functions, requests.Function{
-				Name:            allocation.Name,
+				Name:            allocation.Job.TaskGroups[0].Tasks[0].Name,
 				Image:           allocation.Job.TaskGroups[0].Tasks[0].Config["image"].(string),
 				Replicas:        uint64(*allocation.Job.TaskGroups[0].Count),
 				InvocationCount: 0,

@@ -56,11 +56,13 @@ func TestHandlerReturnsDeployments(t *testing.T) {
 
 	a1Count := 1
 	a1 := &api.Allocation{
-		ID:   "1234",
-		Name: "Test1234",
+		ID: "1234",
 		Job: &api.Job{TaskGroups: []*api.TaskGroup{&api.TaskGroup{
 			Count: &a1Count,
-			Tasks: []*api.Task{&api.Task{Config: map[string]interface{}{"image": "docker"}}},
+			Tasks: []*api.Task{&api.Task{
+				Name:   "Test1234",
+				Config: map[string]interface{}{"image": "docker"},
+			}},
 		}}},
 	}
 
@@ -80,7 +82,7 @@ func TestHandlerReturnsDeployments(t *testing.T) {
 	funcs := make([]requests.Function, 0)
 	json.Unmarshal(body, &funcs)
 
-	assert.Equal(t, a1.Name, funcs[0].Name)
+	assert.Equal(t, a1.Job.TaskGroups[0].Tasks[0].Name, funcs[0].Name)
 	assert.Equal(t, a1.Job.TaskGroups[0].Tasks[0].Config["image"].(string), funcs[0].Image)
 	assert.Equal(t, uint64(*a1.Job.TaskGroups[0].Count), funcs[0].Replicas)
 }

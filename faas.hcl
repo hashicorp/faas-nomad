@@ -15,6 +15,11 @@ job "faas-nomadd" {
 
     task "nomadd" {
       driver = "docker"
+      
+      env {
+        NOMAD_REGION = "${NOMAD_REGION}"
+        NOMAD_ADDR = "docker.for.mac.localhost:4646"
+      }
 
       config {
         image = "quay.io/nicholasjackson/faas-nomad:0.1"

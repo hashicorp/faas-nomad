@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	bootstrap "github.com/alexellis/faas-provider"
 	"github.com/alexellis/faas-provider/types"
@@ -10,7 +11,12 @@ import (
 )
 
 func main() {
-	client, err := api.NewClient(api.DefaultConfig())
+	region := os.Getenv("NOMAD_REGION")
+	address := os.Getenv("NOMAD_ADDR")
+
+	c := api.DefaultConfig()
+
+	client, err := api.NewClient(c.ClientConfig(region, address, false))
 	if err != nil {
 		log.Fatal(err)
 	}
