@@ -47,6 +47,22 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 		Driver: "docker",
 		Config: map[string]interface{}{
 			"image": r.Image,
+			"port_map": []map[string]interface{}{
+				map[string]interface{}{"http": 8080},
+			},
+		},
+		Resources: &api.Resources{
+			Networks: []*api.NetworkResource{
+				&api.NetworkResource{
+					DynamicPorts: []api.Port{api.Port{Label: "http"}},
+				},
+			},
+		},
+		Services: []*api.Service{
+			&api.Service{
+				Name:      r.Service,
+				PortLabel: "http",
+			},
 		},
 	}
 

@@ -6,4 +6,5 @@ import "github.com/hashicorp/nomad/api"
 type Job interface {
 	// Register creates a new Nomad job
 	Register(*api.Job, *api.WriteOptions) (*api.JobRegisterResponse, *api.WriteMeta, error)
+	Info(jobID string, q *api.QueryOptions) (*api.Job, *api.QueryMeta, error)
 }

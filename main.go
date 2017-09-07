@@ -26,7 +26,7 @@ func main() {
 		DeployHandler:  handlers.MakeDeploy(client.Jobs()),
 		DeleteHandler:  handlers.MakeNull(),
 		ReplicaReader:  handlers.MakeNull(),
-		FunctionProxy:  handlers.MakeNull(),
+		FunctionProxy:  handlers.MakeProxy(client.Jobs()),
 		ReplicaUpdater: handlers.MakeNull(),
 	}
 	config := &types.FaaSConfig{}

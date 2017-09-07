@@ -30,3 +30,8 @@ func (m *MockJob) Register(job *api.Job, options *api.WriteOptions) (
 	return resp, meta, args.Error(2)
 
 }
+
+// Info returns mock info from the job API
+func (m *MockJob) Info(jobID string, q *api.QueryOptions) (*api.Job, *api.QueryMeta, error) {
+	return nil, nil, nil
+}

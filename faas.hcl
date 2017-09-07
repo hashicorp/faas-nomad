@@ -23,6 +23,7 @@ job "faas-nomadd" {
 
       config {
         image = "quay.io/nicholasjackson/faas-nomad:0.1"
+        
         port_map {
           http = 8080
         }
@@ -50,6 +51,7 @@ job "faas-nomadd" {
 
       config {
         image = "functions/gateway:0.6.1"
+        
         port_map {
           http = 8080
         }
@@ -68,5 +70,4 @@ job "faas-nomadd" {
 
     }
   }
-
 }
