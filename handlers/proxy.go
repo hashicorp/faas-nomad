@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/nicholasjackson/faas-nomad/consul"
 	"github.com/nicholasjackson/faas-nomad/nomad"
 )
 
 // MakeProxy creates a proxy for HTTP web requests which can be routed to a function.
-func MakeProxy(client nomad.Job) http.HandlerFunc {
+func MakeProxy(client nomad.Job, consulClient consul.Catalog) http.HandlerFunc {
 	proxyClient := http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
@@ -49,7 +50,7 @@ func MakeProxy(client nomad.Job) http.HandlerFunc {
 			requestBody, _ := ioutil.ReadAll(r.Body)
 			defer r.Body.Close()
 
-			url := resolveFunction(client, service)
+			url := resolveFunction(consulClient, service)
 			log.Println("trying to call:", url)
 
 			request, _ := http.NewRequest("POST", url, bytes.NewReader(requestBody))
@@ -83,15 +84,18 @@ func MakeProxy(client nomad.Job) http.HandlerFunc {
 	}
 }
 
-func resolveFunction(client nomad.Job, function string) string {
-	job, _, err := client.Info(function, nil)
+func resolveFunction(client consul.Catalog, function string) string {
+	service, _, err := client.Service(function, "", nil)
 	if err != nil {
-		log.Println("Error locating job")
+		log.Println("Error locating service: ", err)
 	}
 
+	//	address := service[0].Address
+
 	return fmt.Sprintf(
-		"http://docker.for.mac.localhost:%v",
-		job.TaskGroups[0].Tasks[0].Config["port_map"].([]interface{})[0].(map[string]interface{})["http"].(float64),
+		"http://%v:%v",
+		"docker.for.mac.localhost",
+		service[0].ServicePort,
 	)
 }
 

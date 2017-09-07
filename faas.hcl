@@ -19,6 +19,7 @@ job "faas-nomadd" {
       env {
         NOMAD_REGION = "${NOMAD_REGION}"
         NOMAD_ADDR = "docker.for.mac.localhost:4646"
+        CONSUL_ADDR = "docker.for.mac.localhost:8500"
       }
 
       config {
