@@ -75,9 +75,7 @@ is an opaque binary blob). The leader then writes the entry to durable storage a
 attempts to replicate to a quorum of followers. Once the log entry is considered
 *committed*, it can be *applied* to a finite state machine. The finite state machine
 is application specific; in Consul's case, we use
-[MemDB](https://github.com/hashicorp/go-memdb) to maintain cluster state. Consul's writes
-block until it is both _committed_ and _applied_. This achieves read after write semantics
-when used with the [consistent](/api/index.html#consistent) mode for queries.
+[BoltDB](https://github.com/boltdb/bolt) to maintain cluster state.
 
 Obviously, it would be undesirable to allow a replicated log to grow in an unbounded
 fashion. Raft provides a mechanism by which the current state is snapshotted and the

@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/consul/agent"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/mitchellh/cli"
 )
 
@@ -41,9 +42,9 @@ func TestOperator_Raft_ListPeers(t *testing.T) {
 	{
 		ui := cli.NewMockUi()
 		c := OperatorRaftListCommand{
-			BaseCommand: BaseCommand{
+			Command: base.Command{
 				UI:    ui,
-				Flags: FlagSetHTTP,
+				Flags: base.FlagSetHTTP,
 			},
 		}
 		args := []string{"-http-addr=" + a.HTTPAddr()}

@@ -5,12 +5,13 @@ import (
 	"strings"
 
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/base"
 )
 
 // KVDeleteCommand is a Command implementation that is used to delete a key or
 // prefix of keys from the key-value store.
 type KVDeleteCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *KVDeleteCommand) Help() string {
@@ -31,13 +32,13 @@ Usage: consul kv delete [options] KEY_OR_PREFIX
   This will delete the keys named "foo", "food", and "foo/bar/zip" if they
   existed.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
 
 func (c *KVDeleteCommand) Run(args []string) int {
-	f := c.BaseCommand.NewFlagSet(c)
+	f := c.Command.NewFlagSet(c)
 	cas := f.Bool("cas", false,
 		"Perform a Check-And-Set operation. Specifying this value also requires "+
 			"the -modify-index flag to be set. The default value is false.")
@@ -47,7 +48,7 @@ func (c *KVDeleteCommand) Run(args []string) int {
 	recurse := f.Bool("recurse", false,
 		"Recursively delete all keys with the path. The default value is false.")
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
@@ -97,7 +98,7 @@ func (c *KVDeleteCommand) Run(args []string) int {
 	}
 
 	// Create and test the HTTP client
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error connecting to Consul agent: %s", err))
 		return 1

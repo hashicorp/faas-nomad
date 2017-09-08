@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/base"
 )
 
 type OperatorAutopilotGetCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *OperatorAutopilotGetCommand) Help() string {
@@ -18,7 +19,7 @@ Usage: consul operator autopilot get-config [options]
 
 Displays the current Autopilot configuration.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
@@ -28,9 +29,9 @@ func (c *OperatorAutopilotGetCommand) Synopsis() string {
 }
 
 func (c *OperatorAutopilotGetCommand) Run(args []string) int {
-	c.BaseCommand.NewFlagSet(c)
+	c.Command.NewFlagSet(c)
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
 		}
@@ -39,7 +40,7 @@ func (c *OperatorAutopilotGetCommand) Run(args []string) int {
 	}
 
 	// Set up a client.
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error initializing client: %s", err))
 		return 1
@@ -47,7 +48,7 @@ func (c *OperatorAutopilotGetCommand) Run(args []string) int {
 
 	// Fetch the current configuration.
 	opts := &api.QueryOptions{
-		AllowStale: c.BaseCommand.HTTPStale(),
+		AllowStale: c.Command.HTTPStale(),
 	}
 	config, err := client.Operator().AutopilotGetConfiguration(opts)
 	if err != nil {
@@ -60,7 +61,6 @@ func (c *OperatorAutopilotGetCommand) Run(args []string) int {
 	c.UI.Output(fmt.Sprintf("ServerStabilizationTime = %v", config.ServerStabilizationTime.String()))
 	c.UI.Output(fmt.Sprintf("RedundancyZoneTag = %q", config.RedundancyZoneTag))
 	c.UI.Output(fmt.Sprintf("DisableUpgradeMigration = %v", config.DisableUpgradeMigration))
-	c.UI.Output(fmt.Sprintf("UpgradeVersionTag = %q", config.UpgradeVersionTag))
 
 	return 0
 }

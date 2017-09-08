@@ -6,12 +6,13 @@ import (
 	"strings"
 
 	consulapi "github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/base"
 )
 
 // EventCommand is a Command implementation that is used to
 // fire new events
 type EventCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *EventCommand) Help() string {
@@ -22,7 +23,7 @@ Usage: consul event [options] [payload]
   a name, but a payload is optional. Events support filtering using
   regular expressions on node name, service, and tag definitions.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
@@ -30,7 +31,7 @@ Usage: consul event [options] [payload]
 func (c *EventCommand) Run(args []string) int {
 	var name, node, service, tag string
 
-	f := c.BaseCommand.NewFlagSet(c)
+	f := c.Command.NewFlagSet(c)
 	f.StringVar(&name, "name", "",
 		"Name of the event.")
 	f.StringVar(&node, "node", "",
@@ -40,7 +41,7 @@ func (c *EventCommand) Run(args []string) int {
 	f.StringVar(&tag, "tag", "",
 		"Regular expression to filter on service tags. Must be used with -service.")
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
@@ -91,7 +92,7 @@ func (c *EventCommand) Run(args []string) int {
 	}
 
 	// Create and test the HTTP client
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error connecting to Consul agent: %s", err))
 		return 1

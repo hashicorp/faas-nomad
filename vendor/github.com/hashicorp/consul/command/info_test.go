@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/consul/agent"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/mitchellh/cli"
 )
 
@@ -20,9 +21,9 @@ func TestInfoCommandRun(t *testing.T) {
 
 	ui := cli.NewMockUi()
 	c := &InfoCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetClientHTTP,
+			Flags: base.FlagSetClientHTTP,
 		},
 	}
 	args := []string{"-http-addr=" + a1.HTTPAddr()}

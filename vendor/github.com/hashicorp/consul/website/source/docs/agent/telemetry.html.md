@@ -22,8 +22,7 @@ getting a better view of what Consul is doing.
 Additionally, if the [`telemetry` configuration options](/docs/agent/options.html#telemetry)
 are provided, the telemetry information will be streamed to a
 [statsite](http://github.com/armon/statsite) or [statsd](http://github.com/etsy/statsd) server where
-it can be aggregated and flushed to Graphite or any other metrics store. This
-information can also be viewed with the [metrics endpoint](/api/agent.html#view-metrics)
+it can be aggregated and flushed to Graphite or any other metrics store.
 
 Below is sample output of a telemetry dump:
 

@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/consul/agent"
 	consulapi "github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/hashicorp/consul/testutil/retry"
 	"github.com/mitchellh/cli"
 )
@@ -15,9 +16,9 @@ import (
 func testExecCommand(t *testing.T) (*cli.MockUi, *ExecCommand) {
 	ui := cli.NewMockUi()
 	return ui, &ExecCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetHTTP,
+			Flags: base.FlagSetHTTP,
 		},
 	}
 }
@@ -62,19 +63,13 @@ func TestExecCommandRun_CrossDC(t *testing.T) {
 
 	// Join over the WAN
 	wanAddr := fmt.Sprintf("%s:%d", a1.Config.BindAddr, a1.Config.Ports.SerfWan)
-	_, err := a2.JoinWAN([]string{wanAddr})
+	n, err := a2.JoinWAN([]string{wanAddr})
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-
-	retry.Run(t, func(r *retry.R) {
-		if got, want := len(a1.WANMembers()), 2; got != want {
-			r.Fatalf("got %d WAN members on a1 want %d", got, want)
-		}
-		if got, want := len(a2.WANMembers()), 2; got != want {
-			r.Fatalf("got %d WAN members on a2 want %d", got, want)
-		}
-	})
+	if n != 1 {
+		t.Fatalf("bad %d", n)
+	}
 
 	ui, c := testExecCommand(t)
 	args := []string{"-http-addr=" + a1.HTTPAddr(), "-wait=500ms", "-datacenter=dc2", "uptime"}

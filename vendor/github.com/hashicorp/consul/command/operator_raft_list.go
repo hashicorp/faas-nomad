@@ -6,12 +6,13 @@ import (
 	"strings"
 
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/hashicorp/serf/serf"
 	"github.com/ryanuber/columnize"
 )
 
 type OperatorRaftListCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *OperatorRaftListCommand) Help() string {
@@ -20,7 +21,7 @@ Usage: consul operator raft list-peers [options]
 
 Displays the current Raft peer configuration.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
@@ -30,9 +31,9 @@ func (c *OperatorRaftListCommand) Synopsis() string {
 }
 
 func (c *OperatorRaftListCommand) Run(args []string) int {
-	c.BaseCommand.NewFlagSet(c)
+	c.Command.NewFlagSet(c)
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
 		}
@@ -41,14 +42,14 @@ func (c *OperatorRaftListCommand) Run(args []string) int {
 	}
 
 	// Set up a client.
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error initializing client: %s", err))
 		return 1
 	}
 
 	// Fetch the current configuration.
-	result, err := raftListPeers(client, c.BaseCommand.HTTPStale())
+	result, err := raftListPeers(client, c.Command.HTTPStale())
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error getting peers: %v", err))
 	}

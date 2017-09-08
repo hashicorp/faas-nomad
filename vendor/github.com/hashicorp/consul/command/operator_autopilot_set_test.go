@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/consul/agent"
-	"github.com/hashicorp/consul/agent/structs"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
+	"github.com/hashicorp/consul/consul/structs"
 	"github.com/mitchellh/cli"
 )
 
@@ -22,9 +23,9 @@ func TestOperator_Autopilot_Set(t *testing.T) {
 
 	ui := cli.NewMockUi()
 	c := OperatorAutopilotSetCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetHTTP,
+			Flags: base.FlagSetHTTP,
 		},
 	}
 	args := []string{

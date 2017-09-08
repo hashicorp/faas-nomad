@@ -50,6 +50,7 @@ Ember.Handlebars.helper('aclName', function(name, id) {
   }
 });
 
+
 Ember.Handlebars.helper('formatRules', function(rules) {
   if (rules === "") {
     return "No rules defined";
@@ -58,11 +59,6 @@ Ember.Handlebars.helper('formatRules', function(rules) {
   }
 });
 
-Ember.Handlebars.helper('limit', function(str, limit) {
-  if (str.length > limit)
-    return str.substring(0, limit) + '...';
-  return str;
-});
 
 // We need to do this because of our global namespace properties. The
 // service.Tags

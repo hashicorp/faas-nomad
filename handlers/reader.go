@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/alexellis/faas/gateway/requests"
+	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
-	"github.com/nicholasjackson/faas-nomad/nomad"
 )
 
 func getFunctions(

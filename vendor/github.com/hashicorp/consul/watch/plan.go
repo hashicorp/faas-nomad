@@ -107,9 +107,6 @@ func (p *Plan) Stop() {
 		return
 	}
 	p.stop = true
-	if p.cancelFunc != nil {
-		p.cancelFunc()
-	}
 	close(p.stopCh)
 }
 
@@ -120,10 +117,4 @@ func (p *Plan) shouldStop() bool {
 	default:
 		return false
 	}
-}
-
-func (p *Plan) IsStopped() bool {
-	p.stopLock.Lock()
-	defer p.stopLock.Unlock()
-	return p.stop
 }

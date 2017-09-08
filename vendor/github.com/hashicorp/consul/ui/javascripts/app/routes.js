@@ -327,7 +327,7 @@ App.NodesShowRoute = App.BaseRoute.extend({
       max = 0;
     }
 
-    // Return a promise hash of the node
+    // Return a promise hash of the node and nodes
     return Ember.RSVP.hash({
       dc: dc.dc,
       token: token,
@@ -339,6 +339,9 @@ App.NodesShowRoute = App.BaseRoute.extend({
         max: parseInt(max * 100) / 100
       },
       node: Ember.$.getJSON(formatUrl(consulHost + '/v1/internal/ui/node/' + params.name, dc.dc, token)).then(function(data) {
+        return App.Node.create(data);
+      }),
+      nodes: Ember.$.getJSON(formatUrl(consulHost + '/v1/internal/ui/node/' + params.name, dc.dc, token)).then(function(data) {
         return App.Node.create(data);
       })
     });
@@ -356,6 +359,12 @@ App.NodesShowRoute = App.BaseRoute.extend({
       controller.set('content', models.node);
       controller.set('sessions', models.sessions);
       controller.set('tomography', models.tomography);
+      //
+      // Since we have 2 column layout, we need to also display the
+      // list of nodes on the left. Hence setting the attribute
+      // {{nodes}} on the controller.
+      //
+      controller.set('nodes', models.nodes);
   }
 });
 
@@ -422,7 +431,7 @@ App.AclsShowRoute = App.BaseRoute.extend({
     var dc = this.modelFor('dc').dc;
     var token = App.get('settings.token');
 
-    // Return a promise hash of the ACLs
+    // Return a promise hash of the node and nodes
     return Ember.RSVP.hash({
       dc: dc,
       acl: Ember.$.getJSON(formatUrl(consulHost + '/v1/acl/info/'+ params.id, dc, token)).then(function(data) {

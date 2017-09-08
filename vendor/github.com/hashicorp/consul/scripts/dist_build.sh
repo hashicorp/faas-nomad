@@ -22,20 +22,24 @@ popd
 # verify that the checked-in content is up to date without spurious diffs of the
 # file mod times.
 pushd pkg
-cat ../agent/bindata_assetfs.go | ../scripts/fixup_times.sh
+cat ../command/agent/bindata_assetfs.go | ../scripts/fixup_times.sh
 popd
 
 # Regenerate the built-in web assets. If there are any diffs after doing this
 # then we know something is up.
 make static-assets
-if ! git diff --quiet agent/bindata_assetfs.go; then
+if ! git diff --quiet command/agent/bindata_assetfs.go; then
    echo "Checked-in web assets are out of date, build aborted"
    exit 1
 fi
 
-# Now we are ready to do a clean build of everything. We no longer distribute the
-# web UI so it's ok that gets blown away as part of this.
+# Now we are ready to do a clean build of everything. The "all" build will blow
+# away our pkg folder so we have to regenerate the ui once more. This is probably
+# for the best since we have meddled with the timestamps.
 rm -rf pkg
 make all
+pushd ui
+make dist
+popd
 
 exit 0

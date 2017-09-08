@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/consul/agent"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/mitchellh/cli"
 )
 
@@ -39,9 +40,9 @@ func TestOperator_Raft_RemovePeer(t *testing.T) {
 	{
 		ui := cli.NewMockUi()
 		c := OperatorRaftRemoveCommand{
-			BaseCommand: BaseCommand{
+			Command: base.Command{
 				UI:    ui,
-				Flags: FlagSetHTTP,
+				Flags: base.FlagSetHTTP,
 			},
 		}
 		args := []string{"-http-addr=" + a.HTTPAddr(), "-address=nope"}
@@ -62,9 +63,9 @@ func TestOperator_Raft_RemovePeer(t *testing.T) {
 	{
 		ui := cli.NewMockUi()
 		c := OperatorRaftRemoveCommand{
-			BaseCommand: BaseCommand{
+			Command: base.Command{
 				UI:    ui,
-				Flags: FlagSetHTTP,
+				Flags: base.FlagSetHTTP,
 			},
 		}
 		args := []string{"-http-addr=" + a.HTTPAddr(), "-id=nope"}

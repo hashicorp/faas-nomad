@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hashicorp/consul/agent"
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/mitchellh/cli"
 )
 
@@ -18,9 +19,9 @@ func TestKVExportCommand_Run(t *testing.T) {
 
 	ui := cli.NewMockUi()
 	c := KVExportCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetHTTP,
+			Flags: base.FlagSetHTTP,
 		},
 	}
 

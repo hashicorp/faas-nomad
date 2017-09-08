@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/consul/command/base"
 	"github.com/hashicorp/serf/coordinate"
 )
 
 // RTTCommand is a Command implementation that allows users to query the
 // estimated round trip time between nodes using network coordinates.
 type RTTCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *RTTCommand) Help() string {
@@ -33,7 +34,7 @@ Usage: consul rtt [options] node1 [node2]
   because they are maintained by independent Serf gossip areas, so they are
   not compatible.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
@@ -41,11 +42,11 @@ Usage: consul rtt [options] node1 [node2]
 func (c *RTTCommand) Run(args []string) int {
 	var wan bool
 
-	f := c.BaseCommand.NewFlagSet(c)
+	f := c.Command.NewFlagSet(c)
 
 	f.BoolVar(&wan, "wan", false, "Use WAN coordinates instead of LAN coordinates.")
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
@@ -59,7 +60,7 @@ func (c *RTTCommand) Run(args []string) int {
 	}
 
 	// Create and test the HTTP client.
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error connecting to Consul agent: %s", err))
 		return 1

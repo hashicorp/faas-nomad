@@ -6,9 +6,9 @@ import (
 
 	bootstrap "github.com/alexellis/faas-provider"
 	"github.com/alexellis/faas-provider/types"
-	consul "github.com/hashicorp/consul/api"
+	"github.com/hashicorp/faas-nomad/consul"
+	"github.com/hashicorp/faas-nomad/handlers"
 	"github.com/hashicorp/nomad/api"
-	"github.com/nicholasjackson/faas-nomad/handlers"
 )
 
 func main() {
@@ -18,24 +18,19 @@ func main() {
 
 	c := api.DefaultConfig()
 
-	client, err := api.NewClient(c.ClientConfig(region, nomadAddr, false))
+	nomadClient, err := api.NewClient(c.ClientConfig(region, nomadAddr, false))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cc := consul.DefaultConfig()
-	cc.Address = consulAddr
-	consulApi, err := consul.NewClient(cc)
-	if err != nil {
-		log.Fatal(err)
-	}
+	r := consul.NewConsulResolver(consulAddr)
 
 	handlers := &types.FaaSHandlers{
-		FunctionReader: handlers.MakeReader(client.Allocations()),
-		DeployHandler:  handlers.MakeDeploy(client.Jobs()),
+		FunctionReader: handlers.MakeReader(nomadClient.Allocations()),
+		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs()),
 		DeleteHandler:  handlers.MakeNull(),
 		ReplicaReader:  handlers.MakeNull(),
-		FunctionProxy:  handlers.MakeProxy(client.Jobs(), consulApi.Catalog()),
+		FunctionProxy:  handlers.MakeProxy(nomadClient.Jobs(), r),
 		ReplicaUpdater: handlers.MakeNull(),
 	}
 	config := &types.FaaSConfig{}

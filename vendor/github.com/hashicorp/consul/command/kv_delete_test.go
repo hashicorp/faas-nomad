@@ -5,17 +5,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/consul/agent"
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/mitchellh/cli"
 )
 
 func testKVDeleteCommand(t *testing.T) (*cli.MockUi, *KVDeleteCommand) {
 	ui := cli.NewMockUi()
 	return ui, &KVDeleteCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetHTTP,
+			Flags: base.FlagSetHTTP,
 		},
 	}
 }

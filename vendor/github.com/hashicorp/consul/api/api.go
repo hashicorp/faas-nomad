@@ -105,26 +105,6 @@ type QueryOptions struct {
 	// relayed back to the sender through N other random nodes. Must be
 	// a value from 0 to 5 (inclusive).
 	RelayFactor uint8
-
-	// ctx is an optional context pass through to the underlying HTTP
-	// request layer. Use Context() and WithContext() to manage this.
-	ctx context.Context
-}
-
-func (o *QueryOptions) Context() context.Context {
-	if o != nil && o.ctx != nil {
-		return o.ctx
-	}
-	return context.Background()
-}
-
-func (o *QueryOptions) WithContext(ctx context.Context) *QueryOptions {
-	o2 := new(QueryOptions)
-	if o != nil {
-		*o2 = *o
-	}
-	o2.ctx = ctx
-	return o2
 }
 
 // WriteOptions are used to parameterize a write
@@ -141,26 +121,6 @@ type WriteOptions struct {
 	// relayed back to the sender through N other random nodes. Must be
 	// a value from 0 to 5 (inclusive).
 	RelayFactor uint8
-
-	// ctx is an optional context pass through to the underlying HTTP
-	// request layer. Use Context() and WithContext() to manage this.
-	ctx context.Context
-}
-
-func (o *WriteOptions) Context() context.Context {
-	if o != nil && o.ctx != nil {
-		return o.ctx
-	}
-	return context.Background()
-}
-
-func (o *WriteOptions) WithContext(ctx context.Context) *WriteOptions {
-	o2 := new(WriteOptions)
-	if o != nil {
-		*o2 = *o
-	}
-	o2.ctx = ctx
-	return o2
 }
 
 // QueryMeta is used to return meta data about a query
@@ -497,7 +457,6 @@ type request struct {
 	body   io.Reader
 	header http.Header
 	obj    interface{}
-	ctx    context.Context
 }
 
 // setQueryOptions is used to annotate the request with
@@ -535,7 +494,6 @@ func (r *request) setQueryOptions(q *QueryOptions) {
 	if q.RelayFactor != 0 {
 		r.params.Set("relay-factor", strconv.Itoa(int(q.RelayFactor)))
 	}
-	r.ctx = q.ctx
 }
 
 // durToMsec converts a duration to a millisecond specified string. If the
@@ -580,7 +538,6 @@ func (r *request) setWriteOptions(q *WriteOptions) {
 	if q.RelayFactor != 0 {
 		r.params.Set("relay-factor", strconv.Itoa(int(q.RelayFactor)))
 	}
-	r.ctx = q.ctx
 }
 
 // toHTTP converts the request to an HTTP request
@@ -612,11 +569,8 @@ func (r *request) toHTTP() (*http.Request, error) {
 	if r.config.HttpAuth != nil {
 		req.SetBasicAuth(r.config.HttpAuth.Username, r.config.HttpAuth.Password)
 	}
-	if r.ctx != nil {
-		return req.WithContext(r.ctx), nil
-	} else {
-		return req, nil
-	}
+
+	return req, nil
 }
 
 // newRequest is used to create a new request

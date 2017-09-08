@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/hashicorp/consul/command/base"
 )
 
 // SnapshotRestoreCommand is a Command implementation that is used to restore
 // the state of the Consul servers for disaster recovery.
 type SnapshotRestoreCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *SnapshotRestoreCommand) Help() string {
@@ -34,15 +36,15 @@ Usage: consul snapshot restore [options] FILE
 
   For a full list of options and examples, please see the Consul documentation.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
 
 func (c *SnapshotRestoreCommand) Run(args []string) int {
-	flagSet := c.BaseCommand.NewFlagSet(c)
+	flagSet := c.Command.NewFlagSet(c)
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
@@ -61,7 +63,7 @@ func (c *SnapshotRestoreCommand) Run(args []string) int {
 	}
 
 	// Create and test the HTTP client
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error connecting to Consul agent: %s", err))
 		return 1

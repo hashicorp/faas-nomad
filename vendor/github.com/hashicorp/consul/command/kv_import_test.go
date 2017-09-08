@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/consul/agent"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/mitchellh/cli"
 )
 
@@ -29,9 +30,9 @@ func TestKVImportCommand_Run(t *testing.T) {
 
 	ui := cli.NewMockUi()
 	c := &KVImportCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetHTTP,
+			Flags: base.FlagSetHTTP,
 		},
 		testStdin: strings.NewReader(json),
 	}

@@ -7,13 +7,14 @@ import (
 	"strings"
 
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/hashicorp/consul/snapshot"
 )
 
 // SnapshotSaveCommand is a Command implementation that is used to save the
 // state of the Consul servers for disaster recovery.
 type SnapshotSaveCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *SnapshotSaveCommand) Help() string {
@@ -38,15 +39,15 @@ Usage: consul snapshot save [options] FILE
 
   For a full list of options and examples, please see the Consul documentation.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
 
 func (c *SnapshotSaveCommand) Run(args []string) int {
-	flagSet := c.BaseCommand.NewFlagSet(c)
+	flagSet := c.Command.NewFlagSet(c)
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
@@ -65,7 +66,7 @@ func (c *SnapshotSaveCommand) Run(args []string) int {
 	}
 
 	// Create and test the HTTP client
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error connecting to Consul agent: %s", err))
 		return 1
@@ -73,7 +74,7 @@ func (c *SnapshotSaveCommand) Run(args []string) int {
 
 	// Take the snapshot.
 	snap, qm, err := client.Snapshot().Save(&api.QueryOptions{
-		AllowStale: c.BaseCommand.HTTPStale(),
+		AllowStale: c.Command.HTTPStale(),
 	})
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error saving snapshot: %s", err))

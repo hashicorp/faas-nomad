@@ -5,17 +5,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/consul/agent"
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/mitchellh/cli"
 )
 
 func testKVGetCommand(t *testing.T) (*cli.MockUi, *KVGetCommand) {
 	ui := cli.NewMockUi()
 	return ui, &KVGetCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetHTTP,
+			Flags: base.FlagSetHTTP,
 		},
 	}
 }

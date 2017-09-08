@@ -7,13 +7,14 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/hashicorp/consul/command/base"
 	"github.com/hashicorp/consul/snapshot"
 )
 
 // SnapshotInspectCommand is a Command implementation that is used to display
 // metadata about a snapshot file
 type SnapshotInspectCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *SnapshotInspectCommand) Help() string {
@@ -33,9 +34,9 @@ Usage: consul snapshot inspect [options] FILE
 }
 
 func (c *SnapshotInspectCommand) Run(args []string) int {
-	flagSet := c.BaseCommand.NewFlagSet(c)
+	flagSet := c.Command.NewFlagSet(c)
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 

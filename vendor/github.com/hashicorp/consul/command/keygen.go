@@ -5,17 +5,19 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+
+	"github.com/hashicorp/consul/command/base"
 )
 
 // KeygenCommand is a Command implementation that generates an encryption
 // key for use in `consul agent`.
 type KeygenCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *KeygenCommand) Run(args []string) int {
-	c.BaseCommand.NewFlagSet(c)
-	if err := c.BaseCommand.Parse(args); err != nil {
+	c.Command.NewFlagSet(c)
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
@@ -46,7 +48,7 @@ Usage: consul keygen
   agent to encrypt traffic. The output of this command is already
   in the proper format that the agent expects.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }

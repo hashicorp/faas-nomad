@@ -8,17 +8,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/consul/agent"
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/mitchellh/cli"
 )
 
 func testLockCommand(t *testing.T) (*cli.MockUi, *LockCommand) {
 	ui := cli.NewMockUi()
 	return ui, &LockCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetHTTP,
+			Flags: base.FlagSetHTTP,
 		},
 	}
 }
@@ -256,34 +257,4 @@ func TestLockCommand_MonitorRetry_Semaphore_Arg(t *testing.T) {
 		opts.MonitorRetryTime != defaultMonitorRetryTime {
 		t.Fatalf("bad: %#v", opts)
 	}
-}
-
-func TestLockCommand_ChildExitCode(t *testing.T) {
-	t.Parallel()
-	a := agent.NewTestAgent(t.Name(), nil)
-	defer a.Shutdown()
-
-	t.Run("clean exit", func(t *testing.T) {
-		_, c := testLockCommand(t)
-		args := []string{"-http-addr=" + a.HTTPAddr(), "-child-exit-code", "test/prefix", "exit 0"}
-		if got, want := c.Run(args), 0; got != want {
-			t.Fatalf("got %d want %d", got, want)
-		}
-	})
-
-	t.Run("error exit", func(t *testing.T) {
-		_, c := testLockCommand(t)
-		args := []string{"-http-addr=" + a.HTTPAddr(), "-child-exit-code", "test/prefix", "exit 1"}
-		if got, want := c.Run(args), 2; got != want {
-			t.Fatalf("got %d want %d", got, want)
-		}
-	})
-
-	t.Run("not propagated", func(t *testing.T) {
-		_, c := testLockCommand(t)
-		args := []string{"-http-addr=" + a.HTTPAddr(), "test/prefix", "exit 1"}
-		if got, want := c.Run(args), 0; got != want {
-			t.Fatalf("got %d want %d", got, want)
-		}
-	})
 }

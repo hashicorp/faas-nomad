@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/alexellis/faas/gateway/requests"
-	"github.com/nicholasjackson/faas-nomad/nomad"
+	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

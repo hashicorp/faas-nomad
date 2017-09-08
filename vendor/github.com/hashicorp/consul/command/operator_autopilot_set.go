@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/consul/configutil"
+	"github.com/hashicorp/consul/command/base"
 )
 
 type OperatorAutopilotSetCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *OperatorAutopilotSetCommand) Help() string {
@@ -20,7 +20,7 @@ Usage: consul operator autopilot set-config [options]
 
 Modifies the current Autopilot configuration.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
@@ -30,15 +30,14 @@ func (c *OperatorAutopilotSetCommand) Synopsis() string {
 }
 
 func (c *OperatorAutopilotSetCommand) Run(args []string) int {
-	var cleanupDeadServers configutil.BoolValue
-	var maxTrailingLogs configutil.UintValue
-	var lastContactThreshold configutil.DurationValue
-	var serverStabilizationTime configutil.DurationValue
-	var redundancyZoneTag configutil.StringValue
-	var disableUpgradeMigration configutil.BoolValue
-	var upgradeVersionTag configutil.StringValue
+	var cleanupDeadServers base.BoolValue
+	var maxTrailingLogs base.UintValue
+	var lastContactThreshold base.DurationValue
+	var serverStabilizationTime base.DurationValue
+	var redundancyZoneTag base.StringValue
+	var disableUpgradeMigration base.BoolValue
 
-	f := c.BaseCommand.NewFlagSet(c)
+	f := c.Command.NewFlagSet(c)
 
 	f.Var(&cleanupDeadServers, "cleanup-dead-servers",
 		"Controls whether Consul will automatically remove dead servers "+
@@ -61,11 +60,8 @@ func (c *OperatorAutopilotSetCommand) Run(args []string) int {
 	f.Var(&disableUpgradeMigration, "disable-upgrade-migration",
 		"(Enterprise-only) Controls whether Consul will avoid promoting new servers until "+
 			"it can perform a migration. Must be one of `true|false`.")
-	f.Var(&upgradeVersionTag, "upgrade-version-tag",
-		"(Enterprise-only) The node_meta tag to use for version info when performing upgrade "+
-			"migrations. If left blank, the Consul version will be used.")
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
 		}
@@ -74,7 +70,7 @@ func (c *OperatorAutopilotSetCommand) Run(args []string) int {
 	}
 
 	// Set up a client.
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error initializing client: %s", err))
 		return 1
@@ -92,7 +88,6 @@ func (c *OperatorAutopilotSetCommand) Run(args []string) int {
 	cleanupDeadServers.Merge(&conf.CleanupDeadServers)
 	redundancyZoneTag.Merge(&conf.RedundancyZoneTag)
 	disableUpgradeMigration.Merge(&conf.DisableUpgradeMigration)
-	upgradeVersionTag.Merge(&conf.UpgradeVersionTag)
 
 	trailing := uint(conf.MaxTrailingLogs)
 	maxTrailingLogs.Merge(&trailing)

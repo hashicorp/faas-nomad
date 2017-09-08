@@ -26,6 +26,18 @@
   version = "v1.1.0"
 
 [[projects]]
+  name = "github.com/fatih/structs"
+  packages = ["."]
+  revision = "a720dfa8df582c51dee1b36feabb906bde1588bd"
+  version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/golang/snappy"
+  packages = ["."]
+  revision = "553a641470496b2327abcac10b36396bd98e45c9"
+
+[[projects]]
   name = "github.com/gorhill/cronexpr"
   packages = ["."]
   revision = "a557574d6c024ed6e36acc8b610f5f211c91568a"
@@ -46,8 +58,14 @@
 [[projects]]
   name = "github.com/hashicorp/consul"
   packages = ["api"]
-  revision = "75ca2cace08e38de8af1731ee8614d0533d5a4d4"
-  version = "v0.9.2"
+  revision = "f4360770d8e7b852e2d05835b583d20799e58133"
+  version = "v0.8.4"
+
+[[projects]]
+  name = "github.com/hashicorp/consul-template"
+  packages = ["dependency","watch"]
+  revision = "cfe084f488f915b3e41b00824a3e07d79e3677aa"
+  version = "v0.19.0"
 
 [[projects]]
   branch = "master"
@@ -98,6 +116,12 @@
   revision = "0a025b7e63adc15a622f29b0b2c4c3848243bbf6"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/hcl"
+  packages = [".","hcl/ast","hcl/parser","hcl/scanner","hcl/strconv","hcl/token","json/parser","json/scanner","json/token"]
+  revision = "8f6b1344a92ff8877cf24a5de9177bf7d0a2a187"
+
+[[projects]]
   name = "github.com/hashicorp/nomad"
   packages = ["api","api/contexts","helper","helper/args","helper/flatmap","nomad/structs"]
   revision = "a2c40c2114d8cc17795101362bf14b7cf6809e5d"
@@ -114,6 +138,12 @@
   packages = ["coordinate"]
   revision = "d6574a5bb1226678d7010325fb6c985db20ee458"
   version = "v0.8.1"
+
+[[projects]]
+  name = "github.com/hashicorp/vault"
+  packages = ["api","helper/compressutil","helper/jsonutil","helper/parseutil"]
+  revision = "9afe7330e06e486ee326621624f2077d88bc9511"
+  version = "v0.8.2"
 
 [[projects]]
   branch = "master"
@@ -135,15 +165,33 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/mitchellh/mapstructure"
+  packages = ["."]
+  revision = "d0303fe809921458f417bcf828397a65db30a7e4"
+
+[[projects]]
+  branch = "master"
   name = "github.com/mitchellh/reflectwalk"
   packages = ["."]
   revision = "63d60e9d0dbc60cf9164e6510889b0db6683d98c"
+
+[[projects]]
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
 
 [[projects]]
   name = "github.com/pmezard/go-difflib"
   packages = ["difflib"]
   revision = "792786c7400a136282c1664665ae0a8db921c6c2"
   version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/sethgrid/pester"
+  packages = ["."]
+  revision = "a86a2d88f4dc3c7dbf3a6a6bbbfb095690b834b6"
 
 [[projects]]
   branch = "master"
@@ -163,9 +211,21 @@
   packages = ["codec"]
   revision = "8c0409fcbb70099c748d71f714529204975f6c3f"
 
+[[projects]]
+  branch = "master"
+  name = "golang.org/x/net"
+  packages = ["http2","http2/hpack","idna","lex/httplex"]
+  revision = "66aacef3dd8a676686c7ae3716979581e8b03c47"
+
+[[projects]]
+  branch = "master"
+  name = "golang.org/x/text"
+  packages = ["internal/gen","internal/triegen","internal/ucd","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
+  revision = "bd91bbf73e9a4a801adbfb97133c992678533126"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "88370e1513b7b832858910a86bf3af60d91d807a260ba2be6fd7b10fc3810b4b"
+  inputs-digest = "547f711dd3707e9e7efc08c41963f94f69be7e1e7e5e6b8ec1c23c7ffd70cf4d"
   solver-name = "gps-cdcl"
   solver-version = 1

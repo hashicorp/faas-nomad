@@ -4,15 +4,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hashicorp/consul/agent"
 	consulapi "github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/mitchellh/cli"
 )
 
 // KeyringCommand is a Command implementation that handles querying, installing,
 // and removing gossip encryption keys from a keyring.
 type KeyringCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *KeyringCommand) Run(args []string) int {
@@ -20,7 +21,7 @@ func (c *KeyringCommand) Run(args []string) int {
 	var listKeys bool
 	var relay int
 
-	f := c.BaseCommand.NewFlagSet(c)
+	f := c.Command.NewFlagSet(c)
 
 	f.StringVar(&installKey, "install", "",
 		"Install a new encryption key. This will broadcast the new key to "+
@@ -39,7 +40,7 @@ func (c *KeyringCommand) Run(args []string) int {
 			"to the operation through this many randomly-chosen other nodes in the "+
 			"cluster. The maximum allowed value is 5.")
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
@@ -74,7 +75,7 @@ func (c *KeyringCommand) Run(args []string) int {
 	}
 
 	// All other operations will require a client connection
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error connecting to Consul agent: %s", err))
 		return 1
@@ -158,7 +159,7 @@ Usage: consul keyring [options]
   are no errors. If any node fails to reply or reports failure, the exit code
   will be 1.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }

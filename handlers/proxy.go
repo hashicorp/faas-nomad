@@ -2,22 +2,22 @@ package handlers
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/nicholasjackson/faas-nomad/consul"
-	"github.com/nicholasjackson/faas-nomad/nomad"
+	"github.com/hashicorp/faas-nomad/consul"
+	"github.com/hashicorp/faas-nomad/nomad"
 )
 
 // MakeProxy creates a proxy for HTTP web requests which can be routed to a function.
-func MakeProxy(client nomad.Job, consulClient consul.Catalog) http.HandlerFunc {
+func MakeProxy(client nomad.Job, resolver *consul.ConsulResolver) http.HandlerFunc {
 	proxyClient := http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
@@ -50,10 +50,16 @@ func MakeProxy(client nomad.Job, consulClient consul.Catalog) http.HandlerFunc {
 			requestBody, _ := ioutil.ReadAll(r.Body)
 			defer r.Body.Close()
 
-			url := resolveFunction(consulClient, service)
-			log.Println("trying to call:", url)
+			urls, _ := resolver.Resolve(service)
 
-			request, _ := http.NewRequest("POST", url, bytes.NewReader(requestBody))
+			// hack for docker for mac, need real implementation
+			address := urls[0]
+			if strings.Contains(address, "127.0.0.1") {
+				address = strings.Replace(address, "127.0.0.1", "docker.for.mac.localhost", 1)
+			}
+
+			log.Println("Trying to call:", address)
+			request, _ := http.NewRequest("POST", address, bytes.NewReader(requestBody))
 
 			copyHeaders(&request.Header, &r.Header)
 
@@ -82,21 +88,6 @@ func MakeProxy(client nomad.Job, consulClient consul.Catalog) http.HandlerFunc {
 
 		}
 	}
-}
-
-func resolveFunction(client consul.Catalog, function string) string {
-	service, _, err := client.Service(function, "", nil)
-	if err != nil {
-		log.Println("Error locating service: ", err)
-	}
-
-	//	address := service[0].Address
-
-	return fmt.Sprintf(
-		"http://%v:%v",
-		"docker.for.mac.localhost",
-		service[0].ServicePort,
-	)
 }
 
 func writeHead(service string, code int, w http.ResponseWriter) {

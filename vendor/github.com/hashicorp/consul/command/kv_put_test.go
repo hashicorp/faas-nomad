@@ -9,8 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/consul/agent"
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
 	"github.com/hashicorp/consul/testutil"
 	"github.com/mitchellh/cli"
 )
@@ -18,9 +19,9 @@ import (
 func testKVPutCommand(t *testing.T) (*cli.MockUi, *KVPutCommand) {
 	ui := cli.NewMockUi()
 	return ui, &KVPutCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetHTTP,
+			Flags: base.FlagSetHTTP,
 		},
 	}
 }

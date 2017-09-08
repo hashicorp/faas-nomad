@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/consul/agent"
-	"github.com/hashicorp/consul/agent/structs"
+	"github.com/hashicorp/consul/command/agent"
+	"github.com/hashicorp/consul/command/base"
+	"github.com/hashicorp/consul/consul/structs"
 	"github.com/hashicorp/consul/testutil/retry"
 	"github.com/hashicorp/serf/coordinate"
 	"github.com/mitchellh/cli"
@@ -16,9 +17,9 @@ import (
 func testRTTCommand(t *testing.T) (*cli.MockUi, *RTTCommand) {
 	ui := cli.NewMockUi()
 	return ui, &RTTCommand{
-		BaseCommand: BaseCommand{
+		Command: base.Command{
 			UI:    ui,
-			Flags: FlagSetClientHTTP,
+			Flags: base.FlagSetClientHTTP,
 		},
 	}
 }

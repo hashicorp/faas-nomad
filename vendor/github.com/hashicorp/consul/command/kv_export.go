@@ -7,12 +7,13 @@ import (
 	"strings"
 
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/base"
 )
 
 // KVExportCommand is a Command implementation that is used to export
 // a KV tree as JSON
 type KVExportCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *KVExportCommand) Synopsis() string {
@@ -31,14 +32,14 @@ Usage: consul kv export [KEY_OR_PREFIX]
 
   For a full list of options and examples, please see the Consul documentation.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
 
 func (c *KVExportCommand) Run(args []string) int {
-	f := c.BaseCommand.NewFlagSet(c)
-	if err := c.BaseCommand.Parse(args); err != nil {
+	f := c.Command.NewFlagSet(c)
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
@@ -63,14 +64,14 @@ func (c *KVExportCommand) Run(args []string) int {
 	}
 
 	// Create and test the HTTP client
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error connecting to Consul agent: %s", err))
 		return 1
 	}
 
 	pairs, _, err := client.KV().List(key, &api.QueryOptions{
-		AllowStale: c.BaseCommand.HTTPStale(),
+		AllowStale: c.Command.HTTPStale(),
 	})
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error querying Consul agent: %s", err))

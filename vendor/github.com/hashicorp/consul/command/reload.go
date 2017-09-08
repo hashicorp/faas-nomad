@@ -2,13 +2,14 @@ package command
 
 import (
 	"fmt"
+	"github.com/hashicorp/consul/command/base"
 	"strings"
 )
 
 // ReloadCommand is a Command implementation that instructs
 // the Consul agent to reload configurations
 type ReloadCommand struct {
-	BaseCommand
+	base.Command
 }
 
 func (c *ReloadCommand) Help() string {
@@ -18,19 +19,19 @@ Usage: consul reload
   Causes the agent to reload configurations. This can be used instead
   of sending the SIGHUP signal to the agent.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
 
 func (c *ReloadCommand) Run(args []string) int {
-	c.BaseCommand.NewFlagSet(c)
+	c.Command.NewFlagSet(c)
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error connecting to Consul agent: %s", err))
 		return 1

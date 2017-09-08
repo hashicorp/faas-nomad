@@ -12,12 +12,13 @@ import (
 	"strings"
 
 	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/command/base"
 )
 
 // KVImportCommand is a Command implementation that is used to import
 // a KV tree stored as JSON
 type KVImportCommand struct {
-	BaseCommand
+	base.Command
 
 	// testStdin is the input for testing.
 	testStdin io.Reader
@@ -48,15 +49,15 @@ Usage: consul kv import [DATA]
 
   For a full list of options and examples, please see the Consul documentation.
 
-` + c.BaseCommand.Help()
+` + c.Command.Help()
 
 	return strings.TrimSpace(helpText)
 }
 
 func (c *KVImportCommand) Run(args []string) int {
-	f := c.BaseCommand.NewFlagSet(c)
+	f := c.Command.NewFlagSet(c)
 
-	if err := c.BaseCommand.Parse(args); err != nil {
+	if err := c.Command.Parse(args); err != nil {
 		return 1
 	}
 
@@ -69,7 +70,7 @@ func (c *KVImportCommand) Run(args []string) int {
 	}
 
 	// Create and test the HTTP client
-	client, err := c.BaseCommand.HTTPClient()
+	client, err := c.Command.HTTPClient()
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error connecting to Consul agent: %s", err))
 		return 1
