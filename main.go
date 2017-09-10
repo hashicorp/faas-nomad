@@ -30,7 +30,7 @@ func main() {
 		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs()),
 		DeleteHandler:  handlers.MakeNull(),
 		ReplicaReader:  handlers.MakeNull(),
-		FunctionProxy:  handlers.MakeProxy(nomadClient.Jobs(), r),
+		FunctionProxy:  handlers.MakeProxy(handlers.MakeProxyClient(), r),
 		ReplicaUpdater: handlers.MakeNull(),
 	}
 	config := &types.FaaSConfig{}

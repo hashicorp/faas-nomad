@@ -3,12 +3,12 @@ package consul
 import (
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/consul-template/dependency"
 	"github.com/hashicorp/consul-template/watch"
 	"github.com/hashicorp/consul/api"
+	cache "github.com/patrickmn/go-cache"
 )
 
 // Catalog defines methods for Consul's service catalog
@@ -16,18 +16,20 @@ type Catalog interface {
 	Service(service, tag string, q *api.QueryOptions) ([]*api.CatalogService, *api.QueryMeta, error)
 }
 
+// ServiceResolver uses consul to resolve a function name into addresses
 type ServiceResolver interface {
-	Resolve(function string) (string, error)
+	Resolve(function string) ([]string, error)
 }
 
+// ConsulResolver implements ServiceResolver
 type ConsulResolver struct {
-	clientSet  *dependency.ClientSet
-	watcher    *watch.Watcher
-	deps       []dependency.Dependency
-	cache      map[string][]string
-	cacheMutex sync.Mutex
+	clientSet *dependency.ClientSet
+	watcher   *watch.Watcher
+	deps      []dependency.Dependency
+	cache     *cache.Cache
 }
 
+// NewConsulResolver creates a new ConsulResolver
 func NewConsulResolver(address string) *ConsulResolver {
 	clientSet := dependency.NewClientSet()
 	clientSet.CreateConsulClient(&dependency.CreateConsulClientInput{
@@ -39,11 +41,12 @@ func NewConsulResolver(address string) *ConsulResolver {
 		MaxStale: 10000 * time.Millisecond,
 	})
 
+	pc := cache.New(5*time.Minute, 10*time.Minute)
+
 	cr := &ConsulResolver{
-		clientSet:  clientSet,
-		watcher:    watch,
-		cache:      make(map[string][]string),
-		cacheMutex: sync.Mutex{},
+		clientSet: clientSet,
+		watcher:   watch,
+		cache:     pc,
 	}
 
 	cr.watch()
@@ -51,6 +54,7 @@ func NewConsulResolver(address string) *ConsulResolver {
 	return cr
 }
 
+// watch watches consul for changes and updates the cache on change
 func (sr *ConsulResolver) watch() {
 	go func() {
 		dc := sr.watcher.DataCh()
@@ -59,26 +63,25 @@ func (sr *ConsulResolver) watch() {
 
 			cs := w.Data().([]*dependency.CatalogService)
 
-			sr.cacheMutex.Lock()
-			defer sr.cacheMutex.Unlock()
-
-			sr.cache[cs[0].ServiceName] = make([]string, 0)
-
+			addresses := make([]string, 0)
 			for _, addr := range cs {
-				sr.cache[addr.ServiceName] = append(
-					sr.cache[addr.ServiceName],
+				addresses = append(
+					addresses,
 					fmt.Sprintf("http://%v:%v", addr.Address, addr.ServicePort),
 				)
 			}
+
+			sr.cache.Set(cs[0].ServiceName, addresses, cache.DefaultExpiration)
 		}
 	}()
 }
 
+// Resolve resolves a function name to an array of URI
 func (sr *ConsulResolver) Resolve(function string) ([]string, error) {
 	//check the cache
-	if val, ok := sr.cache[function]; ok {
+	if val, ok := sr.cache.Get(function); ok {
 		log.Println("Got Address from cache")
-		return val, nil
+		return val.([]string), nil
 	}
 
 	log.Println("Getting Address from consul")
@@ -103,10 +106,7 @@ func (sr *ConsulResolver) Resolve(function string) ([]string, error) {
 	}
 
 	// append the cache
-	sr.cacheMutex.Lock()
-	defer sr.cacheMutex.Unlock()
-
-	sr.cache[function] = addresses
+	sr.cache.Set(function, addresses, cache.DefaultExpiration)
 
 	return addresses, nil
 }
