@@ -92,15 +92,15 @@ pkg/windows_386/nomad: $(SOURCE_FILES) ## Build Nomad for windows/386
 		go build \
 		-ldflags $(GO_LDFLAGS) \
 		-tags "$(GO_TAGS)" \
-		-o "$@"
+		-o "$@.exe"
 
 pkg/windows_amd64/nomad: $(SOURCE_FILES) ## Build Nomad for windows/amd64
 	@echo "==> Building $@..."
-	@CGO_ENABLED=1 GOOS=windows GOARCH=386 \
+	@CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
 		go build \
 		-ldflags $(GO_LDFLAGS) \
 		-tags "$(GO_TAGS)" \
-		-o "$@"
+		-o "$@.exe"
 
 pkg/linux_amd64-lxc/nomad: $(SOURCE_FILES) ## Build Nomad+LXC for linux/amd64
 	@echo "==> Building $@..."

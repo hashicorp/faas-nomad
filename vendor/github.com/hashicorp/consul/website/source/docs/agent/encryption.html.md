@@ -64,10 +64,10 @@ through the following process.
 rolling update of the cluster with these new values. After this step, the agents will be able to
 decrypt gossip but will not yet be sending encrypted traffic.
 3. Remove the [`encrypt_verify_outgoing`](/docs/agent/options.html#encrypt_verify_outgoing) setting
-to change it back to false (the default) and perform another rolling update of the cluster. The
+to change it back to `true` (the default) and perform another rolling update of the cluster. The
 agents will now be sending encrypted gossip but will still allow incoming unencrypted traffic.
 4. Remove the [`encrypt_verify_incoming`](/docs/agent/options.html#encrypt_verify_incoming) setting
-to change it back to false (the default) and perform a final rolling update of the cluster. All the
+to change it back to `true` (the default) and perform a final rolling update of the cluster. All the
 agents will now be strictly enforcing encrypted gossip.
 
 ## RPC Encryption with TLS
@@ -123,8 +123,11 @@ options are set to `false`. HTTPS for the API can be enabled at this point by
 setting the [`https`](/docs/agent/options.html#http_port) port.
 2. Perform a rolling restart of each agent in the cluster. After this step, TLS should be enabled
 everywhere but the agents will not yet be enforcing TLS.
-3. Change the `verify_incoming` and `verify_outgoing` settings (as well as `verify_server_hostname`
+3. (Optional, Enterprise-only) If applicable, set the `UseTLS` setting in any network areas to `true`.
+This can be done either through the [`consul operator area update`](/docs/commands/operator/area.html)
+command or the [Operator API](/api/operator/area.html).
+4. Change the `verify_incoming` and `verify_outgoing` settings (as well as `verify_server_hostname`
 if applicable) to `true`.
-4. Perform another rolling restart of each agent in the cluster.
+5. Perform another rolling restart of each agent in the cluster.
 
 At this point, full TLS encryption for RPC communication should be enabled.

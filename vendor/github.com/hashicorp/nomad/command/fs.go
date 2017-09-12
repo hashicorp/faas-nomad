@@ -95,7 +95,11 @@ func (c *FSCommand) AutocompleteFlags() complete.Flags {
 
 func (f *FSCommand) AutocompleteArgs() complete.Predictor {
 	return complete.PredictFunc(func(a complete.Args) []string {
-		client, _ := f.Meta.Client()
+		client, err := f.Meta.Client()
+		if err != nil {
+			return nil
+		}
+
 		resp, _, err := client.Search().PrefixSearch(a.Last, contexts.Allocs, nil)
 		if err != nil {
 			return []string{}
@@ -169,12 +173,8 @@ func (f *FSCommand) Run(args []string) int {
 		f.Ui.Error(fmt.Sprintf("Alloc ID must contain at least two characters."))
 		return 1
 	}
-	if len(allocID)%2 == 1 {
-		// Identifiers must be of even length, so we strip off the last byte
-		// to provide a consistent user experience.
-		allocID = allocID[:len(allocID)-1]
-	}
 
+	allocID = sanatizeUUIDPrefix(allocID)
 	allocs, _, err := client.Allocations().PrefixList(allocID)
 	if err != nil {
 		f.Ui.Error(fmt.Sprintf("Error querying allocation: %v", err))

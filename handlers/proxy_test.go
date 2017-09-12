@@ -45,32 +45,32 @@ func TestProxyHandlerWithNoFunctionNameReturnsBadRequest(t *testing.T) {
 func TestProxyHandlerWithFunctionNameCallsResolve(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
-	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).Return([]byte{})
-	mockServiceResolver.On("Resolve", "function").Return([]string{"testaddress"})
+	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil)
+	mockServiceResolver.On("Resolve", "function").Return([]string{"http://testaddress"})
 
 	h(rr, r)
 
 	mockServiceResolver.AssertCalled(t, "Resolve", "function")
 }
 
-func TestProxyHandlerCallsCallAndRetrunResponse(t *testing.T) {
+func TestProxyHandlerCallsCallAndReturnResponse(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
-	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).Return([]byte{})
-	mockServiceResolver.On("Resolve", "function").Return([]string{"testaddress"})
+	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil)
+	mockServiceResolver.On("Resolve", "function").Return([]string{"http://testaddress"})
 
 	h(rr, r)
 
-	mockProxyClient.AssertCalled(t, "CallAndReturnResponse", "testaddress", rr, r)
+	mockProxyClient.AssertCalled(t, "CallAndReturnResponse", "http://testaddress", rr, r)
 }
 
 func TestProxyHandlerWithLocalhostReplacesWithDockerMacAddress(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
-	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).Return([]byte{})
-	mockServiceResolver.On("Resolve", "function").Return([]string{"127.0.0.1"})
+	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil)
+	mockServiceResolver.On("Resolve", "function").Return([]string{"http://127.0.0.1"})
 
 	h(rr, r)
 
-	mockProxyClient.AssertCalled(t, "CallAndReturnResponse", "docker.for.mac.localhost", rr, r)
+	mockProxyClient.AssertCalled(t, "CallAndReturnResponse", "http://docker.for.mac.localhost", rr, r)
 }

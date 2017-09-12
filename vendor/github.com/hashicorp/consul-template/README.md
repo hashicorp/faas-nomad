@@ -218,11 +218,6 @@ consul {
 # to not listen for any reload signals.
 reload_signal = "SIGHUP"
 
-# This is the signal to listen for to trigger a core dump event. The default
-# value is shown below. Setting this value to the empty string will cause CT
-# to not listen for any core dump signals.
-dump_signal = "SIGQUIT"
-
 # This is the signal to listen for to trigger a graceful stop. The default
 # value is shown below. Setting this value to the empty string will cause CT
 # to not listen for any graceful stop signals.
@@ -262,15 +257,15 @@ vault {
   # of the address is required.
   address = "https://vault.service.consul:8200"
 
-  # This is the grace period between lease renewal and secret re-acquisition.
-  # When renewing a secret, if the remaining lease is less than or equal to the
-  # configured grace, Consul Template will request a new credential. This
-  # prevents Vault from revoking the credential at expiration and Consul
+  # This is the grace period between lease renewal of periodic secrets and secret
+  # re-acquisition. When renewing a secret, if the remaining lease is less than or
+  # equal to the configured grace, Consul Template will request a new credential.
+  # This prevents Vault from revoking the credential at expiration and Consul
   # Template having a stale credential.
   #
   # Note: If you set this to a value that is higher than your default TTL or
   # max TTL, Consul Template will always read a new secret!
-  grace = "15s"
+  grace = "5m"
 
   # This is the token to use when communicating with the Vault server.
   # Like other tools that integrate with Vault, Consul Template makes the
@@ -438,6 +433,12 @@ template {
   # This is the maximum amount of time to wait for the optional command to
   # return. Default is 30s.
   command_timeout = "60s"
+
+  # Exit with an error when accessing a struct or map field/key that does not
+  # exist. The default behavior will print "<no value>" when accessing a field
+  # that does not exist. It is highly recommended you set this to "true" when
+  # retrieving secrets from Vault.
+  error_on_missing_key = false
 
   # This is the permission to render the file. If this option is left
   # unspecified, Consul Template will attempt to match the permissions of the
@@ -801,6 +802,29 @@ generic secret backend have a default 30 day lease. This means Consul Template
 will renew the secret every 15 days. As such, it is recommended that a smaller
 lease duration be used when generating the initial secret to force Consul
 Template to renew more often.
+
+Also consider enabling `error_on_missing_key` when working with templates that
+will interact with Vault. By default, Consul Template uses Go's templating
+language. When accessing a struct field or map key that does not exist, it
+defaults to printing "<no value>". This may not be the desired behavior,
+especially when working with passwords or other data. As such, it is recommended
+you set:
+
+```hcl
+template {
+  error_on_missing_key = true
+}
+```
+
+You can also guard against empty values using `if` or `with` blocks.
+
+```liquid
+{{ with secret "secret/foo"}}
+{{ if .Data.password }}
+password = "{{ .Data.password }}"
+{{ end }}
+{{ end }}
+```
 
 ##### `secrets`
 
@@ -1495,8 +1519,10 @@ Takes the result from a `tree` or `ls` call and converts it into a JSON object.
 renders
 
 ```javascript
-{"admin":{"port":1234},"maxconns":5,"minconns":2}
+{"admin":{"port":"1234"},"maxconns":"5","minconns":"2"}
 ```
+
+Note: Consul stores all KV data as strings. Thus true is "true", 1 is "1", etc.
 
 ##### `toJSONPretty`
 
@@ -1512,12 +1538,14 @@ renders
 ```javascript
 {
   "admin": {
-    "port": 1234
+    "port": "1234"
   },
-  "maxconns": 5,
-  "minconns": 2,
+  "maxconns": "5",
+  "minconns": "2",
 }
 ```
+
+Note: Consul stores all KV data as strings. Thus true is "true", 1 is "1", etc.
 
 ##### `toLower`
 
@@ -1559,6 +1587,8 @@ minconns = "2"
   port = "1134"
 ```
 
+Note: Consul stores all KV data as strings. Thus true is "true", 1 is "1", etc.
+
 ##### `toUpper`
 
 Takes the argument as a string and converts it to uppercase.
@@ -1583,10 +1613,13 @@ renders
 
 ```yaml
 admin:
-  port: 1234
-maxconns: 5
-minconns: 2
+  port: "1234"
+maxconns: "5"
+minconns: "2"
 ```
+
+Note: Consul stores all KV data as strings. Thus true is "true", 1 is "1", etc.
+
 ---
 
 #### Math Functions

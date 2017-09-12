@@ -58,6 +58,14 @@ type TestAddressConfig struct {
 	HTTP string `json:"http,omitempty"`
 }
 
+// TestNetworkSegment contains the configuration for a network segment.
+type TestNetworkSegment struct {
+	Name      string `json:"name"`
+	Bind      string `json:"bind"`
+	Port      int    `json:"port"`
+	Advertise string `json:"advertise"`
+}
+
 // TestServerConfig is the main server configuration struct.
 type TestServerConfig struct {
 	NodeName            string                 `json:"node_name"`
@@ -68,6 +76,7 @@ type TestServerConfig struct {
 	Server              bool                   `json:"server,omitempty"`
 	DataDir             string                 `json:"data_dir,omitempty"`
 	Datacenter          string                 `json:"datacenter,omitempty"`
+	Segments            []TestNetworkSegment   `json:"segments"`
 	DisableCheckpoint   bool                   `json:"disable_update_check"`
 	LogLevel            string                 `json:"log_level,omitempty"`
 	Bind                string                 `json:"bind_addr,omitempty"`
@@ -86,6 +95,7 @@ type TestServerConfig struct {
 	VerifyIncomingRPC   bool                   `json:"verify_incoming_rpc,omitempty"`
 	VerifyIncomingHTTPS bool                   `json:"verify_incoming_https,omitempty"`
 	VerifyOutgoing      bool                   `json:"verify_outgoing,omitempty"`
+	EnableScriptChecks  bool                   `json:"enable_script_checks,omitempty"`
 	ReadyTimeout        time.Duration          `json:"-"`
 	Stdout, Stderr      io.Writer              `json:"-"`
 	Args                []string               `json:"-"`
@@ -190,6 +200,19 @@ func NewTestServerConfig(cb ServerConfigCallback) (*TestServer, error) {
 // configuring or starting the server, the server will NOT be running when the
 // function returns (thus you do not need to stop it).
 func NewTestServerConfigT(t *testing.T, cb ServerConfigCallback) (*TestServer, error) {
+	var server *TestServer
+	retry.Run(t, func(r *retry.R) {
+		var err error
+		server, err = newTestServerConfigT(t, cb)
+		if err != nil {
+			r.Fatalf("failed starting test server: %v", err)
+		}
+	})
+	return server, nil
+}
+
+// newTestServerConfigT is the internal helper for NewTestServerConfigT.
+func newTestServerConfigT(t *testing.T, cb ServerConfigCallback) (*TestServer, error) {
 	path, err := exec.LookPath("consul")
 	if err != nil || path == "" {
 		return nil, fmt.Errorf("consul not found on $PATH - download and install " +
@@ -333,7 +356,7 @@ func (s *TestServer) waitForLeader() error {
 	var index int64
 	retry.RunWith(timer, f, func(r *retry.R) {
 		// Query the API and check the status code.
-		url := s.url(fmt.Sprintf("/v1/catalog/nodes?index=%d&wait=2s", index))
+		url := s.url(fmt.Sprintf("/v1/catalog/nodes?index=%d", index))
 		resp, err := s.HTTPClient.Get(url)
 		if err != nil {
 			r.Fatal("failed http get", err)

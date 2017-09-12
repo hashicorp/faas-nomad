@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/serf/serf"
 )
 
-func TestAgent_Self(t *testing.T) {
+func TestAPI_AgentSelf(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -28,7 +28,28 @@ func TestAgent_Self(t *testing.T) {
 	}
 }
 
-func TestAgent_Reload(t *testing.T) {
+func TestAPI_AgentMetrics(t *testing.T) {
+	t.Parallel()
+	c, s := makeClient(t)
+	defer s.Stop()
+
+	agent := c.Agent()
+
+	metrics, err := agent.Metrics()
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	if len(metrics.Gauges) < 0 {
+		t.Fatalf("bad: %v", metrics)
+	}
+
+	if metrics.Gauges[0].Name != "consul.runtime.alloc_bytes" {
+		t.Fatalf("bad: %v", metrics.Gauges[0])
+	}
+}
+
+func TestAPI_AgentReload(t *testing.T) {
 	t.Parallel()
 
 	// Create our initial empty config file, to be overwritten later
@@ -70,7 +91,30 @@ func TestAgent_Reload(t *testing.T) {
 	}
 }
 
-func TestAgent_Members(t *testing.T) {
+func TestAPI_AgentMembersOpts(t *testing.T) {
+	t.Parallel()
+	c, s1 := makeClient(t)
+	_, s2 := makeClientWithConfig(t, nil, func(c *testutil.TestServerConfig) {
+		c.Datacenter = "dc2"
+	})
+	defer s1.Stop()
+	defer s2.Stop()
+
+	agent := c.Agent()
+
+	s2.JoinWAN(t, s1.WANAddr)
+
+	members, err := agent.MembersOpts(MembersOpts{WAN: true})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	if len(members) != 2 {
+		t.Fatalf("bad: %v", members)
+	}
+}
+
+func TestAPI_AgentMembers(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -87,7 +131,7 @@ func TestAgent_Members(t *testing.T) {
 	}
 }
 
-func TestAgent_Services(t *testing.T) {
+func TestAPI_AgentServices(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -132,7 +176,7 @@ func TestAgent_Services(t *testing.T) {
 	}
 }
 
-func TestAgent_Services_CheckPassing(t *testing.T) {
+func TestAPI_AgentServices_CheckPassing(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -176,7 +220,7 @@ func TestAgent_Services_CheckPassing(t *testing.T) {
 	}
 }
 
-func TestAgent_Services_CheckBadStatus(t *testing.T) {
+func TestAPI_AgentServices_CheckBadStatus(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -196,7 +240,7 @@ func TestAgent_Services_CheckBadStatus(t *testing.T) {
 	}
 }
 
-func TestAgent_ServiceAddress(t *testing.T) {
+func TestAPI_AgentServiceAddress(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -243,7 +287,7 @@ func TestAgent_ServiceAddress(t *testing.T) {
 	}
 }
 
-func TestAgent_EnableTagOverride(t *testing.T) {
+func TestAPI_AgentEnableTagOverride(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -286,7 +330,7 @@ func TestAgent_EnableTagOverride(t *testing.T) {
 	}
 }
 
-func TestAgent_Services_MultipleChecks(t *testing.T) {
+func TestAPI_AgentServices_MultipleChecks(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -330,7 +374,7 @@ func TestAgent_Services_MultipleChecks(t *testing.T) {
 	}
 }
 
-func TestAgent_SetTTLStatus(t *testing.T) {
+func TestAPI_AgentSetTTLStatus(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -414,7 +458,7 @@ func TestAgent_SetTTLStatus(t *testing.T) {
 	}
 }
 
-func TestAgent_Checks(t *testing.T) {
+func TestAPI_AgentChecks(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -446,7 +490,7 @@ func TestAgent_Checks(t *testing.T) {
 	}
 }
 
-func TestAgent_CheckStartPassing(t *testing.T) {
+func TestAPI_AgentCheckStartPassing(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -481,7 +525,7 @@ func TestAgent_CheckStartPassing(t *testing.T) {
 	}
 }
 
-func TestAgent_Checks_serviceBound(t *testing.T) {
+func TestAPI_AgentChecks_serviceBound(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -527,9 +571,11 @@ func TestAgent_Checks_serviceBound(t *testing.T) {
 	}
 }
 
-func TestAgent_Checks_Docker(t *testing.T) {
+func TestAPI_AgentChecks_Docker(t *testing.T) {
 	t.Parallel()
-	c, s := makeClient(t)
+	c, s := makeClientWithConfig(t, nil, func(c *testutil.TestServerConfig) {
+		c.EnableScriptChecks = true
+	})
 	defer s.Stop()
 
 	agent := c.Agent()
@@ -571,7 +617,7 @@ func TestAgent_Checks_Docker(t *testing.T) {
 	}
 }
 
-func TestAgent_Join(t *testing.T) {
+func TestAPI_AgentJoin(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -591,7 +637,7 @@ func TestAgent_Join(t *testing.T) {
 	}
 }
 
-func TestAgent_Leave(t *testing.T) {
+func TestAPI_AgentLeave(t *testing.T) {
 	t.Parallel()
 	c1, s1 := makeClient(t)
 	defer s1.Stop()
@@ -626,7 +672,7 @@ func TestAgent_Leave(t *testing.T) {
 	}
 }
 
-func TestAgent_ForceLeave(t *testing.T) {
+func TestAPI_AgentForceLeave(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -640,7 +686,7 @@ func TestAgent_ForceLeave(t *testing.T) {
 	}
 }
 
-func TestAgent_Monitor(t *testing.T) {
+func TestAPI_AgentMonitor(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -663,7 +709,7 @@ func TestAgent_Monitor(t *testing.T) {
 	}
 }
 
-func TestServiceMaintenance(t *testing.T) {
+func TestAPI_ServiceMaintenance(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -718,7 +764,7 @@ func TestServiceMaintenance(t *testing.T) {
 	}
 }
 
-func TestNodeMaintenance(t *testing.T) {
+func TestAPI_NodeMaintenance(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -762,5 +808,29 @@ func TestNodeMaintenance(t *testing.T) {
 		if strings.Contains(check.CheckID, "maintenance") {
 			t.Fatalf("should have removed health check")
 		}
+	}
+}
+
+func TestAPI_AgentUpdateToken(t *testing.T) {
+	t.Parallel()
+	c, s := makeACLClient(t)
+	defer s.Stop()
+
+	agent := c.Agent()
+
+	if _, err := agent.UpdateACLToken("root", nil); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	if _, err := agent.UpdateACLAgentToken("root", nil); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	if _, err := agent.UpdateACLAgentMasterToken("root", nil); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	if _, err := agent.UpdateACLReplicationToken("root", nil); err != nil {
+		t.Fatalf("err: %v", err)
 	}
 }

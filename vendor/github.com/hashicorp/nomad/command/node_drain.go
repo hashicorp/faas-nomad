@@ -57,7 +57,11 @@ func (c *NodeDrainCommand) AutocompleteFlags() complete.Flags {
 
 func (c *NodeDrainCommand) AutocompleteArgs() complete.Predictor {
 	return complete.PredictFunc(func(a complete.Args) []string {
-		client, _ := c.Meta.Client()
+		client, err := c.Meta.Client()
+		if err != nil {
+			return nil
+		}
+
 		resp, _, err := client.Search().PrefixSearch(a.Last, contexts.Nodes, nil)
 		if err != nil {
 			return []string{}
@@ -117,12 +121,8 @@ func (c *NodeDrainCommand) Run(args []string) int {
 		c.Ui.Error(fmt.Sprintf("Identifier must contain at least two characters."))
 		return 1
 	}
-	if len(nodeID)%2 == 1 {
-		// Identifiers must be of even length, so we strip off the last byte
-		// to provide a consistent user experience.
-		nodeID = nodeID[:len(nodeID)-1]
-	}
 
+	nodeID = sanatizeUUIDPrefix(nodeID)
 	nodes, _, err := client.Nodes().PrefixList(nodeID)
 	if err != nil {
 		c.Ui.Error(fmt.Sprintf("Error toggling drain mode: %s", err))

@@ -2,6 +2,7 @@ package command
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/nomad/api"
@@ -53,7 +54,11 @@ func (c *DeploymentStatusCommand) AutocompleteFlags() complete.Flags {
 
 func (c *DeploymentStatusCommand) AutocompleteArgs() complete.Predictor {
 	return complete.PredictFunc(func(a complete.Args) []string {
-		client, _ := c.Meta.Client()
+		client, err := c.Meta.Client()
+		if err != nil {
+			return nil
+		}
+
 		resp, _, err := client.Search().PrefixSearch(a.Last, contexts.Deployments, nil)
 		if err != nil {
 			return []string{}
@@ -164,6 +169,9 @@ func getDeployment(client *api.Deployments, dID string) (match *api.Deployment, 
 }
 
 func formatDeployment(d *api.Deployment, uuidLength int) string {
+	if d == nil {
+		return "No deployment found"
+	}
 	// Format the high-level elements
 	high := []string{
 		fmt.Sprintf("ID|%s", limit(d.ID, uuidLength)),
@@ -185,7 +193,9 @@ func formatDeployment(d *api.Deployment, uuidLength int) string {
 func formatDeploymentGroups(d *api.Deployment, uuidLength int) string {
 	// Detect if we need to add these columns
 	canaries, autorevert := false, false
-	for _, state := range d.TaskGroups {
+	tgNames := make([]string, 0, len(d.TaskGroups))
+	for name, state := range d.TaskGroups {
+		tgNames = append(tgNames, name)
 		if state.AutoRevert {
 			autorevert = true
 		}
@@ -193,6 +203,9 @@ func formatDeploymentGroups(d *api.Deployment, uuidLength int) string {
 			canaries = true
 		}
 	}
+
+	// Sort the task group names to get a reliable ordering
+	sort.Strings(tgNames)
 
 	// Build the row string
 	rowString := "Task Group|"
@@ -211,7 +224,8 @@ func formatDeploymentGroups(d *api.Deployment, uuidLength int) string {
 	rows := make([]string, len(d.TaskGroups)+1)
 	rows[0] = rowString
 	i := 1
-	for tg, state := range d.TaskGroups {
+	for _, tg := range tgNames {
+		state := d.TaskGroups[tg]
 		row := fmt.Sprintf("%s|", tg)
 		if autorevert {
 			row += fmt.Sprintf("%v|", state.AutoRevert)

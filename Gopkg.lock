@@ -2,10 +2,22 @@
 
 
 [[projects]]
+  name = "github.com/DataDog/datadog-go"
+  packages = ["statsd"]
+  revision = "0ddda6bee21174ef6c4873647cb0d6ec9cba996f"
+  version = "1.1.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/afex/hystrix-go"
+  packages = ["hystrix","hystrix/metric_collector","hystrix/rolling"]
+  revision = "f118cd938f786d24f46cc307981d8f63b7951020"
+
+[[projects]]
   name = "github.com/alexellis/faas"
   packages = ["gateway/requests"]
-  revision = "cbfcbbb88054dd52a8881ed9fd3ecdbb1abd9d4f"
-  version = "0.6.4"
+  revision = "5a58db2c5006695c2e1fa08f291513933b469e85"
+  version = "0.6.5"
 
 [[projects]]
   name = "github.com/alexellis/faas-provider"
@@ -26,10 +38,16 @@
   version = "v1.1.0"
 
 [[projects]]
+  name = "github.com/eapache/go-resiliency"
+  packages = ["retrier"]
+  revision = "6800482f2c813e689c88b7ed3282262385011890"
+  version = "v1.0.0"
+
+[[projects]]
   name = "github.com/fatih/structs"
   packages = ["."]
   revision = "a720dfa8df582c51dee1b36feabb906bde1588bd"
-  version = "v1.0.0"
+  version = "v1.0"
 
 [[projects]]
   branch = "master"
@@ -58,14 +76,14 @@
 [[projects]]
   name = "github.com/hashicorp/consul"
   packages = ["api"]
-  revision = "f4360770d8e7b852e2d05835b583d20799e58133"
-  version = "v0.8.4"
+  revision = "112c0603d3d6fb23ab5f15e8fdb1a761da8eaf9a"
+  version = "v0.9.3"
 
 [[projects]]
   name = "github.com/hashicorp/consul-template"
   packages = ["dependency","watch"]
-  revision = "cfe084f488f915b3e41b00824a3e07d79e3677aa"
-  version = "v0.19.0"
+  revision = "e08c9043f75346825b122c4b2f9d3dfe27e75c7a"
+  version = "v0.19.3"
 
 [[projects]]
   branch = "master"
@@ -124,8 +142,8 @@
 [[projects]]
   name = "github.com/hashicorp/nomad"
   packages = ["api","api/contexts","helper","helper/args","helper/flatmap","nomad/structs"]
-  revision = "a2c40c2114d8cc17795101362bf14b7cf6809e5d"
-  version = "v0.6.2"
+  revision = "ac9d8f5f46c83e96670241c0929e63f69b2f2f99"
+  version = "v0.6.3"
 
 [[projects]]
   branch = "master"
@@ -174,6 +192,12 @@
   name = "github.com/mitchellh/reflectwalk"
   packages = ["."]
   revision = "63d60e9d0dbc60cf9164e6510889b0db6683d98c"
+
+[[projects]]
+  name = "github.com/nicholasjackson/ultraclient"
+  packages = ["."]
+  revision = "ac35f53d6ff32d66aa17b29bc2ed609b257ede2e"
+  version = "0.7"
 
 [[projects]]
   name = "github.com/patrickmn/go-cache"
@@ -232,6 +256,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "fc926a7fa703954fef233c42f7e49aa6bf60aa41b9ddc591b09bc50950387aaa"
+  inputs-digest = "800a5d2e2a5d91260da4b3119ee9c2ae67429385d1ab0eb5684edcabb6f91a68"
   solver-name = "gps-cdcl"
   solver-version = 1

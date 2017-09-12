@@ -16,7 +16,7 @@ import (
 
 type ProxyClient interface {
 	GetFunctionName(*http.Request) string
-	CallAndReturnResponse(string, http.ResponseWriter, *http.Request)
+	CallAndReturnResponse(string, http.ResponseWriter, *http.Request) error
 }
 
 type HTTPProxyClient struct {
@@ -48,7 +48,7 @@ func (pc *HTTPProxyClient) GetFunctionName(r *http.Request) string {
 	return vars["name"]
 }
 
-func (pc *HTTPProxyClient) CallAndReturnResponse(address string, w http.ResponseWriter, r *http.Request) {
+func (pc *HTTPProxyClient) CallAndReturnResponse(address string, w http.ResponseWriter, r *http.Request) error {
 	stamp := strconv.FormatInt(time.Now().Unix(), 10)
 
 	defer func(when time.Time) {
@@ -70,7 +70,7 @@ func (pc *HTTPProxyClient) CallAndReturnResponse(address string, w http.Response
 	if err != nil {
 		log.Println(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return err
 	}
 
 	clientHeader := w.Header()
@@ -80,6 +80,8 @@ func (pc *HTTPProxyClient) CallAndReturnResponse(address string, w http.Response
 	// Match header for strict services
 	w.Header().Set("Content-Type", r.Header.Get("Content-Type"))
 	io.Copy(w, response.Body)
+
+	return nil
 }
 
 func copyHeaders(destination *http.Header, source *http.Header) {

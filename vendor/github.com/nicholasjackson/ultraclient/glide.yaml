@@ -1,0 +1,13 @@
+package: github.com/nicholasjackson/loadbalancer
+import:
+- package: github.com/afex/hystrix-go
+  subpackages:
+  - hystrix
+- package: github.com/eapache/go-resiliency
+  subpackages:
+  - retrier
+- package: github.com/stretchr/testify
+  subpackages:
+  - mock
+- package: github.com/DataDog/datadog-go
+  version: ^1.0.0
