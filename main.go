@@ -26,7 +26,7 @@ func main() {
 	r := consul.NewConsulResolver(consulAddr)
 
 	handlers := &types.FaaSHandlers{
-		FunctionReader: handlers.MakeReader(nomadClient.Allocations()),
+		FunctionReader: handlers.MakeReader(nomadClient.Jobs()),
 		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs()),
 		DeleteHandler:  handlers.MakeNull(),
 		ReplicaReader:  handlers.MakeNull(),

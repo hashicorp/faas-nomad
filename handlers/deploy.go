@@ -39,7 +39,8 @@ func MakeDeploy(client nomad.Job) http.HandlerFunc {
 }
 
 func createJob(r requests.CreateFunctionRequest) *api.Job {
-	job := api.NewServiceJob(r.Service, r.Service, "global", 1)
+	jobname := nomad.JobPrefix + r.Service
+	job := api.NewServiceJob(jobname, jobname, "global", 1)
 	job.Datacenters = []string{"dc1"}
 
 	task := &api.Task{

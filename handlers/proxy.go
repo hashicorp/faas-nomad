@@ -28,6 +28,7 @@ func MakeProxy(client ProxyClient, resolver consul.ServiceResolver) http.Handler
 	}
 }
 
+// Proxy is a http.Handler which implements the ability to call a downstream function
 type Proxy struct {
 	lbCache  *cache.Cache
 	client   ProxyClient

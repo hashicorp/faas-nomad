@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/nomad"
@@ -11,22 +12,28 @@ import (
 )
 
 func getFunctions(
-	client nomad.Allocations,
-	allocs []*api.AllocationListStub) ([]requests.Function, error) {
+	client nomad.Job,
+	jobs []*api.JobListStub) ([]requests.Function, error) {
 
 	functions := make([]requests.Function, 0)
-	for _, a := range allocs {
+	for _, j := range jobs {
 
-		if a.ClientStatus == "running" {
-			allocation, _, err := client.Info(a.ID, nil)
+		if j.Status == "running" {
+			job, _, err := client.Info(j.ID, nil)
 			if err != nil {
 				return functions, err
 			}
 
+			jobName := strings.Replace(
+				job.TaskGroups[0].Tasks[0].Name,
+				nomad.JobPrefix,
+				"",
+				-1)
+
 			functions = append(functions, requests.Function{
-				Name:            allocation.Job.TaskGroups[0].Tasks[0].Name,
-				Image:           allocation.Job.TaskGroups[0].Tasks[0].Config["image"].(string),
-				Replicas:        uint64(*allocation.Job.TaskGroups[0].Count),
+				Name:            jobName,
+				Image:           job.TaskGroups[0].Tasks[0].Config["image"].(string),
+				Replicas:        uint64(*job.TaskGroups[0].Count),
 				InvocationCount: 0,
 			})
 		}
@@ -34,7 +41,6 @@ func getFunctions(
 	}
 
 	return functions, nil
-
 }
 
 func writeError(w http.ResponseWriter, err error) {
@@ -45,19 +51,19 @@ func writeError(w http.ResponseWriter, err error) {
 }
 
 // MakeReader implements the OpenFaaS reader handler
-func MakeReader(client nomad.Allocations) http.HandlerFunc {
+func MakeReader(client nomad.Job) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Not sure if prefix is the right option
-		options := api.QueryOptions{}
-		options.Prefix = "faas_function"
+		options := &api.QueryOptions{}
+		options.Prefix = nomad.JobPrefix
 
-		allocations, _, err := client.List(nil)
+		jobs, _, err := client.List(options)
 		if err != nil {
 			writeError(w, err)
 			return
 		}
 
-		functions, err := getFunctions(client, allocations)
+		functions, err := getFunctions(client, jobs)
 		if err != nil {
 			writeError(w, err)
 			return
