@@ -2,18 +2,14 @@ package handlers
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
-
-var mockJob *nomad.MockJob
 
 func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
 	mockJob = &nomad.MockJob{}
@@ -22,12 +18,6 @@ func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 	return MakeDeploy(mockJob),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte(body)))
-}
-
-func createRequest() string {
-	req := requests.CreateFunctionRequest{}
-	data, _ := json.Marshal(req)
-	return string(data)
 }
 
 func TestHandlerReturnsErrorOnInvalidRequest(t *testing.T) {

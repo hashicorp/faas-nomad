@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -80,6 +81,8 @@ func (pc *HTTPProxyClient) CallAndReturnResponse(address string, w http.Response
 	// Match header for strict services
 	w.Header().Set("Content-Type", r.Header.Get("Content-Type"))
 	io.Copy(w, response.Body)
+
+	fmt.Println("Got Body")
 
 	return nil
 }

@@ -28,7 +28,7 @@ func main() {
 	handlers := &types.FaaSHandlers{
 		FunctionReader: handlers.MakeReader(nomadClient.Jobs()),
 		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs()),
-		DeleteHandler:  handlers.MakeNull(),
+		DeleteHandler:  handlers.MakeDelete(nomadClient.Jobs()),
 		ReplicaReader:  handlers.MakeNull(),
 		FunctionProxy:  handlers.MakeProxy(handlers.MakeProxyClient(), r),
 		ReplicaUpdater: handlers.MakeNull(),

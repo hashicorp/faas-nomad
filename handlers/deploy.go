@@ -11,8 +11,6 @@ import (
 	"github.com/hashicorp/nomad/api"
 )
 
-const functionNamespace string = "default"
-
 // MakeDeploy creates a handler for deploying functions
 func MakeDeploy(client nomad.Job) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

@@ -64,3 +64,12 @@ func (m *MockJob) List(q *api.QueryOptions) ([]*api.JobListStub, *api.QueryMeta,
 
 	return jobs, meta, args.Error(2)
 }
+
+// Deregister is a mock implementation of the interface method
+func (m *MockJob) Deregister(jobID string, purge bool, q *api.WriteOptions) (
+	string, *api.WriteMeta, error) {
+
+	args := m.Called(jobID, purge, q)
+
+	return "", nil, args.Error(2)
+}
