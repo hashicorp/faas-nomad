@@ -11,6 +11,32 @@ import (
 	"github.com/hashicorp/nomad/api"
 )
 
+// MakeReader implements the OpenFaaS reader handler
+func MakeReader(client nomad.Job) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Not sure if prefix is the right option
+		options := &api.QueryOptions{}
+		options.Prefix = nomad.JobPrefix
+
+		jobs, _, err := client.List(options)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		functions, err := getFunctions(client, jobs)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		functionBytes, _ := json.Marshal(functions)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		w.Write(functionBytes)
+	}
+}
+
 func getFunctions(
 	client nomad.Job,
 	jobs []*api.JobListStub) ([]requests.Function, error) {
@@ -48,30 +74,4 @@ func writeError(w http.ResponseWriter, err error) {
 	w.Write([]byte(err.Error()))
 	log.Println(err)
 	return
-}
-
-// MakeReader implements the OpenFaaS reader handler
-func MakeReader(client nomad.Job) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Not sure if prefix is the right option
-		options := &api.QueryOptions{}
-		options.Prefix = nomad.JobPrefix
-
-		jobs, _, err := client.List(options)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-
-		functions, err := getFunctions(client, jobs)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-
-		functionBytes, _ := json.Marshal(functions)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
-		w.Write(functionBytes)
-	}
 }

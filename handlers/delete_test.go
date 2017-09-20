@@ -17,7 +17,7 @@ func setupDelete(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 
 	return MakeDelete(mockJob),
 		httptest.NewRecorder(),
-		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte(body)))
+		httptest.NewRequest("DELETE", "/system/functions", bytes.NewReader([]byte(body)))
 }
 
 func TestDeleteHandlerReturnsErrorOnInvalidRequest(t *testing.T) {

@@ -29,9 +29,9 @@ func main() {
 		FunctionReader: handlers.MakeReader(nomadClient.Jobs()),
 		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs()),
 		DeleteHandler:  handlers.MakeDelete(nomadClient.Jobs()),
-		ReplicaReader:  handlers.MakeNull(),
+		ReplicaReader:  handlers.MakeReplicationReader(nomadClient.Jobs()),
+		ReplicaUpdater: handlers.MakeReplicationWriter(nomadClient.Jobs()),
 		FunctionProxy:  handlers.MakeProxy(handlers.MakeProxyClient(), r),
-		ReplicaUpdater: handlers.MakeNull(),
 	}
 	config := &types.FaaSConfig{}
 

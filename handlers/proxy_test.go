@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,6 +20,7 @@ func setupProxy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *htt
 	mockServiceResolver = &consul.MockServiceResolver{}
 
 	r := httptest.NewRequest("POST", "/", bytes.NewReader([]byte(body)))
+	r = r.WithContext(context.WithValue(r.Context(), FunctionNameCTXKey, "function"))
 	rr := httptest.NewRecorder()
 
 	return MakeProxy(mockProxyClient, mockServiceResolver), rr, r
@@ -33,19 +35,11 @@ func TestProxyHandlerOnGETReturnsBadRequest(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
-func TestProxyHandlerWithNoFunctionNameReturnsBadRequest(t *testing.T) {
-	h, rr, r := setupProxy("")
-	mockProxyClient.On("GetFunctionName", mock.Anything).Return("")
-
-	h(rr, r)
-
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-}
-
 func TestProxyHandlerWithFunctionNameCallsResolve(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
-	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil)
+	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).
+		Return([]byte{}, nil)
 	mockServiceResolver.On("Resolve", "function").Return([]string{"http://testaddress"})
 
 	h(rr, r)

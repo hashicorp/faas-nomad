@@ -43,12 +43,7 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service := p.client.GetFunctionName(r)
-	if service == "" {
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(rw, "Expected POST")
-		return
-	}
+	service := r.Context().Value(FunctionNameCTXKey).(string)
 
 	urls, _ := p.resolver.Resolve(service)
 

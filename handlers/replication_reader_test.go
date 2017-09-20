@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,31 +14,20 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-var functionName = ""
-
-func setupReplicationReader() (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
+func setupReplicationReader(functionName string) (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
 	mockJob = &nomad.MockJob{}
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/test/test_function", nil)
+	r = r.WithContext(context.WithValue(r.Context(), FunctionNameCTXKey, functionName))
 
-	h := MakeReplicationReader(mockJob, func(*http.Request) map[string]string {
-		return map[string]string{"name": functionName}
-	})
+	h := MakeReplicationReader(mockJob)
 
 	return h, rr, r
 }
 
-func TestReplicationRReturnsBadRequestWhenNoFunction(t *testing.T) {
-	h, rr, r := setupReplicationReader()
-
-	h(rr, r)
-
-	assert.Equal(t, rr.Code, http.StatusBadRequest)
-}
-
-func TestReplicationRReturns404WhenNotFound(t *testing.T) {
-	h, rr, r := setupReplicationReader()
-	functionName = "notFound"
+func TestMiddlewareReturns404WhenNotFound(t *testing.T) {
+	functionName := "notFound"
+	h, rr, r := setupReplicationReader(functionName)
 	mockJob.On("Info", nomad.JobPrefix+functionName, mock.Anything).Return(nil, nil, nil)
 
 	h(rr, r)
@@ -47,9 +37,12 @@ func TestReplicationRReturns404WhenNotFound(t *testing.T) {
 }
 
 func TestReplicationRReturnsFunctionWhenFound(t *testing.T) {
-	h, rr, r := setupReplicationReader()
-	functionName = "found"
-	mockJob.On("Info", nomad.JobPrefix+functionName, mock.Anything).Return(&api.Job{ID: &functionName}, nil, nil)
+	functionName := "tester"
+	jobName := nomad.JobPrefix + functionName
+
+	h, rr, r := setupReplicationReader(functionName)
+	mockJob.On("Info", jobName, mock.Anything).
+		Return(&api.Job{ID: &jobName}, nil, nil)
 
 	h(rr, r)
 
