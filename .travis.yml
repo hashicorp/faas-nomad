@@ -4,20 +4,29 @@ services:
   - docker
 
 go:
-  - master
+  - 1.9
+
+env:
+  - NOMAD_ADDR=http://localhost:4646
 
 before_install:
   - sudo apt-get update
   - sudo apt-get install unzip curl
   - curl https://releases.hashicorp.com/nomad/0.6.3/nomad_0.6.3_linux_amd64.zip -o nomad.zip
   - curl https://releases.hashicorp.com/consul/0.9.3/consul_0.9.3_linux_amd64.zip -o consul.zip
-  - unzip -d  ./ ~/nomad.zip
-  - unzip -d  ./ ~/consul.zip
-  - chmod +x ./consul
-  - chmod +x ./nomad
+  - sudo unzip -o -d  /usr/local/bin ./nomad.zip
+  - sudo unzip -o -d  /usr/local/bin ./consul.zip
+  - sudo chmod +x /usr/local/bin/consul
+  - sudo chmod +x /usr/local/bin/nomad
   - nohup consul agent -dev >~/logs/consul.log 2>&1 &
   - nohup nomad agent -dev >~/logs/nomad.log 2>&1 &
+  - go get -d github.com/openfaas/certify-incubator
 
 script:
+  - echo "Build and Test"
   - make test
   - make build_linux
+  - make build_docker
+  - echo "Run Functional Tests"
+  - nomad run faas-docker-localhost.hcl
+  - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=http://localhost:8080/ go test ./... 
