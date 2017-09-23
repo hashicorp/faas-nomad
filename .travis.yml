@@ -18,8 +18,8 @@ before_install:
   - sudo unzip -o -d  /usr/local/bin ./consul.zip
   - sudo chmod +x /usr/local/bin/consul
   - sudo chmod +x /usr/local/bin/nomad
-  - nohup consul agent -dev >~/logs/consul.log 2>&1 &
-  - nohup nomad agent -dev >~/logs/nomad.log 2>&1 &
+  - nohup consul agent -dev >consul.log 2>&1 &
+  - nohup nomad agent -dev >nomad.log 2>&1 &
   - trap 'go get -d github.com/openfaas/certify-incubator' ERR
 
 script:
