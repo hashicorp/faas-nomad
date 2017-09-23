@@ -28,4 +28,5 @@ script:
   - make build_docker
   - echo "Run Functional Tests"
   - nomad run faas-docker-localhost.hcl
-  - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=http://localhost:8080/ go test ./... 
+  - sleep 10
+  - cd $GOPATH/src/github.com/openfaas/certify-incubator && go get -t ./... && gateway_url=http://localhost:8080/ go test ./... 
