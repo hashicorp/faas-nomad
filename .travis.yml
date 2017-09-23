@@ -1,7 +1,22 @@
 language: go
 
+services:
+  - docker
+
 go:
   - master
+
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install unzip curl
+  - curl https://releases.hashicorp.com/nomad/0.6.3/nomad_0.6.3_linux_amd64.zip -o nomad.zip
+  - curl https://releases.hashicorp.com/consul/0.9.3/consul_0.9.3_linux_amd64.zip -o consul.zip
+  - unzip -d  ./ ~/nomad.zip
+  - unzip -d  ./ ~/consul.zip
+  - chmod +x ./consul
+  - chmod +x ./nomad
+  - nohup consul agent -dev >~/logs/consul.log 2>&1 &
+  - nohup nomad agent -dev >~/logs/nomad.log 2>&1 &
 
 script:
   - make test
