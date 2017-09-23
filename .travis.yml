@@ -20,12 +20,11 @@ before_install:
   - sudo chmod +x /usr/local/bin/nomad
   - nohup consul agent -dev >consul.log 2>&1 &
   - nohup nomad agent -dev >nomad.log 2>&1 &
-  - trap 'go get -d github.com/openfaas/certify-incubator' ERR
+  - git clone https://github.com/openfaas/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
 
 script:
   - echo "Build and Test"
   - make test
-  - make build_linux
   - make build_docker
   - echo "Run Functional Tests"
   - nomad run faas-docker-localhost.hcl
