@@ -2,8 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -29,7 +27,7 @@ func MakeProxyClient() *HTTPProxyClient {
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
-				Timeout:   3 * time.Second,
+				Timeout:   30 * time.Second,
 				KeepAlive: 0,
 			}).DialContext,
 			MaxIdleConns:          1,
@@ -77,12 +75,16 @@ func (pc *HTTPProxyClient) CallAndReturnResponse(address string, w http.Response
 	clientHeader := w.Header()
 	copyHeaders(&clientHeader, &response.Header)
 
-	// TODO: copyHeaders removes the need for this line - test removal.
-	// Match header for strict services
-	w.Header().Set("Content-Type", r.Header.Get("Content-Type"))
-	io.Copy(w, response.Body)
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Printf("Error reading body: %v\n", err)
 
-	fmt.Println("Got Body")
+		w.WriteHeader(http.StatusInternalServerError)
+		return err
+	}
+
+	w.Write(body)
+	log.Println("Finished")
 
 	return nil
 }

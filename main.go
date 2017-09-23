@@ -2,12 +2,15 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 
 	bootstrap "github.com/alexellis/faas-provider"
 	"github.com/alexellis/faas-provider/types"
+	"github.com/gorilla/mux"
 	"github.com/hashicorp/faas-nomad/consul"
 	"github.com/hashicorp/faas-nomad/handlers"
+	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
 )
 
@@ -29,11 +32,38 @@ func main() {
 		FunctionReader: handlers.MakeReader(nomadClient.Jobs()),
 		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs()),
 		DeleteHandler:  handlers.MakeDelete(nomadClient.Jobs()),
-		ReplicaReader:  handlers.MakeReplicationReader(nomadClient.Jobs()),
-		ReplicaUpdater: handlers.MakeReplicationWriter(nomadClient.Jobs()),
-		FunctionProxy:  handlers.MakeProxy(handlers.MakeProxyClient(), r),
+		ReplicaReader:  makeReplicationReader(nomadClient.Jobs()),
+		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs()),
+		FunctionProxy:  makeFunctionProxyHandler(r),
 	}
 	config := &types.FaaSConfig{}
 
 	bootstrap.Serve(handlers, config)
+}
+
+func makeFunctionProxyHandler(r consul.ServiceResolver) http.HandlerFunc {
+	return handlers.MakeExtractFunctionMiddleWare(
+		func(r *http.Request) map[string]string {
+			return mux.Vars(r)
+		},
+		handlers.MakeProxy(handlers.MakeProxyClient(), r),
+	)
+}
+
+func makeReplicationReader(client nomad.Job) http.HandlerFunc {
+	return handlers.MakeExtractFunctionMiddleWare(
+		func(r *http.Request) map[string]string {
+			return mux.Vars(r)
+		},
+		handlers.MakeReplicationReader(client),
+	)
+}
+
+func makeReplicationUpdater(client nomad.Job) http.HandlerFunc {
+	return handlers.MakeExtractFunctionMiddleWare(
+		func(r *http.Request) map[string]string {
+			return mux.Vars(r)
+		},
+		handlers.MakeReplicationWriter(client),
+	)
 }

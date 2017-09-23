@@ -1,7 +1,7 @@
 VERSION=0.1
 
 test:
-	go test -v -race $(shell go list ./... | grep -v /vendor/)
+	GOMAXPROCS=7 go test -parallel 7 -cover -race ./...
 
 build:
 

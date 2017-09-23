@@ -1,10 +1,10 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -51,12 +51,11 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	lb := p.getLoadbalancer(service, urls)
 	lb.Do(func(endpoint url.URL) error {
 
+		hostIP := os.Getenv("HOST_IP")
 		address := endpoint.String()
-		if strings.Contains(address, "127.0.0.1") {
-			address = strings.Replace(address, "127.0.0.1", "docker.for.mac.localhost", 1)
+		if hostIP != "" && strings.Contains(address, "127.0.0.1") {
+			address = strings.Replace(address, "127.0.0.1", hostIP, 1)
 		}
-
-		fmt.Println(address)
 
 		return p.client.CallAndReturnResponse(address, rw, r)
 	})
@@ -90,7 +89,7 @@ func createLoadbalancer(endpoints []url.URL) ultraclient.Client {
 	bs := ultraclient.ExponentialBackoff{}
 
 	config := ultraclient.Config{
-		Timeout:                5 * time.Second,
+		Timeout:                30 * time.Second,
 		MaxConcurrentRequests:  500,
 		ErrorPercentThreshold:  25,
 		DefaultVolumeThreshold: 10,

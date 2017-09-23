@@ -5,6 +5,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/faas-nomad/consul"
@@ -59,6 +61,9 @@ func TestProxyHandlerCallsCallAndReturnResponse(t *testing.T) {
 }
 
 func TestProxyHandlerWithLocalhostReplacesWithDockerMacAddress(t *testing.T) {
+	f := setEnv()
+	defer f()
+
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
 	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil)
@@ -66,5 +71,17 @@ func TestProxyHandlerWithLocalhostReplacesWithDockerMacAddress(t *testing.T) {
 
 	h(rr, r)
 
-	mockProxyClient.AssertCalled(t, "CallAndReturnResponse", "http://docker.for.mac.localhost", rr, r)
+	mockProxyClient.AssertCalled(t, "CallAndReturnResponse", "http://myhost", rr, r)
+}
+
+func setEnv() func() {
+	env := os.Environ()
+	os.Setenv("HOST_IP", "myhost")
+
+	return func() {
+		for _, e := range env {
+			kv := strings.Split(e, "=")
+			os.Setenv(kv[0], kv[1])
+		}
+	}
 }

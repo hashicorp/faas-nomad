@@ -45,13 +45,21 @@ func MakeReplicationWriter(client nomad.Job) http.HandlerFunc {
 
 		req := types.ScaleServiceRequest{}
 		err = json.NewDecoder(r.Body).Decode(&req)
-		if err != nil {
+		if err != nil || req.ServiceName == "" {
 			rw.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(rw, err)
 			return
 		}
 
 		// update nomad job
+		replicas := int(req.Replicas)
+		job.TaskGroups[0].Count = &replicas
+
+		_, _, err = client.Register(job, nil)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(rw, err)
+		}
 	}
 }
 

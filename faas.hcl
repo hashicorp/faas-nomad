@@ -18,8 +18,9 @@ job "faas-nomadd" {
       
       env {
         NOMAD_REGION = "${NOMAD_REGION}"
-        NOMAD_ADDR = "docker.for.mac.localhost:4646"
-        CONSUL_ADDR = "docker.for.mac.localhost:8500"
+        NOMAD_ADDR   = "192.168.65.1:4646"
+        CONSUL_ADDR  = "192.168.65.1:8500"
+        HOST_IP      = "192.168.65.1"
       }
 
       config {
@@ -47,7 +48,7 @@ job "faas-nomadd" {
       driver = "docker"
 
       env {
-        functions_provider_url = "http://docker.for.mac.localhost:8080/"
+        functions_provider_url = "http://192.168.65.1:8080/"
       }
 
       config {
