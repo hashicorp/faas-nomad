@@ -20,7 +20,7 @@ before_install:
   - sudo chmod +x /usr/local/bin/nomad
   - nohup consul agent -dev >~/logs/consul.log 2>&1 &
   - nohup nomad agent -dev >~/logs/nomad.log 2>&1 &
-  - go get -d github.com/openfaas/certify-incubator
+  - trap 'go get -d github.com/openfaas/certify-incubator' ERR
 
 script:
   - echo "Build and Test"
