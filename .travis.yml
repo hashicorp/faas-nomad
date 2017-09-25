@@ -31,4 +31,6 @@ script:
   - sleep 10
   - nomad status faas-nomadd
   - docker ps
-  - cd $GOPATH/src/github.com/openfaas/certify-incubator && go get -t ./... && gateway_url=http://$HOST_IP:8080/ go test ./... 
+  - cd $GOPATH/src/github.com/openfaas/certify-incubator && \
+    go get -t ./... && \
+    gateway_url=http://$(ip route get 1 | awk '{print $NF;exit}'):8080/ go test ./...
