@@ -1,0 +1,15 @@
+sudo: required
+
+services:
+      - docker
+addons:
+  apt:
+    packages:
+      - docker-ce
+
+before_install:
+    - docker pull golang:1.7.5
+
+script:
+    - sh build.sh
+

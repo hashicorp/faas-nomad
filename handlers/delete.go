@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/nomad"
+	"github.com/openfaas/faas/gateway/requests"
 )
 
 const functionNamespace string = "default"

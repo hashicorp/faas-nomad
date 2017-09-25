@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"os"
 
-	bootstrap "github.com/alexellis/faas-provider"
-	"github.com/alexellis/faas-provider/types"
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/faas-nomad/consul"
 	"github.com/hashicorp/faas-nomad/handlers"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
+	bootstrap "github.com/openfaas/faas-provider"
+	"github.com/openfaas/faas-provider/types"
 )
 
 func main() {

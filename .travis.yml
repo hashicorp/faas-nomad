@@ -18,8 +18,6 @@ before_install:
   - sudo unzip -o -d  /usr/local/bin ./consul.zip
   - sudo chmod +x /usr/local/bin/consul
   - sudo chmod +x /usr/local/bin/nomad
-  - nohup consul agent -dev >consul.log 2>&1 &
-  - nohup nomad agent -dev >nomad.log 2>&1 &
   - git clone https://github.com/openfaas/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
 
 script:
@@ -27,8 +25,10 @@ script:
   - make test
   - make build_docker
   - echo "Run Functional Tests"
-  - nomad run faas-docker-localhost.hcl
+  - ./startNomad.sh
+  - sleep 10
+  - nomad run faas.hcl
   - sleep 10
   - nomad status faas-nomadd
   - docker ps
-  - cd $GOPATH/src/github.com/openfaas/certify-incubator && go get -t ./... && gateway_url=http://localhost:8080/ go test ./... 
+  - cd $GOPATH/src/github.com/openfaas/certify-incubator && go get -t ./... && gateway_url=http://$HOST_IP:8080/ go test ./... 

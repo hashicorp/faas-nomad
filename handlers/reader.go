@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
+	"github.com/openfaas/faas/gateway/requests"
 )
 
 // MakeReader implements the OpenFaaS reader handler

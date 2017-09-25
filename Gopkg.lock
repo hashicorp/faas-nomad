@@ -21,7 +21,7 @@
 
 [[projects]]
   name = "github.com/alexellis/faas-provider"
-  packages = [".","types"]
+  packages = ["types"]
   revision = "e29c512428c07b7ad7617523bf939581eade1e56"
   version = "0.1"
 
@@ -200,6 +200,18 @@
   version = "0.7"
 
 [[projects]]
+  name = "github.com/openfaas/faas"
+  packages = ["gateway/requests"]
+  revision = "5a58db2c5006695c2e1fa08f291513933b469e85"
+  version = "0.6.5"
+
+[[projects]]
+  name = "github.com/openfaas/faas-provider"
+  packages = [".","types"]
+  revision = "e29c512428c07b7ad7617523bf939581eade1e56"
+  version = "0.1"
+
+[[projects]]
   name = "github.com/patrickmn/go-cache"
   packages = ["."]
   revision = "1881a9bccb818787f68c52bfba648c6cf34c34fa"
@@ -256,6 +268,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "800a5d2e2a5d91260da4b3119ee9c2ae67429385d1ab0eb5684edcabb6f91a68"
+  inputs-digest = "8dbb104bf3d1b452381f69848910bd880275ffedb71052aff4f454f595036665"
   solver-name = "gps-cdcl"
   solver-version = 1

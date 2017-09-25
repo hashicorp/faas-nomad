@@ -71,7 +71,9 @@ func (sr *ConsulResolver) watch() {
 				)
 			}
 
-			sr.cache.Set(cs[0].ServiceName, addresses, cache.DefaultExpiration)
+			if len(cs) > 0 {
+				sr.cache.Set(cs[0].ServiceName, addresses, cache.DefaultExpiration)
+			}
 		}
 	}()
 }

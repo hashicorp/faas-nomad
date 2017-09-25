@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
+	"github.com/openfaas/faas/gateway/requests"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

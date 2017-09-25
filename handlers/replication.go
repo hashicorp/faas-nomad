@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alexellis/faas-provider/types"
-	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
+	"github.com/openfaas/faas-provider/types"
+	"github.com/openfaas/faas/gateway/requests"
 )
 
 // MakeReplicationReader creates a replication reader handler

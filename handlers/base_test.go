@@ -3,8 +3,8 @@ package handlers
 import (
 	"encoding/json"
 
-	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/nomad"
+	"github.com/openfaas/faas/gateway/requests"
 )
 
 var mockJob *nomad.MockJob

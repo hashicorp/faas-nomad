@@ -18,9 +18,9 @@ job "faas-nomadd" {
       
       env {
         NOMAD_REGION = "${NOMAD_REGION}"
-        NOMAD_ADDR   = "192.168.65.1:4646"
-        CONSUL_ADDR  = "192.168.65.1:8500"
-        HOST_IP      = "192.168.65.1"
+        NOMAD_ADDR   = "${NOMAD_IP_http}:4646"
+        CONSUL_ADDR  = "${NOMAD_IP_http}:8500"
+        HOST_IP      = "${NOMAD_IP_http}"
       }
 
       config {
@@ -48,7 +48,7 @@ job "faas-nomadd" {
       driver = "docker"
 
       env {
-        functions_provider_url = "http://192.168.65.1:8080/"
+        functions_provider_url = "http://${NOMAD_IP_http}:8080/"
       }
 
       config {
