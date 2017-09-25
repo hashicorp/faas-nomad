@@ -18,7 +18,7 @@ before_install:
   - sudo unzip -o -d  /usr/local/bin ./consul.zip
   - sudo chmod +x /usr/local/bin/consul
   - sudo chmod +x /usr/local/bin/nomad
-  - git clone https://github.com/openfaas/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
+  - git clone https://github.com/nicholasjackson/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
 
 script:
   - echo "Build and Test"
@@ -31,5 +31,5 @@ script:
   - sleep 10
   - nomad status faas-nomadd
   - docker ps
-  - cd $GOPATH/src/github.com/openfaas/certify-incubator && go get -t ./... && gateway_url=http://$(ip route get 1 | awk '{print $NF;exit}'):8080/ go test ./tests -v
+  - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=http://$(ip route get 1 | awk '{print $NF;exit}'):8080/ go test ./tests -v
 
