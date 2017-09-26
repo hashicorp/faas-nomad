@@ -60,18 +60,19 @@ func TestProxyHandlerCallsCallAndReturnResponse(t *testing.T) {
 	mockProxyClient.AssertCalled(t, "CallAndReturnResponse", "http://testaddress", rr, r)
 }
 
-func TestProxyHandlerWithLocalhostReplacesWithDockerMacAddress(t *testing.T) {
+func TestProxyHandlerReturnsErrorWhenNoEndpoints(t *testing.T) {
 	f := setEnv()
 	defer f()
 
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
 	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil)
-	mockServiceResolver.On("Resolve", "function").Return([]string{"http://127.0.0.1"})
+	mockServiceResolver.On("Resolve", "function").Return([]string{})
 
 	h(rr, r)
 
-	mockProxyClient.AssertCalled(t, "CallAndReturnResponse", "http://myhost", rr, r)
+	mockProxyClient.AssertNotCalled(t, "CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
 func setEnv() func() {

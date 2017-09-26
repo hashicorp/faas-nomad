@@ -97,13 +97,18 @@ func TestHandlerReturnsRunningDeployments(t *testing.T) {
 
 	a1 := createMockJob("1234", 1)
 	a2 := createMockJob("4567", 1)
+	a3 := createMockJob("8929", 1)
 
-	status := "stopped"
-	a2.Status = &status
+	a2status := "stopped"
+	a2.Status = &a2status
+
+	a3status := "pending"
+	a3.Status = &a3status
 
 	d := make([]*api.JobListStub, 0)
 	d = append(d, &api.JobListStub{ID: *a1.ID, Status: *a1.Status})
 	d = append(d, &api.JobListStub{ID: *a2.ID, Status: *a2.Status})
+	d = append(d, &api.JobListStub{ID: *a3.ID, Status: *a3.Status})
 
 	mockJob.On("List", mock.Anything).Return(d, nil, nil)
 	mockJob.On("Info", *a1.ID, mock.Anything).Return(a1, nil, nil)
@@ -119,5 +124,5 @@ func TestHandlerReturnsRunningDeployments(t *testing.T) {
 	funcs := make([]requests.Function, 0)
 	json.Unmarshal(body, &funcs)
 
-	assert.Equal(t, 1, len(funcs))
+	assert.Equal(t, 2, len(funcs))
 }

@@ -44,7 +44,7 @@ func getFunctions(
 	functions := make([]requests.Function, 0)
 	for _, j := range jobs {
 
-		if j.Status == "running" {
+		if j.Status == "running" || j.Status == "pending" {
 			job, _, err := client.Info(j.ID, nil)
 			if err != nil {
 				return functions, err

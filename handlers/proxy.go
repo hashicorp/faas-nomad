@@ -4,8 +4,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/faas-nomad/consul"
@@ -15,7 +13,6 @@ import (
 
 // MakeProxy creates a proxy for HTTP web requests which can be routed to a function.
 func MakeProxy(client ProxyClient, resolver consul.ServiceResolver) http.HandlerFunc {
-
 	c := cache.New(5*time.Minute, 10*time.Minute)
 	p := &Proxy{
 		lbCache:  c,
@@ -46,18 +43,14 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	service := r.Context().Value(FunctionNameCTXKey).(string)
 
 	urls, _ := p.resolver.Resolve(service)
+	if len(urls) == 0 {
+		rw.WriteHeader(http.StatusNotFound)
+		return
+	}
 
-	// hack for docker for mac, need real implementation
 	lb := p.getLoadbalancer(service, urls)
 	lb.Do(func(endpoint url.URL) error {
-
-		hostIP := os.Getenv("HOST_IP")
-		address := endpoint.String()
-		if hostIP != "" && strings.Contains(address, "127.0.0.1") {
-			address = strings.Replace(address, "127.0.0.1", hostIP, 1)
-		}
-
-		return p.client.CallAndReturnResponse(address, rw, r)
+		return p.client.CallAndReturnResponse(endpoint.String(), rw, r)
 	})
 }
 
