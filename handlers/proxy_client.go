@@ -13,15 +13,18 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// ProxyClient defines the interface for a client which calls faas functions
 type ProxyClient interface {
 	GetFunctionName(*http.Request) string
-	CallAndReturnResponse(string, http.ResponseWriter, *http.Request) error
+	CallAndReturnResponse(address string, body []byte, headers http.Header) ([]byte, http.Header, error)
 }
 
+// HTTPProxyClient allows the calling of functions
 type HTTPProxyClient struct {
 	proxyClient *http.Client
 }
 
+// MakeProxyClient creates a new HTTPProxyClient
 func MakeProxyClient() *HTTPProxyClient {
 	proxyClient := &http.Client{
 		Transport: &http.Transport{
@@ -42,12 +45,15 @@ func MakeProxyClient() *HTTPProxyClient {
 	}
 }
 
+// GetFunctionName returns the name of the function from the request vars
 func (pc *HTTPProxyClient) GetFunctionName(r *http.Request) string {
 	vars := mux.Vars(r)
 	return vars["name"]
 }
 
-func (pc *HTTPProxyClient) CallAndReturnResponse(address string, w http.ResponseWriter, r *http.Request) error {
+// CallAndReturnResponse calls the function and resturns the response
+func (pc *HTTPProxyClient) CallAndReturnResponse(address string, body []byte, headers http.Header) (
+	[]byte, http.Header, error) {
 	stamp := strconv.FormatInt(time.Now().Unix(), 10)
 
 	defer func(when time.Time) {
@@ -55,38 +61,30 @@ func (pc *HTTPProxyClient) CallAndReturnResponse(address string, w http.Response
 		log.Printf("[%s] took %f seconds\n", stamp, seconds)
 	}(time.Now())
 
-	requestBody, _ := ioutil.ReadAll(r.Body)
-	defer r.Body.Close()
-
 	log.Println("Trying to call:", address)
-	request, _ := http.NewRequest("POST", address, bytes.NewReader(requestBody))
+	request, _ := http.NewRequest("POST", address, bytes.NewReader(body))
 
-	copyHeaders(&request.Header, &r.Header)
+	copyHeaders(&request.Header, &headers)
 
 	defer request.Body.Close()
 
 	response, err := pc.proxyClient.Do(request)
 	if err != nil {
 		log.Println(err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return err
+		return nil, nil, err
 	}
 
-	clientHeader := w.Header()
-	copyHeaders(&clientHeader, &response.Header)
-
-	body, err := ioutil.ReadAll(response.Body)
+	respBody, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		log.Printf("Error reading body: %v\n", err)
 
-		w.WriteHeader(http.StatusInternalServerError)
-		return err
+		return nil, nil, err
 	}
+	response.Body.Close()
 
-	w.Write(body)
 	log.Println("Finished")
 
-	return nil
+	return respBody, response.Header, nil
 }
 
 func copyHeaders(destination *http.Header, source *http.Header) {

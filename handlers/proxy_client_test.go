@@ -25,7 +25,6 @@ func testHandler(rw http.ResponseWriter, r *http.Request) {
 
 func setupProxyClient(body []byte) (
 	*HTTPProxyClient,
-	*httptest.ResponseRecorder,
 	*http.Request,
 	*httptest.Server) {
 
@@ -39,37 +38,35 @@ func setupProxyClient(body []byte) (
 		bytes.NewReader(body),
 	)
 
-	rw := httptest.NewRecorder()
-
-	return MakeProxyClient(), rw, r, server
+	return MakeProxyClient(), r, server
 }
 
 func TestClientPostsGivenRequestBody(t *testing.T) {
 	body := []byte("request body")
-	c, rw, r, s := setupProxyClient(body)
+	c, r, s := setupProxyClient(body)
 	defer s.Close()
 
-	c.CallAndReturnResponse(s.URL, rw, r)
+	c.CallAndReturnResponse(s.URL, body, r.Header)
 
 	assert.Equal(t, "request body", string(postBody))
 }
 
 func TestClientReturnsHeadersFromRequest(t *testing.T) {
 	body := []byte("request body")
-	c, rw, r, s := setupProxyClient(body)
+	c, r, s := setupProxyClient(body)
 	defer s.Close()
 
-	c.CallAndReturnResponse(s.URL, rw, r)
+	_, h, _ := c.CallAndReturnResponse(s.URL, body, r.Header)
 
-	assert.Equal(t, "somevalue", rw.Header().Get("TESTHeader"))
+	assert.Equal(t, "somevalue", h.Get("TESTHeader"))
 }
 
 func TestClientReturnsBodysFromRequest(t *testing.T) {
 	body := []byte("request body")
-	c, rw, r, s := setupProxyClient(body)
+	c, r, s := setupProxyClient(body)
 	defer s.Close()
 
-	c.CallAndReturnResponse(s.URL, rw, r)
+	b, _, _ := c.CallAndReturnResponse(s.URL, body, r.Header)
 
-	assert.Equal(t, "my body", rw.Body.String())
+	assert.Equal(t, "my body", string(b))
 }

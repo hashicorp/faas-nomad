@@ -17,12 +17,9 @@ func (mp *MockProxyClient) GetFunctionName(r *http.Request) string {
 	return args.Get(0).(string)
 }
 
-func (mp *MockProxyClient) CallAndReturnResponse(address string, rw http.ResponseWriter, r *http.Request) error {
-	args := mp.Called(address, rw, r)
+func (mp *MockProxyClient) CallAndReturnResponse(address string, body []byte, h http.Header) (
+	[]byte, http.Header, error) {
+	args := mp.Called(address, body, h)
 
-	if body := args.Get(0); body != nil {
-		rw.Write(body.([]byte))
-	}
-
-	return args.Error(1)
+	return args.Get(0).([]byte), args.Get(1).(http.Header), args.Error(2)
 }

@@ -20,11 +20,11 @@ job "faas-nomadd" {
         NOMAD_REGION = "${NOMAD_REGION}"
         NOMAD_ADDR   = "${NOMAD_IP_http}:4646"
         CONSUL_ADDR  = "${NOMAD_IP_http}:8500"
-        HOST_IP      = "${NOMAD_IP_http}"
+        STATSD_ADDR  = "${NOMAD_ADDR_statsd_statsd}"
       }
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:0.1"
+        image = "quay.io/nicholasjackson/faas-nomad:0.2"
 
         port_map {
           http = 8080
@@ -91,6 +91,10 @@ job "faas-nomadd" {
 
       config {
         image = "prom/statsd-exporter:v0.4.0"
+
+        args = [
+          "-log.level=debug",
+        ]
       }
 
       resources {
