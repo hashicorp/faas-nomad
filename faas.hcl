@@ -15,7 +15,7 @@ job "faas-nomadd" {
 
     task "nomadd" {
       driver = "docker"
-      
+
       env {
         NOMAD_REGION = "${NOMAD_REGION}"
         NOMAD_ADDR   = "${NOMAD_IP_http}:4646"
@@ -25,7 +25,7 @@ job "faas-nomadd" {
 
       config {
         image = "quay.io/nicholasjackson/faas-nomad:0.1"
-        
+
         port_map {
           http = 8080
         }
@@ -34,26 +34,33 @@ job "faas-nomadd" {
       resources {
         cpu    = 500 # 500 MHz
         memory = 256 # 256MB
+
         network {
           mbits = 10
+
           port "http" {
-            static = 8080 
+            static = 8081
           }
         }
       }
 
+      service {
+        port = "http"
+        name = "faasd-nomad"
+        tags = ["faas"]
+      }
     }
 
     task "gateway" {
       driver = "docker"
 
       env {
-        functions_provider_url = "http://${NOMAD_IP_http}:8080/"
+        functions_provider_url = "http://${NOMAD_IP_http}:8081/"
       }
 
       config {
         image = "functions/gateway:0.6.1"
-        
+
         port_map {
           http = 8080
         }
@@ -62,14 +69,21 @@ job "faas-nomadd" {
       resources {
         cpu    = 500 # 500 MHz
         memory = 256 # 256MB
+
         network {
           mbits = 10
+
           port "http" {
-            static = 8081 
+            static = 8080
           }
         }
       }
 
+      service {
+        port = "http"
+        name = "gateway"
+        tags = ["faas"]
+      }
     }
   }
 }
