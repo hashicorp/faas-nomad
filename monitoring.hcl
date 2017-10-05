@@ -167,6 +167,13 @@ scrape_configs:
       - names: ["gateway.service.dc1.consul"]
         type: SRV
         refresh_interval: 5s
+  
+  - job_name: "statsd"
+    scrape_interval: 5s
+    dns_sd_configs:
+      - names: ["statsd.service.dc1.consul"]
+        type: SRV
+        refresh_interval: 5s
 EOH
 
         destination   = "/etc/prometheus/prometheus.yml"
@@ -243,6 +250,31 @@ EOH
           interval = "10s"
           timeout  = "2s"
           path     = "/graph"
+        }
+      }
+    }
+
+    task "grafana" {
+      driver = "docker"
+
+      config {
+        image = "grafana/grafana:4.5.2"
+
+        port_map {
+          http = 3000
+        }
+      }
+
+      resources {
+        cpu    = 500 # 500 MHz
+        memory = 256 # 256MB
+
+        network {
+          mbits = 10
+
+          port "http" {
+            static = 3000
+          }
         }
       }
     }

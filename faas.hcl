@@ -85,5 +85,44 @@ job "faas-nomadd" {
         tags = ["faas"]
       }
     }
+
+    task "statsd" {
+      driver = "docker"
+
+      config {
+        image = "prom/statsd-exporter:v0.4.0"
+      }
+
+      resources {
+        cpu    = 500 # 500 MHz
+        memory = 256 # 256MB
+
+        network {
+          mbits = 1
+
+          port "http" {
+            static = 9102
+          }
+
+          port "statsd" {
+            static = 9125
+          }
+        }
+      }
+
+      service {
+        port = "http"
+        name = "statsd"
+        tags = ["faas"]
+
+        check {
+          type     = "http"
+          port     = "http"
+          interval = "10s"
+          timeout  = "2s"
+          path     = "/"
+        }
+      }
+    }
   }
 }
