@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/nomad"
@@ -40,6 +41,11 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 	jobname := nomad.JobPrefix + r.Service
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
 	job.Datacenters = []string{"dc1"}
+	count := 1
+	restartDelay := 1 * time.Second
+	restartMode := "delay"
+	restartAttempts := 25
+	taskMemory := 256
 
 	task := &api.Task{
 		Name:   r.Service,
@@ -56,6 +62,7 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 					DynamicPorts: []api.Port{api.Port{Label: "http"}},
 				},
 			},
+			MemoryMB: &taskMemory,
 		},
 		Services: []*api.Service{
 			&api.Service{
@@ -65,12 +72,15 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 		},
 	}
 
-	count := 1
-
 	tg := []*api.TaskGroup{
 		&api.TaskGroup{
 			Name:  &r.Service,
 			Count: &count,
+			RestartPolicy: &api.RestartPolicy{
+				Delay:    &restartDelay,
+				Mode:     &restartMode,
+				Attempts: &restartAttempts,
+			},
 			Tasks: []*api.Task{task},
 		},
 	}
