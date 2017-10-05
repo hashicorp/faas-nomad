@@ -176,24 +176,23 @@ EOH
 
       template {
         data = <<EOH
-alert.rules: |
-  ALERT service_down
-    IF up == 0
-  ALERT APIHighInvocationRate
-    IF sum ( rate(gateway_function_invocation_total{code="200"}[10s]) ) by (function_name) > 5
-    FOR 5s
-    LABELS {
-      service = "gateway",
-      severity = "major",
-      value = "{{ "{{" }}$value{{ "}}" }}"
-    }
-    ANNOTATIONS {
-      summary = "High invocation total on {{ "{{" }} $labels.instance {{ "}}" }}",
-      description =  "High invocation total on {{ "{{" }} $labels.instance {{ "}}" }}"
-    }
+ALERT service_down
+  IF up == 0
+ALERT APIHighInvocationRate
+  IF sum ( rate(gateway_function_invocation_total{code="200"}[10s]) ) by (function_name) > 5
+  FOR 5s
+  LABELS {
+    service = "gateway",
+    severity = "major",
+    value = "{{ "{{" }}$value{{ "}}" }}"
+  }
+  ANNOTATIONS {
+    summary = "High invocation total on {{ "{{" }} $labels.instance {{ "}}" }}",
+    description =  "High invocation total on {{ "{{" }} $labels.instance {{ "}}" }}"
+  }
 EOH
 
-        destination   = "/etc/prometheus/alerts.yml"
+        destination   = "/etc/prometheus/alert.rules"
         change_mode   = "noop"
         change_signal = "SIGINT"
       }
@@ -216,7 +215,7 @@ EOH
 
         volumes = [
           "etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml",
-          "etc/prometheus/alerts.yml:/etc/prometheus/alerts.yml",
+          "etc/prometheus/alert.rules:/etc/prometheus/alert.rules",
         ]
       }
 
@@ -227,7 +226,9 @@ EOH
         network {
           mbits = 10
 
-          port "http" {}
+          port "http" {
+            static = 9090
+          }
         }
       }
 
