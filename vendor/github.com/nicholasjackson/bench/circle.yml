@@ -1,0 +1,12 @@
+test:
+  pre:
+    - go get github.com/mattn/goveralls
+    - go get github.com/wadey/gocovmerge
+  override:
+    - go test -v -cover -race -coverprofile=bench.coverprofile
+    - go test -v -cover -race -coverprofile=errors.coverprofile ./errors
+    - go test -v -cover -race -coverprofile=results.coverprofile ./results
+    - go test -v -cover -race -coverprofile=semaphore.coverprofile ./semaphore
+  post:
+    - gocovmerge *.coverprofile > coveralls.coverprofile
+    - goveralls -coverprofile=coveralls.coverprofile -service=circle-ci -repotoken=$COVERALLS_TOKEN

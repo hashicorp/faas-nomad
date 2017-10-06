@@ -1,0 +1,12 @@
+syntax = "proto3";
+package proto;
+
+message BenchRequest {
+  string value = 1;
+}
+
+message Empty {}
+
+service BenchPlugin {
+  rpc Do(BenchRequest) returns (Empty);
+}
