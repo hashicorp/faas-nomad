@@ -27,10 +27,10 @@ script:
   - echo "Run Functional Tests"
   - ./startNomad.sh
   - sleep 10
-  - nomad run faas.hcl
+  - NOMAD_ADDR=http://$(ip route get 1 | awk '{print $NF;exit}'):4646 nomad run faas.hcl
   - sleep 10
-  - nomad status faas-nomadd
+  - NOMAD_ADDR=http://$(ip route get 1 | awk '{print $NF;exit}'):4646 nomad status faas-nomadd
   - docker ps
   - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=http://$(ip route get 1 | awk '{print $NF;exit}'):8080/ go test ./tests -v
-  - nomad status
+  - NOMAD_ADDR=http://$(ip route get 1 | awk '{print $NF;exit}'):4646 nomad status
   - cat $HOME/log/nomad.log
