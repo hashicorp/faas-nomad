@@ -11,20 +11,20 @@ fi
 sed "s/##HOST_IP##/${IP_ADDRESS}/g" < nomad_config.hcl.tmpl > nomad.hcl
 echo "Discovered IP Address: ${IP_ADDRESS}"
 
-
 # Create logs folder if needed
 if [ ! -d "${HOME}/log" ]; then
   mkdir $HOME/log
 fi
 
+# Start Consul
+echo "Starting Consul, redirecting logs to $HOME/log/consul.log"
+sudo -b HOST_IP=${HOST_IP} nohup consul agent -dev -bind ${IP_ADDRESS} -dns-port 53 -client ${IP_ADDRESS} >~/log/consul.log 2>&1
+
 # Start Nomad
 echo "Starting Nomad, redirecting logs to $HOME/log/nomad.log"
 HOST_IP=${HOST_IP} nohup nomad agent --config=nomad.hcl >~/log/nomad.log 2>&1 &
 
-# Start Consul
-echo "Starting Consul, redirecting logs to $HOME/log/consul.log"
-HOST_IP=${HOST_IP} nohup consul agent -dev -bind ${IP_ADDRESS} -dns-port 53 -client ${IP_ADDRESS} >~/log/consul.log 2>&1 &
-
 # Set Nomad environment variable
 export NOMAD_ADDR=http://${IP_ADDRESS}:4646
+export CONSUL_HTTP_ADDR=http://${IP_ADDRESS}:8500
 export FAAS_GATEWAY=http://${IP_ADDRESS}:8080

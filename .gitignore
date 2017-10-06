@@ -15,3 +15,4 @@
 
 faas-nomad
 main
+benchmark/faas
