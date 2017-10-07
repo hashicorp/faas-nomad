@@ -112,8 +112,8 @@ EOF
       }
 
       resources {
-        cpu    = 500 # 500 MHz
-        memory = 256 # 256MB
+        cpu    = 100 # 100 MHz
+        memory = 128 # 128MB
 
         network {
           mbits = 10
@@ -227,7 +227,7 @@ EOH
       }
 
       resources {
-        cpu    = 500 # 500 MHz
+        cpu    = 200 # 200 MHz
         memory = 256 # 256MB
 
         network {
@@ -266,7 +266,7 @@ EOH
       }
 
       resources {
-        cpu    = 500 # 500 MHz
+        cpu    = 200 # 500 MHz
         memory = 256 # 256MB
 
         network {

@@ -1,4 +1,4 @@
-VERSION=0.2
+VERSION=0.2.2
 
 test:
 	GOMAXPROCS=7 go test -parallel 7 -cover -race ./...

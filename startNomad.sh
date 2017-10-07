@@ -25,6 +25,9 @@ echo "Starting Nomad, redirecting logs to $HOME/log/nomad.log"
 HOST_IP=${HOST_IP} nohup nomad agent --config=nomad.hcl >~/log/nomad.log 2>&1 &
 
 # Set Nomad environment variable
-export NOMAD_ADDR=http://${IP_ADDRESS}:4646
-export CONSUL_HTTP_ADDR=http://${IP_ADDRESS}:8500
-export FAAS_GATEWAY=http://${IP_ADDRESS}:8080
+echo ""
+echo "You can set the following environment variables"
+echo "export NOMAD_ADDR=http://${IP_ADDRESS}:4646"
+echo "export CONSUL_HTTP_ADDR=http://${IP_ADDRESS}:8500"
+echo "export FAAS_GATEWAY=http://${IP_ADDRESS}:8080"
+
