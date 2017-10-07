@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas-provider/types"
@@ -27,11 +28,14 @@ func setupReplicationWriter(t *testing.T, functionName string, req *types.ScaleS
 	}
 
 	mockJob = &nomad.MockJob{}
+	mockStats := &metrics.MockStatsD{}
+	mockStats.On("Incr", mock.Anything, mock.Anything, mock.Anything)
+
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/test/test_function", bytes.NewReader(body))
 	r = r.WithContext(context.WithValue(r.Context(), FunctionNameCTXKey, functionName))
 
-	h := MakeReplicationWriter(mockJob)
+	h := MakeReplicationWriter(mockJob, mockStats)
 
 	return h, rr, r
 }

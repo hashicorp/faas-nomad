@@ -8,13 +8,16 @@ import (
 	"time"
 
 	"github.com/alexellis/faas/gateway/requests"
+	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
 )
 
 // MakeDeploy creates a handler for deploying functions
-func MakeDeploy(client nomad.Job) http.HandlerFunc {
+func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		stats.Incr("deploy.called", nil, 1)
+
 		defer r.Body.Close()
 
 		body, _ := ioutil.ReadAll(r.Body)
@@ -23,6 +26,8 @@ func MakeDeploy(client nomad.Job) http.HandlerFunc {
 		err := json.Unmarshal(body, &req)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
+
+			stats.Incr("deploy.error.badrequest", nil, 1)
 			return
 		}
 
@@ -32,8 +37,12 @@ func MakeDeploy(client nomad.Job) http.HandlerFunc {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
 			log.Println(err)
+
+			stats.Incr("deploy.error.createjob", []string{"job=" + req.Service}, 1)
 			return
 		}
+
+		stats.Incr("deploy.success", []string{"job=" + req.Service}, 1)
 	}
 }
 
@@ -45,7 +54,9 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 	restartDelay := 1 * time.Second
 	restartMode := "delay"
 	restartAttempts := 25
-	taskMemory := 256
+	taskMemory := 128
+	logFiles := 5
+	logSize := 2
 
 	task := &api.Task{
 		Name:   r.Service,
@@ -69,6 +80,10 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 				Name:      r.Service,
 				PortLabel: "http",
 			},
+		},
+		LogConfig: &api.LogConfig{
+			MaxFiles:      &logFiles,
+			MaxFileSizeMB: &logSize,
 		},
 	}
 

@@ -6,27 +6,34 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas/gateway/requests"
 )
 
 // MakeReader implements the OpenFaaS reader handler
-func MakeReader(client nomad.Job) http.HandlerFunc {
+func MakeReader(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Not sure if prefix is the right option
 		options := &api.QueryOptions{}
 		options.Prefix = nomad.JobPrefix
 
+		stats.Incr("reader.called", nil, 1)
+
 		jobs, _, err := client.List(options)
 		if err != nil {
 			writeError(w, err)
+
+			stats.Incr("reader.error.getjobs", nil, 1)
 			return
 		}
 
 		functions, err := getFunctions(client, jobs)
 		if err != nil {
 			writeError(w, err)
+
+			stats.Incr("reader.error.getfunctions", nil, 1)
 			return
 		}
 
@@ -34,6 +41,8 @@ func MakeReader(client nomad.Job) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		w.Write(functionBytes)
+
+		stats.Incr("reader.success", nil, 1)
 	}
 }
 

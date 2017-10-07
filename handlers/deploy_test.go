@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -14,8 +15,10 @@ import (
 func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
 	mockJob = &nomad.MockJob{}
 	mockJob.On("Register", mock.Anything, mock.Anything).Return(nil, nil, nil)
+	mockStats := &metrics.MockStatsD{}
+	mockStats.On("Incr", mock.Anything, mock.Anything, mock.Anything)
 
-	return MakeDeploy(mockJob),
+	return MakeDeploy(mockJob, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte(body)))
 }

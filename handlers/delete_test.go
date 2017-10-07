@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -14,8 +15,10 @@ import (
 
 func setupDelete(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
 	mockJob = &nomad.MockJob{}
+	mockStats := &metrics.MockStatsD{}
+	mockStats.On("Incr", mock.Anything, mock.Anything, mock.Anything)
 
-	return MakeDelete(mockJob),
+	return MakeDelete(mockJob, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("DELETE", "/system/functions", bytes.NewReader([]byte(body)))
 }

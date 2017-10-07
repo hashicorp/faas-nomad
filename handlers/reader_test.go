@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas/gateway/requests"
@@ -19,8 +20,10 @@ import (
 
 func setupReader() (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
 	mockJob = &nomad.MockJob{}
+	mockStatsD := &metrics.MockStatsD{}
+	mockStatsD.On("Incr", mock.Anything, mock.Anything, mock.Anything)
 
-	return MakeReader(mockJob),
+	return MakeReader(mockJob, mockStatsD),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte("")))
 }

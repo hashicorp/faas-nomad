@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/openfaas/faas/gateway/requests"
 )
@@ -13,8 +14,10 @@ import (
 const functionNamespace string = "default"
 
 // MakeDelete creates a handler for deploying functions
-func MakeDelete(client nomad.Job) http.HandlerFunc {
+func MakeDelete(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		stats.Incr("delete.called", nil, 1)
+
 		defer r.Body.Close()
 
 		body, _ := ioutil.ReadAll(r.Body)
@@ -23,6 +26,8 @@ func MakeDelete(client nomad.Job) http.HandlerFunc {
 		err := json.Unmarshal(body, &req)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
+
+			stats.Incr("delete.error.badrequest", []string{"job=" + req.FunctionName}, 1)
 			return
 		}
 
@@ -32,7 +37,11 @@ func MakeDelete(client nomad.Job) http.HandlerFunc {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
 			log.Println(err)
+
+			stats.Incr("delete.error.deregister", []string{"job=" + req.FunctionName}, 1)
 			return
 		}
+
+		stats.Incr("delete.success", []string{"job=" + req.FunctionName}, 1)
 	}
 }

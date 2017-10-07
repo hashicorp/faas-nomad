@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas/gateway/requests"
@@ -16,11 +17,14 @@ import (
 
 func setupReplicationReader(functionName string) (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
 	mockJob = &nomad.MockJob{}
+	mockStats := &metrics.MockStatsD{}
+	mockStats.On("Incr", mock.Anything, mock.Anything, mock.Anything)
+
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/test/test_function", nil)
 	r = r.WithContext(context.WithValue(r.Context(), FunctionNameCTXKey, functionName))
 
-	h := MakeReplicationReader(mockJob)
+	h := MakeReplicationReader(mockJob, mockStats)
 
 	return h, rr, r
 }
