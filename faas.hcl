@@ -24,7 +24,7 @@ job "faas-nomadd" {
       }
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:0.2"
+        image = "quay.io/nicholasjackson/faas-nomad:0.2.2"
 
         port_map {
           http = 8080
@@ -98,8 +98,8 @@ job "faas-nomadd" {
       }
 
       resources {
-        cpu    = 500 # 500 MHz
-        memory = 256 # 256MB
+        cpu    = 100 # 100 MHz
+        memory = 128 # 128MB
 
         network {
           mbits = 1
