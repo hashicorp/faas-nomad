@@ -69,7 +69,16 @@ func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 func createJob(r requests.CreateFunctionRequest) *api.Job {
 	jobname := nomad.JobPrefix + r.Service
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
+
 	job.Datacenters = []string{"dc1"}
+	count := 1
+	restartDelay := 1 * time.Second
+	restartMode := "delay"
+	restartAttempts := 25
+	taskMemory := 128
+	logFiles := 5
+	logSize := 2
+	envVars := r.EnvVars
 
 	// add constraints
 	job.Constraints = append(job.Constraints,
