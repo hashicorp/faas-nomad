@@ -9,12 +9,19 @@ import (
 
 var mockJob *nomad.MockJob
 
-func createRequest() string {
-	req := requests.CreateFunctionRequest{}
-	req.Service = "TestFunction"
+type testFunctionRequest struct {
+	requests.CreateFunctionRequest
+}
 
-	data, _ := json.Marshal(req)
+func (r testFunctionRequest) String() string {
+	data, _ := json.Marshal(r)
 	return string(data)
+}
+
+func createRequest() testFunctionRequest {
+	req := testFunctionRequest{}
+	req.Service = "TestFunction"
+	return req
 }
 
 func deleteRequest() string {

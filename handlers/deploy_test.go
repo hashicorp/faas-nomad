@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	"github.com/hashicorp/nomad/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -32,9 +33,40 @@ func TestHandlerReturnsErrorOnInvalidRequest(t *testing.T) {
 }
 
 func TestHandlerRegistersJob(t *testing.T) {
-	h, rw, r := setupDeploy(createRequest())
+	h, rw, r := setupDeploy(createRequest().String())
 
 	h(rw, r)
 
 	mockJob.AssertCalled(t, "Register", mock.Anything, mock.Anything)
+}
+
+func TestHandlerRegistersWithEnvironmentVariables(t *testing.T) {
+	reqEnv := map[string]string{"VAR1": "ABC"}
+	fr := createRequest()
+	fr.EnvVars = reqEnv
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	jobEnv := job.TaskGroups[0].Tasks[0].Env
+
+	assert.Equal(t, reqEnv, jobEnv)
+}
+
+func TestHandlerRegistersWithFunctionProcess(t *testing.T) {
+	fr := createRequest()
+	fr.EnvProcess = "env"
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	jobEnv := job.TaskGroups[0].Tasks[0].Env
+
+	assert.Equal(t, "env", jobEnv["fprocess"])
 }
