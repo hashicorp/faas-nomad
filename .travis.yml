@@ -22,7 +22,7 @@ script:
   - make test
   - make build_docker
   - echo "Run Functional Tests"
-  - eval ./startNomad.sh
+  - source ./startNomad.sh
   - sleep 10
   - nomad run faas.hcl
   - sleep 10
