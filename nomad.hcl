@@ -17,7 +17,6 @@ server {
 
 client {
   enabled = true
-  network_interface = "en0"
 }
 
 consul {
