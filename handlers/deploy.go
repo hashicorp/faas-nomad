@@ -49,6 +49,7 @@ func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 func createJob(r requests.CreateFunctionRequest) *api.Job {
 	jobname := nomad.JobPrefix + r.Service
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
+
 	job.Datacenters = []string{"dc1"}
 	count := 1
 	restartDelay := 1 * time.Second
@@ -57,6 +58,16 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 	taskMemory := 128
 	logFiles := 5
 	logSize := 2
+	envVars := r.EnvVars
+
+	// append the function process to the environment vars
+	if envVars == nil {
+		envVars = map[string]string{}
+	}
+
+	if r.EnvProcess != "" {
+		envVars["fprocess"] = r.EnvProcess
+	}
 
 	task := &api.Task{
 		Name:   r.Service,
@@ -85,6 +96,7 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 			MaxFiles:      &logFiles,
 			MaxFileSizeMB: &logSize,
 		},
+		Env: envVars,
 	}
 
 	tg := []*api.TaskGroup{

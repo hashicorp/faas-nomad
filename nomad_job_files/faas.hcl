@@ -3,6 +3,12 @@ job "faas-nomadd" {
 
   type = "system"
 
+  constraint {
+    attribute = "${attr.cpu.arch}"
+    operator  = "!="
+    value     = "arm"
+  }
+
   group "faas-nomadd" {
     count = 1
 
@@ -24,7 +30,7 @@ job "faas-nomadd" {
       }
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:0.2.2"
+        image = "quay.io/nicholasjackson/faas-nomad:0.2.4"
 
         port_map {
           http = 8080

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hashicorp/faas-nomad/consul"
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,10 @@ func setupDelete(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 	mockStats := &metrics.MockStatsD{}
 	mockStats.On("Incr", mock.Anything, mock.Anything, mock.Anything)
 
-	return MakeDelete(mockJob, mockStats),
+	mockServiceResolver = &consul.MockResolver{}
+	mockServiceResolver.On("RemoveCacheItem", mock.Anything)
+
+	return MakeDelete(mockServiceResolver, mockJob, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("DELETE", "/system/functions", bytes.NewReader([]byte(body)))
 }
@@ -38,6 +42,7 @@ func TestDeleteHandlerDeletesJob(t *testing.T) {
 	h(rw, r)
 
 	mockJob.AssertCalled(t, "Deregister", mock.Anything, mock.Anything, mock.Anything)
+	assert.Equal(t, http.StatusOK, rw.Code)
 }
 
 func TestDeleteHandlerReturnsErrorOnAPIError(t *testing.T) {
@@ -48,4 +53,14 @@ func TestDeleteHandlerReturnsErrorOnAPIError(t *testing.T) {
 
 	mockJob.AssertCalled(t, "Deregister", nomad.JobPrefix+"TestFunction", mock.Anything, mock.Anything)
 	assert.Equal(t, http.StatusBadRequest, rw.Code)
+}
+
+func TestDeleteHandlerClearsConsulCache(t *testing.T) {
+	h, rw, r := setupDelete(deleteRequest())
+	mockJob.On("Deregister", nomad.JobPrefix+"TestFunction", mock.Anything, mock.Anything).Return(nil, nil, nil)
+
+	h(rw, r)
+
+	mockServiceResolver.AssertCalled(t, "RemoveCacheItem", "TestFunction")
+	assert.Equal(t, http.StatusOK, rw.Code)
 }

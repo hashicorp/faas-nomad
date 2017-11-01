@@ -1,4 +1,4 @@
-bind_addr = "192.168.1.113" # the default
+bind_addr = "0.0.0.0" # the default
 
 data_dir  = "/tmp/nomad"
 

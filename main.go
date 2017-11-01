@@ -17,7 +17,7 @@ import (
 	"github.com/openfaas/faas-provider/types"
 )
 
-const version = "0.2.2"
+const version = "0.2.5"
 
 func main() {
 	region := os.Getenv("NOMAD_REGION")
@@ -49,16 +49,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	r := consul.NewConsulResolver(consulAddr)
+	cr := consul.NewResolver(consulAddr)
 
 	handlers := &types.FaaSHandlers{
 		FunctionReader: handlers.MakeReader(nomadClient.Jobs(), stats),
 		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs(), stats),
-		DeleteHandler:  handlers.MakeDelete(nomadClient.Jobs(), stats),
+		DeleteHandler:  handlers.MakeDelete(cr, nomadClient.Jobs(), stats),
 		ReplicaReader:  makeReplicationReader(nomadClient.Jobs(), stats),
 		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), stats),
-		FunctionProxy:  makeFunctionProxyHandler(r, statsDAddr, stats),
+		FunctionProxy:  makeFunctionProxyHandler(cr, statsDAddr, stats),
 	}
+
 	config := &types.FaaSConfig{}
 
 	bootstrap.Serve(handlers, config)

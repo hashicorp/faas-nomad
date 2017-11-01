@@ -18,16 +18,26 @@ fi
 
 # Start Consul
 echo "Starting Consul, redirecting logs to $HOME/log/consul.log"
-sudo -b HOST_IP=${HOST_IP} nohup consul agent -dev -bind ${IP_ADDRESS} -dns-port 53 -client ${IP_ADDRESS} >~/log/consul.log 2>&1
+nohup consul agent -dev -advertise ${IP_ADDRESS} -client ${IP_ADDRESS} >~/log/consul.log 2>&1 &
 
 # Start Nomad
 echo "Starting Nomad, redirecting logs to $HOME/log/nomad.log"
-HOST_IP=${HOST_IP} nohup nomad agent --config=nomad.hcl >~/log/nomad.log 2>&1 &
+nohup nomad agent --config=nomad.hcl >~/log/nomad.log 2>&1 &
 
 # Set Nomad environment variable
-echo ""
-echo "You can set the following environment variables"
-echo "export NOMAD_ADDR=http://${IP_ADDRESS}:4646"
-echo "export CONSUL_HTTP_ADDR=http://${IP_ADDRESS}:8500"
-echo "export FAAS_GATEWAY=http://${IP_ADDRESS}:8080"
+export NOMAD_ADDR=http://${IP_ADDRESS}:4646
+export CONSUL_HTTP_ADDR=http://${IP_ADDRESS}:8500
+export FAAS_GATEWAY=http://${IP_ADDRESS}:8080/
 
+n=0
+until [ $n -ge 10 ]
+do
+  response=`curl -sL -w "%{http_code}\\n" "${NOMAD_ADDR}/v1/status/leader" -o /dev/null --connect-timeout 3 --max-time 5`
+  if [[ "${response}" == "200" ]]; then
+    echo "NOMAD Running"
+    break
+  fi
+  
+  n=$[$n+1]
+  sleep 2
+done

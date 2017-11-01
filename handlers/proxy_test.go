@@ -16,11 +16,10 @@ import (
 )
 
 var mockProxyClient *MockProxyClient
-var mockServiceResolver *consul.MockServiceResolver
 
 func setupProxy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
 	mockProxyClient = &MockProxyClient{}
-	mockServiceResolver = &consul.MockServiceResolver{}
+	mockServiceResolver = &consul.MockResolver{}
 
 	r := httptest.NewRequest("POST", "/", bytes.NewReader([]byte(body)))
 	r = r.WithContext(context.WithValue(r.Context(), FunctionNameCTXKey, "function"))
