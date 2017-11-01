@@ -6,9 +6,6 @@ services:
 go:
   - 1.9
 
-env:
-  - NOMAD_ADDR=http://localhost:4646
-
 before_install:
   - sudo apt-get update
   - sudo apt-get install unzip curl
@@ -25,12 +22,12 @@ script:
   - make test
   - make build_docker
   - echo "Run Functional Tests"
-  - ./startNomad.sh
+  - eval ./startNomad.sh
   - sleep 10
-  - NOMAD_ADDR=http://$(ip route get 1 | awk '{print $NF;exit}'):4646 nomad run faas.hcl
+  - nomad run faas.hcl
   - sleep 10
-  - NOMAD_ADDR=http://$(ip route get 1 | awk '{print $NF;exit}'):4646 nomad status faas-nomadd
+  - nomad status faas-nomadd
   - docker ps
-  - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=http://$(ip route get 1 | awk '{print $NF;exit}'):8080/ go test ./tests -v
-  - NOMAD_ADDR=http://$(ip route get 1 | awk '{print $NF;exit}'):4646 nomad status
+  - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=$FAAS_GATEWAY go test ./tests -v
+  - nomad status
   - cat $HOME/log/nomad.log
