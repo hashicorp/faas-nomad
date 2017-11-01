@@ -30,3 +30,5 @@ script:
   - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=$FAAS_GATEWAY go test ./tests -v
   - nomad status
   - cat $HOME/log/nomad.log
+  - ps -aux | grep nomad
+  - ps -aux | grep consul
