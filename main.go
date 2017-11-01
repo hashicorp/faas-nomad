@@ -59,6 +59,7 @@ func main() {
 		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), stats),
 		FunctionProxy:  makeFunctionProxyHandler(r, statsDAddr, stats),
 	}
+
 	config := &types.FaaSConfig{}
 
 	bootstrap.Serve(handlers, config)

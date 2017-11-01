@@ -22,7 +22,7 @@ sudo -b HOST_IP=${HOST_IP} nohup consul agent -dev -bind ${IP_ADDRESS} -dns-port
 
 # Start Nomad
 echo "Starting Nomad, redirecting logs to $HOME/log/nomad.log"
-HOST_IP=${HOST_IP} nohup nomad agent --config=nomad.hcl >~/log/nomad.log 2>&1 &
+nohup nomad agent --config=nomad.hcl >~/log/nomad.log 2>&1 &
 
 # Set Nomad environment variable
 echo ""
