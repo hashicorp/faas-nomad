@@ -1,4 +1,4 @@
-VERSION=0.2.3
+VERSION=0.2.5
 NAMESPACE=quay.io/nicholasjackson
 
 test:
@@ -14,3 +14,7 @@ build_docker: build_linux
 	docker build -t ${NAMESPACE}/faas-nomad:${VERSION} .
 	docker tag ${NAMESPACE}/faas-nomad:${VERSION} faas-nomad:${VERSION}
 	docker tag ${NAMESPACE}/faas-nomad:${VERSION} ${NAMESPACE}/faas-nomad:latest
+
+push_docker: 
+	docker push ${NAMESPACE}/faas-nomad:${VERSION}
+	docker push ${NAMESPACE}/faas-nomad:latest

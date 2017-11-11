@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -63,6 +64,7 @@ func MakeReplicationWriter(client nomad.Job, stats metrics.StatsD) http.HandlerF
 		}
 
 		// update nomad job
+		log.Println("Updating function to scale:", req.Replicas)
 		replicas := int(req.Replicas)
 		job.TaskGroups[0].Count = &replicas
 

@@ -2,13 +2,13 @@ package consul
 
 import "github.com/stretchr/testify/mock"
 
-// MockServiceResolver is a mock implementation of the ServiceResolver interface
-type MockServiceResolver struct {
+// MockResolver is a mock implementation of the ServiceResolver interface
+type MockResolver struct {
 	mock.Mock
 }
 
 // Resolve returns the arguments from the Mocks setup method
-func (mr *MockServiceResolver) Resolve(function string) ([]string, error) {
+func (mr *MockResolver) Resolve(function string) ([]string, error) {
 	args := mr.Called(function)
 
 	if a := args.Get(0); a != nil {
@@ -16,4 +16,9 @@ func (mr *MockServiceResolver) Resolve(function string) ([]string, error) {
 	}
 
 	return nil, args.Error(1)
+}
+
+// RemoveCacheItem implements the interface method for removing cache items
+func (mr *MockResolver) RemoveCacheItem(function string) {
+	mr.Called(function)
 }

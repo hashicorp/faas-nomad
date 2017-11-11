@@ -3,11 +3,13 @@ package handlers
 import (
 	"encoding/json"
 
+	"github.com/hashicorp/faas-nomad/consul"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/openfaas/faas/gateway/requests"
 )
 
 var mockJob *nomad.MockJob
+var mockServiceResolver *consul.MockResolver
 
 type testFunctionRequest struct {
 	requests.CreateFunctionRequest

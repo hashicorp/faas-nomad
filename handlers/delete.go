@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/hashicorp/faas-nomad/consul"
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/openfaas/faas/gateway/requests"
@@ -14,7 +15,7 @@ import (
 const functionNamespace string = "default"
 
 // MakeDelete creates a handler for deploying functions
-func MakeDelete(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
+func MakeDelete(sr consul.ServiceResolver, client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		stats.Incr("delete.called", nil, 1)
 
@@ -24,12 +25,14 @@ func MakeDelete(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 
 		req := requests.DeleteFunctionRequest{}
 		err := json.Unmarshal(body, &req)
-		if err != nil {
+		if err != nil || req.FunctionName == "" {
 			w.WriteHeader(http.StatusBadRequest)
 
 			stats.Incr("delete.error.badrequest", []string{"job=" + req.FunctionName}, 1)
 			return
 		}
+
+		log.Println("Deleting", req.FunctionName)
 
 		// Delete job /v1/jobs
 		_, _, err = client.Deregister(nomad.JobPrefix+req.FunctionName, false, nil)
@@ -41,6 +44,8 @@ func MakeDelete(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 			stats.Incr("delete.error.deregister", []string{"job=" + req.FunctionName}, 1)
 			return
 		}
+
+		sr.RemoveCacheItem(req.FunctionName)
 
 		stats.Incr("delete.success", []string{"job=" + req.FunctionName}, 1)
 	}

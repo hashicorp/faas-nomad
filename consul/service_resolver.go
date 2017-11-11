@@ -19,18 +19,23 @@ type Catalog interface {
 // ServiceResolver uses consul to resolve a function name into addresses
 type ServiceResolver interface {
 	Resolve(function string) ([]string, error)
+	RemoveCacheItem(service string)
 }
 
-// ConsulResolver implements ServiceResolver
-type ConsulResolver struct {
+// Resolver implements ServiceResolver
+type Resolver struct {
 	clientSet *dependency.ClientSet
 	watcher   *watch.Watcher
-	deps      []dependency.Dependency
 	cache     *cache.Cache
 }
 
-// NewConsulResolver creates a new ConsulResolver
-func NewConsulResolver(address string) *ConsulResolver {
+type cacheItem struct {
+	serviceQuery dependency.Dependency
+	addresses    []string
+}
+
+// NewResolver creates a new Resolver
+func NewResolver(address string) *Resolver {
 	clientSet := dependency.NewClientSet()
 	clientSet.CreateConsulClient(&dependency.CreateConsulClientInput{
 		Address: address,
@@ -43,7 +48,7 @@ func NewConsulResolver(address string) *ConsulResolver {
 
 	pc := cache.New(5*time.Minute, 10*time.Minute)
 
-	cr := &ConsulResolver{
+	cr := &Resolver{
 		clientSet: clientSet,
 		watcher:   watch,
 		cache:     pc,
@@ -54,8 +59,54 @@ func NewConsulResolver(address string) *ConsulResolver {
 	return cr
 }
 
+// Resolve resolves a function name to an array of URI
+func (sr *Resolver) Resolve(function string) ([]string, error) {
+	//check the cache
+	if val, ok := sr.cache.Get(function); ok {
+		log.Println("Got Address from cache")
+		return val.(*cacheItem).addresses, nil
+	}
+
+	log.Println("Getting Address from consul")
+	q, err := dependency.NewCatalogServiceQuery(function)
+	if err != nil {
+		return nil, err
+	}
+
+	sr.watcher.Add(q)
+
+	s, _, err := q.Fetch(sr.clientSet, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	cs := s.([]*dependency.CatalogService)
+	addresses := make([]string, 0)
+
+	for _, a := range cs {
+		addresses = append(addresses, fmt.Sprintf("http://%v:%v", a.Address, a.ServicePort))
+	}
+
+	// append the cache
+	ci := &cacheItem{
+		addresses:    addresses,
+		serviceQuery: q,
+	}
+	sr.cache.Set(function, ci, cache.DefaultExpiration)
+
+	return addresses, nil
+}
+
+// RemoveCacheItem removes a service reference from the cache
+func (sr *Resolver) RemoveCacheItem(function string) {
+	if d, ok := sr.cache.Get(function); ok {
+		sr.watcher.Remove(d.(*cacheItem).serviceQuery)
+		sr.cache.Delete(function)
+	}
+}
+
 // watch watches consul for changes and updates the cache on change
-func (sr *ConsulResolver) watch() {
+func (sr *Resolver) watch() {
 	go func() {
 		dc := sr.watcher.DataCh()
 		for w := range dc {
@@ -72,43 +123,10 @@ func (sr *ConsulResolver) watch() {
 			}
 
 			if len(cs) > 0 {
-				sr.cache.Set(cs[0].ServiceName, addresses, cache.DefaultExpiration)
+				ci, _ := sr.cache.Get(cs[0].ServiceName)
+				ci.(*cacheItem).addresses = addresses
+				sr.cache.Set(cs[0].ServiceName, ci, cache.DefaultExpiration)
 			}
 		}
 	}()
-}
-
-// Resolve resolves a function name to an array of URI
-func (sr *ConsulResolver) Resolve(function string) ([]string, error) {
-	//check the cache
-	if val, ok := sr.cache.Get(function); ok {
-		log.Println("Got Address from cache")
-		return val.([]string), nil
-	}
-
-	log.Println("Getting Address from consul")
-	q, err := dependency.NewCatalogServiceQuery(function)
-	if err != nil {
-		return nil, err
-	}
-
-	sr.deps = append(sr.deps, q)
-	sr.watcher.Add(q)
-
-	s, _, err := q.Fetch(sr.clientSet, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	cs := s.([]*dependency.CatalogService)
-	addresses := make([]string, 0)
-
-	for _, a := range cs {
-		addresses = append(addresses, fmt.Sprintf("http://%v:%v", a.Address, a.ServicePort))
-	}
-
-	// append the cache
-	sr.cache.Set(function, addresses, cache.DefaultExpiration)
-
-	return addresses, nil
 }
