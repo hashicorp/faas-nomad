@@ -15,8 +15,7 @@ before_install:
   - sudo unzip -o -d  /usr/local/bin ./consul.zip
   - sudo chmod +x /usr/local/bin/consul
   - sudo chmod +x /usr/local/bin/nomad
-  - git clone https://github.com/nicholasjackson/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
-  - cd $GOPATH/src/github.com/openfaas/certify-incubator && git checkout additions
+  - git clone -b additions https://github.com/nicholasjackson/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
 
 script:
   - echo "Build and Test"
