@@ -89,7 +89,7 @@
               "legendFormat": "{{ function_name }} {{code}}",
               "metric": "gateway_function_invocation_total",
               "refId": "A",
-              "step": 2
+              "step": 4
             }
           ],
           "thresholds": [],
