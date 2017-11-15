@@ -31,7 +31,7 @@ func (b *BenchImpl) Do() error {
 
 	// return an error if the work is not successful
 	// return nil on success
-	resp, err := http.Post("http://192.168.1.113:8080/function/test", "", nil)
+	resp, err := http.Post("http://192.168.1.113:8080/function/info", "", nil)
 	defer func(response *http.Response) {
 		if response != nil && response.Body != nil {
 			response.Body.Close()
