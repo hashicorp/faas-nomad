@@ -18,7 +18,7 @@ fi
 
 # Start Consul
 echo "Starting Consul, redirecting logs to $HOME/log/consul.log"
-sudo -b nohup consul agent -dev -bind ${IP_ADDRESS} -dns-port 53 -client ${IP_ADDRESS} >~/log/consul.log 2>&1
+nohup consul agent -dev -advertise ${IP_ADDRESS} -client ${IP_ADDRESS} >~/log/consul.log 2>&1 &
 
 # Start Nomad
 echo "Starting Nomad, redirecting logs to $HOME/log/nomad.log"

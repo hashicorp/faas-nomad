@@ -16,3 +16,7 @@
 faas-nomad
 main
 benchmark/faas
+.envrc
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform

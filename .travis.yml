@@ -23,7 +23,7 @@ script:
   - make build_docker
   - echo "Run Functional Tests"
   - source ./startNomad.sh
-  - nomad run faas.hcl
+  - nomad run nomad_job_files/faas.hcl
   - sleep 10
   - nomad status faas-nomadd
   - docker ps

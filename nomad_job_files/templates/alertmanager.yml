@@ -1,3 +1,4 @@
+
 global:
   # The smarthost and SMTP sender used for mail notifications.
   smtp_smarthost: 'localhost:25'
@@ -63,5 +64,5 @@ inhibit_rules:
 receivers:
 - name: 'scale-up'
   webhook_configs:
-    - url: http://gateway.service.dc1.consul:8080/system/alert
+    - url: http://{{ env "NOMAD_IP_http" }}:8080/system/alert
       send_resolved: true

@@ -16,8 +16,14 @@ job "faas-monitoring" {
     task "alertmanager" {
       driver = "docker"
 
+			artifact {
+			  source      = "https://raw.githubusercontent.com/hashicorp/faas-nomad/master/nomad_job_files/templates/alertmanager.yml"
+			  destination = "local/alertmanager.yml.tpl"
+				mode        = "file"
+			}
+
       template {
-        source        = "/Users/nicj/Developer/go/src/github.com/hashicorp/faas-nomad/nomad_job_files/templates/alertmanager.yml"
+        source        = "local/alertmanager.yml.tpl"
         destination   = "/etc/alertmanager/alertmanager.yml"
         change_mode   = "noop"
         change_signal = "SIGINT"
@@ -63,15 +69,27 @@ job "faas-monitoring" {
     task "prometheus" {
       driver = "docker"
 
+			artifact {
+			  source      = "https://raw.githubusercontent.com/hashicorp/faas-nomad/master/nomad_job_files/templates/prometheus.yml"
+			  destination = "local/prometheus.yml.tpl"
+				mode        = "file"
+			}
+			
+			artifact {
+			  source      = "https://raw.githubusercontent.com/hashicorp/faas-nomad/master/nomad_job_files/templates/alert.rules"
+			  destination = "local/alert.rules.tpl"
+				mode        = "file"
+			}
+
       template {
-        source        = "/Users/nicj/Developer/go/src/github.com/hashicorp/faas-nomad/nomad_job_files/templates/prometheus.yml"
+        source        = "local/prometheus.yml.tpl"
         destination   = "/etc/prometheus/prometheus.yml"
         change_mode   = "noop"
         change_signal = "SIGINT"
       }
 
       template {
-        source        = "/Users/nicj/Developer/go/src/github.com/hashicorp/faas-nomad/nomad_job_files/templates/alert.rules"
+        source        = "local/alert.rules.tpl"
         destination   = "/etc/prometheus/alert.rules"
         change_mode   = "noop"
         change_signal = "SIGINT"
