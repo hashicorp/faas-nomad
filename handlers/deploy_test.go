@@ -16,8 +16,10 @@ import (
 func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
 	mockJob = &nomad.MockJob{}
 	mockJob.On("Register", mock.Anything, mock.Anything).Return(nil, nil, nil)
+
 	mockStats := &metrics.MockStatsD{}
 	mockStats.On("Incr", mock.Anything, mock.Anything, mock.Anything)
+	mockStats.On("Gauge", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 
 	return MakeDeploy(mockJob, mockStats),
 		httptest.NewRecorder(),

@@ -43,6 +43,7 @@ func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 		}
 
 		stats.Incr("deploy.success", []string{"job=" + req.Service}, 1)
+		stats.Gauge("deploy.count", 1, []string{"job=" + req.Service}, 1)
 	}
 }
 

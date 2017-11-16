@@ -7,7 +7,7 @@ module "open-faas-nomad" {
 
   ssh_key = "~/.ssh/id_rsa.pub"
 
-  min_servers = "1"
+  min_servers = "3"
   max_servers = "5"
   min_agents  = "3"
   max_agents  = "5"
@@ -16,18 +16,18 @@ module "open-faas-nomad" {
   nomad_version  = "0.7.0"
 }
 
-output "nomad_alb" {
-  value = "${module.open-faas-nomad.nomad_alb}"
+output "nomad_endpoint" {
+  value = "http://${module.open-faas-nomad.nomad_alb}:4646/"
 }
 
-output "faas_alb" {
-  value = "${module.open-faas-nomad.faas_alb}"
+output "openfaas_endpoint" {
+  value = "http://${module.open-faas-nomad.openfaas_alb}:8080/"
 }
 
-output "grafana_alb" {
-  value = "${module.open-faas-nomad.grafana_alb}"
+output "grafana_endpoint" {
+  value = "http://${module.open-faas-nomad.openfaas_alb}:3000/"
 }
 
-output "prometheus_alb" {
-  value = "${module.open-faas-nomad.prometheus_alb}"
+output "prometheus_endpoint" {
+  value = "http://${module.open-faas-nomad.openfaas_alb}:9090/"
 }

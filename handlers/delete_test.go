@@ -18,6 +18,7 @@ func setupDelete(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 	mockJob = &nomad.MockJob{}
 	mockStats := &metrics.MockStatsD{}
 	mockStats.On("Incr", mock.Anything, mock.Anything, mock.Anything)
+	mockStats.On("Gauge", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 
 	mockServiceResolver = &consul.MockResolver{}
 	mockServiceResolver.On("RemoveCacheItem", mock.Anything)
