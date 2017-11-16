@@ -38,12 +38,12 @@ func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 			w.Write([]byte(err.Error()))
 			log.Println(err)
 
-			stats.Incr("deploy.error.createjob", []string{"job=" + req.Service}, 1)
+			stats.Incr("deploy.error.createjob", []string{"job:" + req.Service}, 1)
 			return
 		}
 
-		stats.Incr("deploy.success", []string{"job=" + req.Service}, 1)
-		stats.Gauge("deploy.count", 1, []string{"job=" + req.Service}, 1)
+		stats.Incr("deploy.success", []string{"job:" + req.Service}, 1)
+		stats.Gauge("deploy.count", 1, []string{"job:" + req.Service}, 1)
 	}
 }
 

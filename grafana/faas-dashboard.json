@@ -621,10 +621,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "faas_nomadd_deploy_count_gauge",
+              "expr": "sum(faas_nomadd_deploy_count_gauge) by (exported_job)",
               "format": "time_series",
               "intervalFactor": 2,
-              "legendFormat": "",
+              "legendFormat": "deployment count - {{exported_job}}",
               "refId": "A",
               "step": 2
             }
@@ -711,5 +711,5 @@
   },
   "timezone": "browser",
   "title": "FaaS",
-  "version": 4
+  "version": 5
 }

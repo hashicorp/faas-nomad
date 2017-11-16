@@ -28,7 +28,7 @@ func MakeDelete(sr consul.ServiceResolver, client nomad.Job, stats metrics.Stats
 		if err != nil || req.FunctionName == "" {
 			w.WriteHeader(http.StatusBadRequest)
 
-			stats.Incr("delete.error.badrequest", []string{"job=" + req.FunctionName}, 1)
+			stats.Incr("delete.error.badrequest", []string{"job:" + req.FunctionName}, 1)
 			return
 		}
 
@@ -41,13 +41,13 @@ func MakeDelete(sr consul.ServiceResolver, client nomad.Job, stats metrics.Stats
 			w.Write([]byte(err.Error()))
 			log.Println(err)
 
-			stats.Incr("delete.error.deregister", []string{"job=" + req.FunctionName}, 1)
+			stats.Incr("delete.error.deregister", []string{"job:" + req.FunctionName}, 1)
 			return
 		}
 
 		sr.RemoveCacheItem(req.FunctionName)
 
-		stats.Gauge("deploy.count", 0, []string{"job=" + req.FunctionName}, 1)
-		stats.Incr("delete.success", []string{"job=" + req.FunctionName}, 1)
+		stats.Gauge("deploy.count", 0, []string{"job:" + req.FunctionName}, 1)
+		stats.Incr("delete.success", []string{"job:" + req.FunctionName}, 1)
 	}
 }

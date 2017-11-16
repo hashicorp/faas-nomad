@@ -121,10 +121,10 @@ func createLoadbalancer(endpoints []url.URL, statsDAddr, service string) ultracl
 
 	config := ultraclient.Config{
 		Timeout:                30 * time.Second,
-		MaxConcurrentRequests:  500,
+		MaxConcurrentRequests:  1500,
 		ErrorPercentThreshold:  25,
 		DefaultVolumeThreshold: 10,
-		Retries:                3,
+		Retries:                5,
 		RetryDelay:             2 * time.Second,
 		Endpoints:              endpoints,
 		StatsD: ultraclient.StatsD{
