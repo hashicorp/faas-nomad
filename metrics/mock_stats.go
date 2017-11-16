@@ -13,3 +13,10 @@ func (m *MockStatsD) Incr(name string, tags []string, rate float64) error {
 
 	return nil
 }
+
+// Gauge calls the mock method to increment a statistic
+func (m *MockStatsD) Gauge(name string, value float64, tags []string, rate float64) error {
+	m.Mock.Called(name, value, tags, rate)
+
+	return nil
+}

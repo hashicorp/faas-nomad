@@ -30,6 +30,7 @@ func setupReplicationWriter(t *testing.T, functionName string, req *types.ScaleS
 	mockJob = &nomad.MockJob{}
 	mockStats := &metrics.MockStatsD{}
 	mockStats.On("Incr", mock.Anything, mock.Anything, mock.Anything)
+	mockStats.On("Gauge", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/test/test_function", bytes.NewReader(body))

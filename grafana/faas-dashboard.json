@@ -89,7 +89,7 @@
               "legendFormat": "{{ function_name }} {{code}}",
               "metric": "gateway_function_invocation_total",
               "refId": "A",
-              "step": 4
+              "step": 2
             }
           ],
           "thresholds": [],
@@ -130,7 +130,7 @@
         },
         {
           "aliasColors": {},
-          "bars": false,
+          "bars": true,
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_FAAS}",
@@ -145,7 +145,7 @@
             "total": false,
             "values": false
           },
-          "lines": true,
+          "lines": false,
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
@@ -160,14 +160,22 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "gateway_service_count",
+              "expr": "changes(faas_nomadd_replicationwriter_called_counter[10s])",
               "format": "time_series",
-              "interval": "",
+              "interval": "10s",
               "intervalFactor": 2,
-              "legendFormat": "{{function_name}} ",
+              "legendFormat": "replication called - {{exported_instance}}",
               "metric": "gateway_service_count",
               "refId": "A",
-              "step": 4
+              "step": 20
+            },
+            {
+              "expr": "changes(faas_nomadd_replicationwriter_success_counter[10s])",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "replication success - {{exported_instance}}",
+              "refId": "B",
+              "step": 2
             }
           ],
           "thresholds": [],
@@ -280,7 +288,7 @@
               "legendFormat": "",
               "metric": "gateway_function_invocation_total",
               "refId": "A",
-              "step": 40
+              "step": 4
             }
           ],
           "thresholds": "",
@@ -333,7 +341,7 @@
               "legendFormat": "{{function_name}} ",
               "metric": "gateway_functions_seconds_sum",
               "refId": "A",
-              "step": 4
+              "step": 2
             }
           ],
           "thresholds": [],
@@ -524,7 +532,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(faas_nomadd_function_timing_timer_sum[10s])) by(job_function) / sum(rate(faas_nomadd_function_timing_timer_count[10s])) by(job_function)",
+              "expr": "sum(rate(faas_nomadd_function_timing_timer_sum[10s])) by(exported_job) / sum(rate(faas_nomadd_function_timing_timer_count[10s])) by(exported_job)",
               "format": "time_series",
               "interval": "10s",
               "intervalFactor": 2,
@@ -576,6 +584,94 @@
       "showTitle": false,
       "title": "Dashboard Row",
       "titleSize": "h6"
+    },
+    {
+      "collapse": false,
+      "height": 250,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_FAAS}",
+          "fill": 1,
+          "id": 7,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "span": 12,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "faas_nomadd_deploy_count_gauge",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "",
+              "refId": "A",
+              "step": 2
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "FaaS Nomad - Function Deployment Count",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        }
+      ],
+      "repeat": null,
+      "repeatIteration": null,
+      "repeatRowId": null,
+      "showTitle": false,
+      "title": "Dashboard Row",
+      "titleSize": "h6"
     }
   ],
   "schemaVersion": 14,
@@ -585,7 +681,7 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
@@ -615,5 +711,5 @@
   },
   "timezone": "browser",
   "title": "FaaS",
-  "version": 7
+  "version": 4
 }

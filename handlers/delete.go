@@ -47,6 +47,7 @@ func MakeDelete(sr consul.ServiceResolver, client nomad.Job, stats metrics.Stats
 
 		sr.RemoveCacheItem(req.FunctionName)
 
+		stats.Gauge("deploy.count", 0, []string{"job=" + req.FunctionName}, 1)
 		stats.Incr("delete.success", []string{"job=" + req.FunctionName}, 1)
 	}
 }

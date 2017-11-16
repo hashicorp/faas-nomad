@@ -76,6 +76,7 @@ func MakeReplicationWriter(client nomad.Job, stats metrics.StatsD) http.HandlerF
 			stats.Incr("replicationwriter.error.internalerror", nil, 1)
 		}
 
+		stats.Gauge("deploy.count", float64(req.Replicas), []string{"job=" + req.ServiceName}, 1)
 		stats.Incr("replicationwriter.success", nil, 1)
 	}
 }
