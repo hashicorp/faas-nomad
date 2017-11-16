@@ -33,7 +33,7 @@ func MakeProxyClient() *HTTPProxyClient {
 				Timeout:   30 * time.Second,
 				KeepAlive: 0,
 			}).DialContext,
-			MaxIdleConns:          1,
+			MaxIdleConns:          200,
 			DisableKeepAlives:     true,
 			IdleConnTimeout:       120 * time.Millisecond,
 			ExpectContinueTimeout: 1500 * time.Millisecond,

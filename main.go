@@ -17,7 +17,7 @@ import (
 	"github.com/openfaas/faas-provider/types"
 )
 
-const version = "0.2.6"
+const version = "0.2.7"
 
 func main() {
 	region := os.Getenv("NOMAD_REGION")
