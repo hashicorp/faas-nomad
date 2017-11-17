@@ -450,6 +450,14 @@
               "legendFormat": "function timeout - {{exported_job}}",
               "refId": "C",
               "step": 20
+            },
+            {
+              "expr": "sum(rate(faas_nomadd_function_circuitopen_counter[10s])) by (exported_job)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "function open circuit - {{exported_job}}",
+              "refId": "D",
+              "step": 2
             }
           ],
           "thresholds": [],
@@ -711,5 +719,5 @@
   },
   "timezone": "browser",
   "title": "FaaS",
-  "version": 5
+  "version": 6
 }
