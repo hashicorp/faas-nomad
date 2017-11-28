@@ -1,5 +1,49 @@
 # Consul Template CHANGELOG
 
+## v0.19.4 (October 30, 2017)
+
+BREAKING CHANGES:
+
+  * The version of Consul Template is now taken into account when using
+    de-duplication mode. Without bundling the version, it's challenging to
+    upgrade existing clusters or run multiple versions of Consul Template on the
+    same cluster and template simultaneously. [GH-1025]
+
+BUG FIXES:
+
+  * Remove references to unsupported `dump_signal` configuration
+
+  * Update vendor libraries to support Consul 1.0.0 changes for better test
+    stability
+
+  * Renew unwrapped Vault token (previously Consul Template) would try to renew
+    the wrapped token, which would not work.
+
+  * Do not sort results when `~near` queries are used [GH-1027]
+
+  * Handle integer overflow in exponential backoff calculations
+    [GH-1031, GH-1028]
+
+  * Properly preserve existing file permissions [GH-1037]
+
+IMPROVEMENTS:
+
+  * Compile with Go 1.9.2
+
+  * The Vault grace period in the config is now set to 15 seconds as the
+    default. This matches Vault's default configuration for consistency.
+
+  * Add `indent` function for indenting blocks of text in templates
+
+  * Allow additional colons in the template command on the CLI [GH-1026]
+
+  * Add Vault Transit example for key exfiltration [Gh-1014]
+
+  * Add a new option for disabling recursive directory creation per template
+    [GH-1033]
+
+  * Allow dots in node names [GH-977]
+
 ## v0.19.3 (September 11, 2017)
 
 BUG FIXES:

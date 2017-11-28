@@ -11,23 +11,37 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/consul/lib/freeport"
 	memdb "github.com/hashicorp/go-memdb"
 	"github.com/hashicorp/nomad/client/config"
 	"github.com/hashicorp/nomad/client/fingerprint"
 	"github.com/hashicorp/nomad/command/agent/consul"
 	"github.com/hashicorp/nomad/helper"
+	"github.com/hashicorp/nomad/helper/uuid"
 	"github.com/hashicorp/nomad/nomad"
 	"github.com/hashicorp/nomad/nomad/mock"
 	"github.com/hashicorp/nomad/nomad/structs"
 	nconfig "github.com/hashicorp/nomad/nomad/structs/config"
 	"github.com/hashicorp/nomad/testutil"
 	"github.com/mitchellh/hashstructure"
+	"github.com/stretchr/testify/assert"
 
 	ctestutil "github.com/hashicorp/nomad/client/testutil"
 )
 
-func getPort() int {
-	return 1030 + int(rand.Int31n(6440))
+func testACLServer(t *testing.T, cb func(*nomad.Config)) (*nomad.Server, string, *structs.ACLToken) {
+	server, addr := testServer(t, func(c *nomad.Config) {
+		c.ACLEnabled = true
+		if cb != nil {
+			cb(c)
+		}
+	})
+	token := mock.ACLManagementToken()
+	err := server.State().BootstrapACLTokens(1, 0, token)
+	if err != nil {
+		t.Fatalf("failed to bootstrap ACL token: %v", err)
+	}
+	return server, addr, token
 }
 
 func testServer(t *testing.T, cb func(*nomad.Config)) (*nomad.Server, string) {
@@ -61,12 +75,13 @@ func testServer(t *testing.T, cb func(*nomad.Config)) (*nomad.Server, string) {
 	}
 
 	for i := 10; i >= 0; i-- {
+		ports := freeport.GetT(t, 2)
 		config.RPCAddr = &net.TCPAddr{
 			IP:   []byte{127, 0, 0, 1},
-			Port: getPort(),
+			Port: ports[0],
 		}
 		config.NodeName = fmt.Sprintf("Node %d", config.RPCAddr.Port)
-		config.SerfConfig.MemberlistConfig.BindPort = getPort()
+		config.SerfConfig.MemberlistConfig.BindPort = ports[1]
 
 		// Create server
 		server, err := nomad.NewServer(config, catalog, logger)
@@ -118,6 +133,32 @@ func TestClient_StartStop(t *testing.T) {
 	client := testClient(t, nil)
 	if err := client.Shutdown(); err != nil {
 		t.Fatalf("err: %v", err)
+	}
+}
+
+// Certain labels for metrics are dependant on client initial setup. This tests
+// that the client has properly initialized before we assign values to labels
+func TestClient_BaseLabels(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	client := testClient(t, nil)
+	if err := client.Shutdown(); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// directly invoke this function, as otherwise this will fail on a CI build
+	// due to a race condition
+	client.emitStats()
+
+	baseLabels := client.baseLabels
+	assert.NotEqual(0, len(baseLabels))
+
+	nodeID := client.Node().ID
+	for _, e := range baseLabels {
+		if e.Name == "node_id" {
+			assert.Equal(nodeID, e.Value)
+		}
 	}
 }
 
@@ -181,7 +222,7 @@ func TestClient_HasNodeChanged(t *testing.T) {
 	c := testClient(t, nil)
 	defer c.Shutdown()
 
-	node := c.Node()
+	node := c.config.Node
 	attrHash, err := hashstructure.Hash(node.Attributes, nil)
 	if err != nil {
 		c.logger.Printf("[DEBUG] client: unable to calculate node attributes hash: %v", err)
@@ -866,7 +907,7 @@ func TestClient_BlockedAllocations(t *testing.T) {
 
 	// Add a new chained alloc
 	alloc2 := alloc.Copy()
-	alloc2.ID = structs.GenerateUUID()
+	alloc2.ID = uuid.Generate()
 	alloc2.Job = alloc.Job
 	alloc2.JobID = alloc.JobID
 	alloc2.PreviousAllocation = alloc.ID
@@ -918,4 +959,46 @@ func TestClient_BlockedAllocations(t *testing.T) {
 	for _, ar := range c1.getAllocRunners() {
 		<-ar.WaitCh()
 	}
+}
+
+func TestClient_ValidateMigrateToken_ValidToken(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	c := testClient(t, func(c *config.Config) {
+		c.ACLEnabled = true
+	})
+	defer c.Shutdown()
+
+	alloc := mock.Alloc()
+	validToken, err := nomad.GenerateMigrateToken(alloc.ID, c.secretNodeID())
+	assert.Nil(err)
+
+	assert.Equal(c.ValidateMigrateToken(alloc.ID, validToken), true)
+}
+
+func TestClient_ValidateMigrateToken_InvalidToken(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	c := testClient(t, func(c *config.Config) {
+		c.ACLEnabled = true
+	})
+	defer c.Shutdown()
+
+	assert.Equal(c.ValidateMigrateToken("", ""), false)
+
+	alloc := mock.Alloc()
+	assert.Equal(c.ValidateMigrateToken(alloc.ID, alloc.ID), false)
+	assert.Equal(c.ValidateMigrateToken(alloc.ID, ""), false)
+}
+
+func TestClient_ValidateMigrateToken_ACLDisabled(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	c := testClient(t, func(c *config.Config) {})
+	defer c.Shutdown()
+
+	assert.Equal(c.ValidateMigrateToken("", ""), true)
 }

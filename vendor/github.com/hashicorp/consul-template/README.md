@@ -415,8 +415,12 @@ template {
 
   # This is the destination path on disk where the source template will render.
   # If the parent directories do not exist, Consul Template will attempt to
-  # create them.
+  # create them, unless create_dest_dirs is false.
   destination = "/path/on/disk/where/template/will/render.txt"
+
+  # This options tells Consul Template to create the parent directories of the
+  # destination path if they do not exist. The default value is true.
+  create_dest_dirs = true
 
   # This option allows embedding the contents of a template in the configuration
   # file rather then supplying the `source` path to the template file. This is
@@ -1290,6 +1294,15 @@ You can also access deeply nested values:
 You will need to have a reasonable format about your data in Consul. Please see
 [Go's text/template package][text-template] for more information.
 
+
+##### `indent`
+
+Indents a block of text by prefixing N number of spaces per line.
+
+```liquid
+{{ tree "foo" | explode | toYAML | indent 4 }}
+```
+
 ##### `in`
 
 Determines if a needle is within an iterable element.
@@ -1907,9 +1920,8 @@ carefully before use:
   customized via the CLI or configuration file.
 
 - Consul Template will forward all signals it receives to the child process
-  **except** its defined `reload_signal`, `dump_signal`, and `kill_signal`. If
-  you disable these signals, Consul Template will forward them to the child
-  process.
+  **except** its defined `reload_signal` and `kill_signal`. If you disable these
+  signals, Consul Template will forward them to the child process.
 
 - It is not possible to have more than one exec command (although each template
   can still have its own reload command).

@@ -42,6 +42,9 @@ func (s *HTTPServer) NodeSpecificRequest(resp http.ResponseWriter, req *http.Req
 	case strings.HasSuffix(path, "/drain"):
 		nodeName := strings.TrimSuffix(path, "/drain")
 		return s.nodeToggleDrain(resp, req, nodeName)
+	case strings.HasSuffix(path, "/purge"):
+		nodeName := strings.TrimSuffix(path, "/purge")
+		return s.nodePurge(resp, req, nodeName)
 	default:
 		return s.nodeQuery(resp, req, path)
 	}
@@ -55,7 +58,7 @@ func (s *HTTPServer) nodeForceEvaluate(resp http.ResponseWriter, req *http.Reque
 	args := structs.NodeEvaluateRequest{
 		NodeID: nodeID,
 	}
-	s.parseRegion(req, &args.Region)
+	s.parseWriteRequest(req, &args.WriteRequest)
 
 	var out structs.NodeUpdateResponse
 	if err := s.agent.RPC("Node.Evaluate", &args, &out); err != nil {
@@ -109,7 +112,7 @@ func (s *HTTPServer) nodeToggleDrain(resp http.ResponseWriter, req *http.Request
 		NodeID: nodeID,
 		Drain:  enable,
 	}
-	s.parseRegion(req, &args.Region)
+	s.parseWriteRequest(req, &args.WriteRequest)
 
 	var out structs.NodeDrainUpdateResponse
 	if err := s.agent.RPC("Node.UpdateDrain", &args, &out); err != nil {
@@ -141,4 +144,20 @@ func (s *HTTPServer) nodeQuery(resp http.ResponseWriter, req *http.Request,
 		return nil, CodedError(404, "node not found")
 	}
 	return out.Node, nil
+}
+
+func (s *HTTPServer) nodePurge(resp http.ResponseWriter, req *http.Request, nodeID string) (interface{}, error) {
+	if req.Method != "PUT" && req.Method != "POST" {
+		return nil, CodedError(405, ErrInvalidMethod)
+	}
+	args := structs.NodeDeregisterRequest{
+		NodeID: nodeID,
+	}
+	s.parseWriteRequest(req, &args.WriteRequest)
+	var out structs.NodeUpdateResponse
+	if err := s.agent.RPC("Node.Deregister", &args, &out); err != nil {
+		return nil, err
+	}
+	setIndex(resp, out.Index)
+	return out, nil
 }

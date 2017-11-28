@@ -48,7 +48,7 @@ func TestValidateUserEventParams(t *testing.T) {
 
 func TestShouldProcessUserEvent(t *testing.T) {
 	t.Parallel()
-	a := NewTestAgent(t.Name(), nil)
+	a := NewTestAgent(t.Name(), "")
 	defer a.Shutdown()
 
 	srv1 := &structs.NodeService{
@@ -57,7 +57,7 @@ func TestShouldProcessUserEvent(t *testing.T) {
 		Tags:    []string{"test", "foo", "bar", "master"},
 		Port:    5000,
 	}
-	a.state.AddService(srv1, "")
+	a.State.AddService(srv1, "")
 
 	p := &UserEvent{}
 	if !a.shouldProcessUserEvent(p) {
@@ -117,7 +117,7 @@ func TestShouldProcessUserEvent(t *testing.T) {
 
 func TestIngestUserEvent(t *testing.T) {
 	t.Parallel()
-	a := NewTestAgent(t.Name(), nil)
+	a := NewTestAgent(t.Name(), "")
 	defer a.Shutdown()
 
 	for i := 0; i < 512; i++ {
@@ -148,7 +148,7 @@ func TestIngestUserEvent(t *testing.T) {
 
 func TestFireReceiveEvent(t *testing.T) {
 	t.Parallel()
-	a := NewTestAgent(t.Name(), nil)
+	a := NewTestAgent(t.Name(), "")
 	defer a.Shutdown()
 
 	srv1 := &structs.NodeService{
@@ -157,7 +157,7 @@ func TestFireReceiveEvent(t *testing.T) {
 		Tags:    []string{"test", "foo", "bar", "master"},
 		Port:    5000,
 	}
-	a.state.AddService(srv1, "")
+	a.State.AddService(srv1, "")
 
 	p1 := &UserEvent{Name: "deploy", ServiceFilter: "web"}
 	err := a.UserEvent("dc1", "root", p1)
@@ -184,9 +184,9 @@ func TestFireReceiveEvent(t *testing.T) {
 
 func TestUserEventToken(t *testing.T) {
 	t.Parallel()
-	cfg := TestACLConfig()
-	cfg.ACLDefaultPolicy = "deny" // Set the default policies to deny
-	a := NewTestAgent(t.Name(), cfg)
+	a := NewTestAgent(t.Name(), TestACLConfig()+`
+		acl_default_policy = "deny"
+	`)
 	defer a.Shutdown()
 
 	// Create an ACL token

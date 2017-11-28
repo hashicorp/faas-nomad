@@ -20,13 +20,14 @@ import (
 	"github.com/hashicorp/nomad/nomad/structs"
 	"github.com/hashicorp/nomad/nomad/structs/config"
 	"github.com/hashicorp/nomad/testutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/ugorji/go/codec"
 )
 
 // makeHTTPServer returns a test server whose logs will be written to
 // the passed writer. If the writer is nil, the logs are written to stderr.
 func makeHTTPServer(t testing.TB, cb func(c *Config)) *TestAgent {
-	return NewTestAgent(t.Name(), cb)
+	return NewTestAgent(t, t.Name(), cb)
 }
 
 func BenchmarkHTTPRequests(b *testing.B) {
@@ -218,6 +219,40 @@ func testPrettyPrint(pretty string, prettyFmt bool, t *testing.T) {
 	}
 }
 
+func TestPermissionDenied(t *testing.T) {
+	s := makeHTTPServer(t, func(c *Config) {
+		c.ACL.Enabled = true
+	})
+	defer s.Shutdown()
+
+	resp := httptest.NewRecorder()
+	handler := func(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
+		return nil, structs.ErrPermissionDenied
+	}
+
+	urlStr := "/v1/job/foo"
+	req, _ := http.NewRequest("GET", urlStr, nil)
+	s.Server.wrap(handler)(resp, req)
+	assert.Equal(t, resp.Code, 403)
+}
+
+func TestTokenNotFound(t *testing.T) {
+	s := makeHTTPServer(t, func(c *Config) {
+		c.ACL.Enabled = true
+	})
+	defer s.Shutdown()
+
+	resp := httptest.NewRecorder()
+	handler := func(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
+		return nil, structs.ErrTokenNotFound
+	}
+
+	urlStr := "/v1/job/foo"
+	req, _ := http.NewRequest("GET", urlStr, nil)
+	s.Server.wrap(handler)(resp, req)
+	assert.Equal(t, resp.Code, 403)
+}
+
 func TestParseWait(t *testing.T) {
 	t.Parallel()
 	resp := httptest.NewRecorder()
@@ -335,6 +370,24 @@ func TestParseRegion(t *testing.T) {
 	s.Server.parseRegion(req, &region)
 	if region != "global" {
 		t.Fatalf("bad %s", region)
+	}
+}
+
+func TestParseToken(t *testing.T) {
+	t.Parallel()
+	s := makeHTTPServer(t, nil)
+	defer s.Shutdown()
+
+	req, err := http.NewRequest("GET", "/v1/jobs", nil)
+	req.Header.Add("X-Nomad-Token", "foobar")
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	var token string
+	s.Server.parseToken(req, &token)
+	if token != "foobar" {
+		t.Fatalf("bad %s", token)
 	}
 }
 
@@ -494,6 +547,22 @@ func httpTest(t testing.TB, cb func(c *Config), f func(srv *TestAgent)) {
 	defer s.Shutdown()
 	testutil.WaitForLeader(t, s.Agent.RPC)
 	f(s)
+}
+
+func httpACLTest(t testing.TB, cb func(c *Config), f func(srv *TestAgent)) {
+	s := makeHTTPServer(t, func(c *Config) {
+		c.ACL.Enabled = true
+		if cb != nil {
+			cb(c)
+		}
+	})
+	defer s.Shutdown()
+	testutil.WaitForLeader(t, s.Agent.RPC)
+	f(s)
+}
+
+func setToken(req *http.Request, token *structs.ACLToken) {
+	req.Header.Set("X-Nomad-Token", token.SecretID)
 }
 
 func encodeReq(obj interface{}) io.ReadCloser {

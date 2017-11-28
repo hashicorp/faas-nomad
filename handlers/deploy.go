@@ -13,6 +13,25 @@ import (
 	"github.com/hashicorp/nomad/api"
 )
 
+var (
+	count           = 1
+	restartDelay    = 1 * time.Second
+	restartMode     = "delay"
+	restartAttempts = 25
+	logFiles        = 5
+	logSize         = 2
+
+	// Constraints
+	constraintCPUArch = "amd64"
+	taskMemory        = 128
+
+	// Update Strategy
+	updateAutoRevert      = true
+	updateMinHealthyTime  = 5 * time.Second
+	updateHealthyDeadline = 20 * time.Second
+	updateStagger         = 5 * time.Second
+)
+
 // MakeDeploy creates a handler for deploying functions
 func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -50,18 +69,26 @@ func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 func createJob(r requests.CreateFunctionRequest) *api.Job {
 	jobname := nomad.JobPrefix + r.Service
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
-
 	job.Datacenters = []string{"dc1"}
-	count := 1
-	restartDelay := 1 * time.Second
-	restartMode := "delay"
-	restartAttempts := 25
-	taskMemory := 128
-	logFiles := 5
-	logSize := 2
-	envVars := r.EnvVars
 
-	// append the function process to the environment vars
+	// add constraints
+	job.Constraints = append(job.Constraints,
+		&api.Constraint{
+			LTarget: "${attr.cpu.arch}",
+			Operand: "=",
+			RTarget: constraintCPUArch,
+		},
+	)
+
+	// add rolling update
+	job.Update = &api.UpdateStrategy{
+		MinHealthyTime:  &updateMinHealthyTime,
+		AutoRevert:      &updateAutoRevert,
+		Stagger:         &updateStagger,
+		HealthyDeadline: &updateHealthyDeadline,
+	}
+
+	envVars := r.EnvVars
 	if envVars == nil {
 		envVars = map[string]string{}
 	}

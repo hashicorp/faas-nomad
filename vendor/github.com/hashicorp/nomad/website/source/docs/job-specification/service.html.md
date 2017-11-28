@@ -47,6 +47,12 @@ job "docs" {
           args     = ["--verbose"]
           interval = "60s"
           timeout  = "5s"
+
+          check_restart {
+            limit = 3
+            grace = "90s"
+            ignore_warnings = false
+          }
         }
       }
     }
@@ -98,8 +104,8 @@ does not automatically enable service discovery.
   and port. `driver` advertises the IP used in the driver (e.g. Docker's internal
   IP) and uses the ports specified in the port map. The default is `auto` which
   behaves the same as `host` unless the driver determines its IP should be used.
-  This setting was added in Nomad 0.6 and only supported by the Docker driver.
-  It will advertise the container IP if a network plugin is used (e.g. weave).
+  This setting supported Docker since Nomad 0.6 and rkt since Nomad 0.7. It
+  will advertise the container IP if a network plugin is used (e.g. weave).
 
 ### `check` Parameters
 
@@ -110,6 +116,8 @@ scripts.
 
 - `args` `(array<string>: [])` - Specifies additional arguments to the
   `command`. This only applies to script-based health checks.
+
+- `check_restart` - See [`check_restart` stanza][check_restart_stanza].
 
 - `command` `(string: <varies>)` - Specifies the command to run for performing
   the health check. The script must exit: 0 for passing, 1 for warning, or any
@@ -170,6 +178,7 @@ the header to be set multiple times, once for each value.
 
 ```hcl
 service {
+  # ...
   check {
     type     = "http"
     port     = "lb"
@@ -315,7 +324,9 @@ service {
 [qemu driver][qemu] since the Nomad client does not have access to the file
 system of a task for that driver.</small>
 
+[check_restart_stanza]: /docs/job-specification/check_restart.html "check_restart stanza"
 [service-discovery]: /docs/service-discovery/index.html "Nomad Service Discovery"
 [interpolation]: /docs/runtime/interpolation.html "Nomad Runtime Interpolation"
 [network]: /docs/job-specification/network.html "Nomad network Job Specification"
 [qemu]: /docs/drivers/qemu.html "Nomad qemu Driver"
+[restart_stanza]: /docs/job-specification/restart.html "restart stanza"

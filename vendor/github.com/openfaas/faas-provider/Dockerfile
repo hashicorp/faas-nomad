@@ -1,15 +1,14 @@
-FROM golang:1.7.5
+FROM golang:1.8.3
 
-RUN mkdir -p /go/src/github.com/alexellis/faas-netes/
+RUN mkdir -p /go/src/github.com/openfaas/faas-provider/
 
-WORKDIR /go/src/github.com/alexellis/faas-netes
+WORKDIR /go/src/github.com/openfaas/faas-provider
 
 COPY vendor     vendor
-COPY handlers	handlers
 COPY types      types
-COPY server.go  .
+COPY serve.go   .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o faas-netes .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o faas-provider .
 
 FROM alpine:3.5
 RUN apk --no-cache add ca-certificates
@@ -19,6 +18,6 @@ EXPOSE 8080
 ENV http_proxy      ""
 ENV https_proxy     ""
 
-COPY --from=0 /go/src/github.com/alexellis/faas-netes/faas-netes    .
+COPY --from=0 /go/src/github.com/openfaas/faas-provider/faas-provider    .
 
-CMD ["./faas-netes"]
+CMD ["./faas-provider]

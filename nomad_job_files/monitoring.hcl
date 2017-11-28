@@ -2,6 +2,12 @@ job "faas-monitoring" {
   datacenters = ["dc1"]
 
   type = "service"
+  
+  constraint {
+    attribute = "${attr.cpu.arch}"
+    operator  = "!="
+    value     = "arm"
+  }
 
   group "faas-monitoring" {
     count = 1

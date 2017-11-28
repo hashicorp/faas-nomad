@@ -25,10 +25,14 @@ func (c *Catalog) Register(args *structs.RegisterRequest, reply *struct{}) error
 		return err
 	}
 	defer metrics.MeasureSince([]string{"consul", "catalog", "register"}, time.Now())
+	defer metrics.MeasureSince([]string{"catalog", "register"}, time.Now())
 
 	// Verify the args.
-	if args.Node == "" || args.Address == "" {
-		return fmt.Errorf("Must provide node and address")
+	if args.Node == "" {
+		return fmt.Errorf("Must provide node")
+	}
+	if args.Address == "" && !args.SkipNodeUpdate {
+		return fmt.Errorf("Must provide address if SkipNodeUpdate is not set")
 	}
 	if args.ID != "" {
 		if _, err := uuid.ParseUUID(string(args.ID)); err != nil {
@@ -66,7 +70,7 @@ func (c *Catalog) Register(args *structs.RegisterRequest, reply *struct{}) error
 		// later if version 0.8 is enabled, so we can eventually just
 		// delete this and do all the ACL checks down there.
 		if args.Service.Service != structs.ConsulServiceName {
-			if rule != nil && !rule.ServiceWrite(args.Service.Service) {
+			if rule != nil && !rule.ServiceWrite(args.Service.Service, nil) {
 				return acl.ErrPermissionDenied
 			}
 		}
@@ -114,6 +118,7 @@ func (c *Catalog) Deregister(args *structs.DeregisterRequest, reply *struct{}) e
 		return err
 	}
 	defer metrics.MeasureSince([]string{"consul", "catalog", "deregister"}, time.Now())
+	defer metrics.MeasureSince([]string{"catalog", "deregister"}, time.Now())
 
 	// Verify the args
 	if args.Node == "" {
@@ -149,6 +154,7 @@ func (c *Catalog) Deregister(args *structs.DeregisterRequest, reply *struct{}) e
 		if err := vetDeregisterWithACL(rule, args, ns, nc); err != nil {
 			return err
 		}
+
 	}
 
 	if _, err := c.srv.raftApply(structs.DeregisterRequestType, args); err != nil {
@@ -271,12 +277,18 @@ func (c *Catalog) ServiceNodes(args *structs.ServiceSpecificRequest, reply *stru
 	if err == nil {
 		metrics.IncrCounterWithLabels([]string{"consul", "catalog", "service", "query"}, 1,
 			[]metrics.Label{{Name: "service", Value: args.ServiceName}})
+		metrics.IncrCounterWithLabels([]string{"catalog", "service", "query"}, 1,
+			[]metrics.Label{{Name: "service", Value: args.ServiceName}})
 		if args.ServiceTag != "" {
 			metrics.IncrCounterWithLabels([]string{"consul", "catalog", "service", "query-tag"}, 1,
+				[]metrics.Label{{Name: "service", Value: args.ServiceName}, {Name: "tag", Value: args.ServiceTag}})
+			metrics.IncrCounterWithLabels([]string{"catalog", "service", "query-tag"}, 1,
 				[]metrics.Label{{Name: "service", Value: args.ServiceName}, {Name: "tag", Value: args.ServiceTag}})
 		}
 		if len(reply.ServiceNodes) == 0 {
 			metrics.IncrCounterWithLabels([]string{"consul", "catalog", "service", "not-found"}, 1,
+				[]metrics.Label{{Name: "service", Value: args.ServiceName}})
+			metrics.IncrCounterWithLabels([]string{"catalog", "service", "not-found"}, 1,
 				[]metrics.Label{{Name: "service", Value: args.ServiceName}})
 		}
 	}

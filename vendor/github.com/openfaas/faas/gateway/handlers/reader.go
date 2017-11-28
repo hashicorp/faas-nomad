@@ -6,20 +6,20 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 
 	"strings"
 
-	"github.com/alexellis/faas/gateway/metrics"
-	"github.com/alexellis/faas/gateway/requests"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"github.com/openfaas/faas/gateway/metrics"
+	"github.com/openfaas/faas/gateway/requests"
 )
 
 // MakeFunctionReader gives a summary of Function structs with Docker service stats overlaid with Prometheus counters.
-func MakeFunctionReader(metricsOptions metrics.MetricOptions, c *client.Client) http.HandlerFunc {
+func MakeFunctionReader(metricsOptions metrics.MetricOptions, c client.ServiceAPIClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		serviceFilter := filters.NewArgs()
@@ -30,34 +30,35 @@ func MakeFunctionReader(metricsOptions metrics.MetricOptions, c *client.Client) 
 
 		services, err := c.ServiceList(context.Background(), options)
 		if err != nil {
-			fmt.Println(err)
+			log.Println("Error getting service list:", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Error getting service list"))
+			return
 		}
 
 		// TODO: Filter only "faas" functions (via metadata?)
-		var functions []requests.Function
+		functions := []requests.Function{}
 
 		for _, service := range services {
 
 			if len(service.Spec.TaskTemplate.ContainerSpec.Labels["function"]) > 0 {
-
-				// Ping counters
-				// getCounterValue(service.Spec.Name, "200", &metricsOptions)
-				// getCounterValue(service.Spec.Name, "500", &metricsOptions)
-
 				var envProcess string
 
 				for _, env := range service.Spec.TaskTemplate.ContainerSpec.Env {
-					if strings.Index(env, "fprocess=") > -1 {
+					if strings.Contains(env, "fprocess=") {
 						envProcess = env[len("fprocess="):]
 					}
 				}
 
+				// Required (copy by value)
+				labels := service.Spec.Annotations.Labels
 				f := requests.Function{
 					Name:            service.Spec.Name,
 					Image:           service.Spec.TaskTemplate.ContainerSpec.Image,
 					InvocationCount: 0,
 					Replicas:        *service.Spec.Mode.Replicated.Replicas,
 					EnvProcess:      envProcess,
+					Labels:          &labels,
 				}
 
 				functions = append(functions, f)
@@ -70,19 +71,3 @@ func MakeFunctionReader(metricsOptions metrics.MetricOptions, c *client.Client) 
 		w.Write(functionBytes)
 	}
 }
-
-// func getCounterValue(service string, code string, metricsOptions *metrics.MetricOptions) float64 {
-
-// 	metric, err := metricsOptions.GatewayFunctionInvocation.
-// 		GetMetricWith(prometheus.Labels{"function_name": service, "code": code})
-
-// 	if err != nil {
-// 		return 0
-// 	}
-
-// 	// Get the metric's value from ProtoBuf interface (idea via Julius Volz)
-// 	var protoMetric io_prometheus_client.Metric
-// 	metric.Write(&protoMetric)
-// 	invocations := protoMetric.GetCounter().GetValue()
-// 	return invocations
-// }

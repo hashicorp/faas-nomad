@@ -9,7 +9,9 @@ import (
 
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/go-multierror"
+	"github.com/hashicorp/nomad/helper/uuid"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestJob_Validate(t *testing.T) {
@@ -25,16 +27,19 @@ func TestJob_Validate(t *testing.T) {
 	if !strings.Contains(mErr.Errors[2].Error(), "job name") {
 		t.Fatalf("err: %s", err)
 	}
-	if !strings.Contains(mErr.Errors[3].Error(), "job type") {
+	if !strings.Contains(mErr.Errors[3].Error(), "namespace") {
 		t.Fatalf("err: %s", err)
 	}
-	if !strings.Contains(mErr.Errors[4].Error(), "priority") {
+	if !strings.Contains(mErr.Errors[4].Error(), "job type") {
 		t.Fatalf("err: %s", err)
 	}
-	if !strings.Contains(mErr.Errors[5].Error(), "datacenters") {
+	if !strings.Contains(mErr.Errors[5].Error(), "priority") {
 		t.Fatalf("err: %s", err)
 	}
-	if !strings.Contains(mErr.Errors[6].Error(), "task groups") {
+	if !strings.Contains(mErr.Errors[6].Error(), "datacenters") {
+		t.Fatalf("err: %s", err)
+	}
+	if !strings.Contains(mErr.Errors[7].Error(), "task groups") {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -60,13 +65,14 @@ func TestJob_Validate(t *testing.T) {
 
 	j = &Job{
 		Region:      "global",
-		ID:          GenerateUUID(),
+		ID:          uuid.Generate(),
+		Namespace:   "test",
 		Name:        "my-job",
 		Type:        JobTypeService,
 		Priority:    50,
 		Datacenters: []string{"dc1"},
 		TaskGroups: []*TaskGroup{
-			&TaskGroup{
+			{
 				Name: "web",
 				RestartPolicy: &RestartPolicy{
 					Interval: 5 * time.Minute,
@@ -74,7 +80,7 @@ func TestJob_Validate(t *testing.T) {
 					Attempts: 10,
 				},
 			},
-			&TaskGroup{
+			{
 				Name: "web",
 				RestartPolicy: &RestartPolicy{
 					Interval: 5 * time.Minute,
@@ -82,7 +88,7 @@ func TestJob_Validate(t *testing.T) {
 					Attempts: 10,
 				},
 			},
-			&TaskGroup{
+			{
 				RestartPolicy: &RestartPolicy{
 					Interval: 5 * time.Minute,
 					Delay:    10 * time.Second,
@@ -160,7 +166,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 			Name:     "One task group",
 			Warnings: []string{"conversion to new update stanza"},
 			Job: &Job{
-				Type: JobTypeService,
+				Namespace: "test",
+				Type:      JobTypeService,
 				Update: UpdateStrategy{
 					MaxParallel: 2,
 					Stagger:     10 * time.Second,
@@ -173,7 +180,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 				},
 			},
 			Expected: &Job{
-				Type: JobTypeService,
+				Namespace: "test",
+				Type:      JobTypeService,
 				Update: UpdateStrategy{
 					MaxParallel: 2,
 					Stagger:     10 * time.Second,
@@ -201,7 +209,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 			Name:     "One task group batch",
 			Warnings: []string{"Update stanza is disallowed for batch jobs"},
 			Job: &Job{
-				Type: JobTypeBatch,
+				Namespace: "test",
+				Type:      JobTypeBatch,
 				Update: UpdateStrategy{
 					MaxParallel: 2,
 					Stagger:     10 * time.Second,
@@ -214,8 +223,9 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 				},
 			},
 			Expected: &Job{
-				Type:   JobTypeBatch,
-				Update: UpdateStrategy{},
+				Namespace: "test",
+				Type:      JobTypeBatch,
+				Update:    UpdateStrategy{},
 				TaskGroups: []*TaskGroup{
 					{
 						Name:          "foo",
@@ -230,7 +240,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 			Name:     "One task group batch - new spec",
 			Warnings: []string{"Update stanza is disallowed for batch jobs"},
 			Job: &Job{
-				Type: JobTypeBatch,
+				Namespace: "test",
+				Type:      JobTypeBatch,
 				Update: UpdateStrategy{
 					Stagger:         2 * time.Second,
 					MaxParallel:     2,
@@ -255,8 +266,9 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 				},
 			},
 			Expected: &Job{
-				Type:   JobTypeBatch,
-				Update: UpdateStrategy{},
+				Namespace: "test",
+				Type:      JobTypeBatch,
+				Update:    UpdateStrategy{},
 				TaskGroups: []*TaskGroup{
 					{
 						Name:          "foo",
@@ -270,7 +282,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 		{
 			Name: "One task group service - new spec",
 			Job: &Job{
-				Type: JobTypeService,
+				Namespace: "test",
+				Type:      JobTypeService,
 				Update: UpdateStrategy{
 					Stagger:         2 * time.Second,
 					MaxParallel:     2,
@@ -295,7 +308,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 				},
 			},
 			Expected: &Job{
-				Type: JobTypeService,
+				Namespace: "test",
+				Type:      JobTypeService,
 				Update: UpdateStrategy{
 					Stagger:         2 * time.Second,
 					MaxParallel:     2,
@@ -326,7 +340,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 			Name:     "One task group; too high of parallelism",
 			Warnings: []string{"conversion to new update stanza"},
 			Job: &Job{
-				Type: JobTypeService,
+				Namespace: "test",
+				Type:      JobTypeService,
 				Update: UpdateStrategy{
 					MaxParallel: 200,
 					Stagger:     10 * time.Second,
@@ -339,7 +354,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 				},
 			},
 			Expected: &Job{
-				Type: JobTypeService,
+				Namespace: "test",
+				Type:      JobTypeService,
 				Update: UpdateStrategy{
 					MaxParallel: 200,
 					Stagger:     10 * time.Second,
@@ -367,7 +383,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 			Name:     "Multiple task group; rounding",
 			Warnings: []string{"conversion to new update stanza"},
 			Job: &Job{
-				Type: JobTypeService,
+				Namespace: "test",
+				Type:      JobTypeService,
 				Update: UpdateStrategy{
 					MaxParallel: 2,
 					Stagger:     10 * time.Second,
@@ -388,7 +405,8 @@ func TestJob_Canonicalize_Update(t *testing.T) {
 				},
 			},
 			Expected: &Job{
-				Type: JobTypeService,
+				Namespace: "test",
+				Type:      JobTypeService,
 				Update: UpdateStrategy{
 					MaxParallel: 2,
 					Stagger:     10 * time.Second,
@@ -513,14 +531,15 @@ func TestJob_SpecChanged(t *testing.T) {
 func testJob() *Job {
 	return &Job{
 		Region:      "global",
-		ID:          GenerateUUID(),
+		ID:          uuid.Generate(),
+		Namespace:   "test",
 		Name:        "my-job",
 		Type:        JobTypeService,
 		Priority:    50,
 		AllAtOnce:   false,
 		Datacenters: []string{"dc1"},
 		Constraints: []*Constraint{
-			&Constraint{
+			{
 				LTarget: "$attr.kernel.name",
 				RTarget: "linux",
 				Operand: "=",
@@ -530,7 +549,7 @@ func testJob() *Job {
 			Enabled: false,
 		},
 		TaskGroups: []*TaskGroup{
-			&TaskGroup{
+			{
 				Name:          "web",
 				Count:         10,
 				EphemeralDisk: DefaultEphemeralDisk(),
@@ -541,7 +560,7 @@ func testJob() *Job {
 					Delay:    1 * time.Minute,
 				},
 				Tasks: []*Task{
-					&Task{
+					{
 						Name:   "web",
 						Driver: "exec",
 						Config: map[string]interface{}{
@@ -565,7 +584,7 @@ func testJob() *Job {
 							CPU:      500,
 							MemoryMB: 256,
 							Networks: []*NetworkResource{
-								&NetworkResource{
+								{
 									MBits:        50,
 									DynamicPorts: []Port{{Label: "http"}},
 								},
@@ -661,26 +680,26 @@ func TestJob_VaultPolicies(t *testing.T) {
 	}
 	j1 := &Job{
 		TaskGroups: []*TaskGroup{
-			&TaskGroup{
+			{
 				Name: "foo",
 				Tasks: []*Task{
-					&Task{
+					{
 						Name: "t1",
 					},
-					&Task{
+					{
 						Name:  "t2",
 						Vault: vj1,
 					},
 				},
 			},
-			&TaskGroup{
+			{
 				Name: "bar",
 				Tasks: []*Task{
-					&Task{
+					{
 						Name:  "t3",
 						Vault: vj2,
 					},
-					&Task{
+					{
 						Name:  "t4",
 						Vault: vj3,
 					},
@@ -690,10 +709,10 @@ func TestJob_VaultPolicies(t *testing.T) {
 	}
 
 	e1 := map[string]map[string]*Vault{
-		"foo": map[string]*Vault{
+		"foo": {
 			"t2": vj1,
 		},
-		"bar": map[string]*Vault{
+		"bar": {
 			"t3": vj2,
 			"t4": vj3,
 		},
@@ -747,28 +766,28 @@ func TestJob_RequiredSignals(t *testing.T) {
 	}
 	j1 := &Job{
 		TaskGroups: []*TaskGroup{
-			&TaskGroup{
+			{
 				Name: "foo",
 				Tasks: []*Task{
-					&Task{
+					{
 						Name: "t1",
 					},
-					&Task{
+					{
 						Name:      "t2",
 						Vault:     vj2,
 						Templates: []*Template{tj2},
 					},
 				},
 			},
-			&TaskGroup{
+			{
 				Name: "bar",
 				Tasks: []*Task{
-					&Task{
+					{
 						Name:      "t3",
 						Vault:     vj1,
 						Templates: []*Template{tj1},
 					},
-					&Task{
+					{
 						Name:  "t4",
 						Vault: vj2,
 					},
@@ -778,11 +797,11 @@ func TestJob_RequiredSignals(t *testing.T) {
 	}
 
 	e1 := map[string]map[string][]string{
-		"foo": map[string][]string{
-			"t2": []string{"SIGUSR1", "SIGUSR2"},
+		"foo": {
+			"t2": {"SIGUSR1", "SIGUSR2"},
 		},
-		"bar": map[string][]string{
-			"t4": []string{"SIGUSR1"},
+		"bar": {
+			"t4": {"SIGUSR1"},
 		},
 	}
 
@@ -833,21 +852,21 @@ func TestTaskGroup_Validate(t *testing.T) {
 
 	tg = &TaskGroup{
 		Tasks: []*Task{
-			&Task{
+			{
 				Name: "task-a",
 				Resources: &Resources{
 					Networks: []*NetworkResource{
-						&NetworkResource{
+						{
 							ReservedPorts: []Port{{Label: "foo", Value: 123}},
 						},
 					},
 				},
 			},
-			&Task{
+			{
 				Name: "task-b",
 				Resources: &Resources{
 					Networks: []*NetworkResource{
-						&NetworkResource{
+						{
 							ReservedPorts: []Port{{Label: "foo", Value: 123}},
 						},
 					},
@@ -863,11 +882,11 @@ func TestTaskGroup_Validate(t *testing.T) {
 
 	tg = &TaskGroup{
 		Tasks: []*Task{
-			&Task{
+			{
 				Name: "task-a",
 				Resources: &Resources{
 					Networks: []*NetworkResource{
-						&NetworkResource{
+						{
 							ReservedPorts: []Port{
 								{Label: "foo", Value: 123},
 								{Label: "bar", Value: 123},
@@ -888,9 +907,9 @@ func TestTaskGroup_Validate(t *testing.T) {
 		Name:  "web",
 		Count: 1,
 		Tasks: []*Task{
-			&Task{Name: "web", Leader: true},
-			&Task{Name: "web", Leader: true},
-			&Task{},
+			{Name: "web", Leader: true},
+			{Name: "web", Leader: true},
+			{},
 		},
 		RestartPolicy: &RestartPolicy{
 			Interval: 5 * time.Minute,
@@ -1041,14 +1060,14 @@ func TestTask_Validate_Services(t *testing.T) {
 		LogConfig: DefaultLogConfig(),
 	}
 	task1.Resources.Networks = []*NetworkResource{
-		&NetworkResource{
+		{
 			MBits: 10,
 			DynamicPorts: []Port{
-				Port{
+				{
 					Label: "a",
 					Value: 1000,
 				},
-				Port{
+				{
 					Label: "b",
 					Value: 2000,
 				},
@@ -1134,6 +1153,24 @@ func TestTask_Validate_Service_Check(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
+}
+
+func TestTask_Validate_Service_Check_CheckRestart(t *testing.T) {
+	invalidCheckRestart := &CheckRestart{
+		Limit: -1,
+		Grace: -1,
+	}
+
+	err := invalidCheckRestart.Validate()
+	assert.NotNil(t, err, "invalidateCheckRestart.Validate()")
+	assert.Len(t, err.(*multierror.Error).Errors, 2)
+
+	validCheckRestart := &CheckRestart{}
+	assert.Nil(t, validCheckRestart.Validate())
+
+	validCheckRestart.Limit = 1
+	validCheckRestart.Grace = 1
+	assert.Nil(t, validCheckRestart.Validate())
 }
 
 func TestTask_Validate_LogConfig(t *testing.T) {
@@ -1422,9 +1459,9 @@ func TestUpdateStrategy_Validate(t *testing.T) {
 func TestResource_NetIndex(t *testing.T) {
 	r := &Resources{
 		Networks: []*NetworkResource{
-			&NetworkResource{Device: "eth0"},
-			&NetworkResource{Device: "lo0"},
-			&NetworkResource{Device: ""},
+			{Device: "eth0"},
+			{Device: "lo0"},
+			{Device: ""},
 		},
 	}
 	if idx := r.NetIndex(&NetworkResource{Device: "eth0"}); idx != 0 {
@@ -1473,7 +1510,7 @@ func TestResource_Add(t *testing.T) {
 		DiskMB:   10000,
 		IOPS:     100,
 		Networks: []*NetworkResource{
-			&NetworkResource{
+			{
 				CIDR:          "10.0.0.0/8",
 				MBits:         100,
 				ReservedPorts: []Port{{"ssh", 22}},
@@ -1486,7 +1523,7 @@ func TestResource_Add(t *testing.T) {
 		DiskMB:   5000,
 		IOPS:     50,
 		Networks: []*NetworkResource{
-			&NetworkResource{
+			{
 				IP:            "10.0.0.1",
 				MBits:         50,
 				ReservedPorts: []Port{{"web", 80}},
@@ -1505,7 +1542,7 @@ func TestResource_Add(t *testing.T) {
 		DiskMB:   15000,
 		IOPS:     150,
 		Networks: []*NetworkResource{
-			&NetworkResource{
+			{
 				CIDR:          "10.0.0.0/8",
 				MBits:         150,
 				ReservedPorts: []Port{{"ssh", 22}, {"web", 80}},
@@ -1522,7 +1559,7 @@ func TestResource_Add_Network(t *testing.T) {
 	r1 := &Resources{}
 	r2 := &Resources{
 		Networks: []*NetworkResource{
-			&NetworkResource{
+			{
 				MBits:        50,
 				DynamicPorts: []Port{{"http", 0}, {"https", 0}},
 			},
@@ -1530,7 +1567,7 @@ func TestResource_Add_Network(t *testing.T) {
 	}
 	r3 := &Resources{
 		Networks: []*NetworkResource{
-			&NetworkResource{
+			{
 				MBits:        25,
 				DynamicPorts: []Port{{"admin", 0}},
 			},
@@ -1548,7 +1585,7 @@ func TestResource_Add_Network(t *testing.T) {
 
 	expect := &Resources{
 		Networks: []*NetworkResource{
-			&NetworkResource{
+			{
 				MBits:        75,
 				DynamicPorts: []Port{{"http", 0}, {"https", 0}, {"admin", 0}},
 			},
@@ -1762,7 +1799,7 @@ func TestJob_ExpandServiceNames(t *testing.T) {
 	j := &Job{
 		Name: "my-job",
 		TaskGroups: []*TaskGroup{
-			&TaskGroup{
+			{
 				Name: "web",
 				Tasks: []*Task{
 					{
@@ -1778,7 +1815,7 @@ func TestJob_ExpandServiceNames(t *testing.T) {
 					},
 				},
 			},
-			&TaskGroup{
+			{
 				Name: "admin",
 				Tasks: []*Task{
 					{
@@ -1854,7 +1891,7 @@ func TestPeriodicConfig_ValidCron(t *testing.T) {
 func TestPeriodicConfig_NextCron(t *testing.T) {
 	from := time.Date(2009, time.November, 10, 23, 22, 30, 0, time.UTC)
 	specs := []string{"0 0 29 2 * 1980", "*/5 * * * *"}
-	expected := []time.Time{time.Time{}, time.Date(2009, time.November, 10, 23, 25, 0, 0, time.UTC)}
+	expected := []time.Time{{}, time.Date(2009, time.November, 10, 23, 25, 0, 0, time.UTC)}
 	for i, spec := range specs {
 		p := &PeriodicConfig{Enabled: true, SpecType: PeriodicSpecCron, Spec: spec}
 		p.Canonicalize()
@@ -2008,7 +2045,8 @@ func TestTaskArtifact_Validate_Dest(t *testing.T) {
 
 func TestAllocation_ShouldMigrate(t *testing.T) {
 	alloc := Allocation{
-		TaskGroup: "foo",
+		PreviousAllocation: "123",
+		TaskGroup:          "foo",
 		Job: &Job{
 			TaskGroups: []*TaskGroup{
 				{
@@ -2027,7 +2065,8 @@ func TestAllocation_ShouldMigrate(t *testing.T) {
 	}
 
 	alloc1 := Allocation{
-		TaskGroup: "foo",
+		PreviousAllocation: "123",
+		TaskGroup:          "foo",
 		Job: &Job{
 			TaskGroups: []*TaskGroup{
 				{
@@ -2043,7 +2082,8 @@ func TestAllocation_ShouldMigrate(t *testing.T) {
 	}
 
 	alloc2 := Allocation{
-		TaskGroup: "foo",
+		PreviousAllocation: "123",
+		TaskGroup:          "foo",
 		Job: &Job{
 			TaskGroups: []*TaskGroup{
 				{
@@ -2062,7 +2102,8 @@ func TestAllocation_ShouldMigrate(t *testing.T) {
 	}
 
 	alloc3 := Allocation{
-		TaskGroup: "foo",
+		PreviousAllocation: "123",
+		TaskGroup:          "foo",
 		Job: &Job{
 			TaskGroups: []*TaskGroup{
 				{
@@ -2074,6 +2115,26 @@ func TestAllocation_ShouldMigrate(t *testing.T) {
 
 	if alloc3.ShouldMigrate() {
 		t.Fatalf("bad: %v", alloc)
+	}
+
+	// No previous
+	alloc4 := Allocation{
+		TaskGroup: "foo",
+		Job: &Job{
+			TaskGroups: []*TaskGroup{
+				{
+					Name: "foo",
+					EphemeralDisk: &EphemeralDisk{
+						Migrate: true,
+						Sticky:  true,
+					},
+				},
+			},
+		},
+	}
+
+	if alloc4.ShouldMigrate() {
+		t.Fatalf("bad: %v", alloc4)
 	}
 }
 
@@ -2263,4 +2324,110 @@ func TestIsRecoverable(t *testing.T) {
 	if !IsRecoverable(NewRecoverableError(fmt.Errorf(""), true)) {
 		t.Errorf("Explicitly recoverable errors *should* be recoverable")
 	}
+}
+
+func TestACLTokenValidate(t *testing.T) {
+	tk := &ACLToken{}
+
+	// Mising a type
+	err := tk.Validate()
+	assert.NotNil(t, err)
+	if !strings.Contains(err.Error(), "client or management") {
+		t.Fatalf("bad: %v", err)
+	}
+
+	// Missing policies
+	tk.Type = ACLClientToken
+	err = tk.Validate()
+	assert.NotNil(t, err)
+	if !strings.Contains(err.Error(), "missing policies") {
+		t.Fatalf("bad: %v", err)
+	}
+
+	// Invalid policices
+	tk.Type = ACLManagementToken
+	tk.Policies = []string{"foo"}
+	err = tk.Validate()
+	assert.NotNil(t, err)
+	if !strings.Contains(err.Error(), "associated with policies") {
+		t.Fatalf("bad: %v", err)
+	}
+
+	// Name too long policices
+	tk.Name = uuid.Generate() + uuid.Generate()
+	tk.Policies = nil
+	err = tk.Validate()
+	assert.NotNil(t, err)
+	if !strings.Contains(err.Error(), "too long") {
+		t.Fatalf("bad: %v", err)
+	}
+
+	// Make it valid
+	tk.Name = "foo"
+	err = tk.Validate()
+	assert.Nil(t, err)
+}
+
+func TestACLTokenPolicySubset(t *testing.T) {
+	tk := &ACLToken{
+		Type:     ACLClientToken,
+		Policies: []string{"foo", "bar", "baz"},
+	}
+
+	assert.Equal(t, true, tk.PolicySubset([]string{"foo", "bar", "baz"}))
+	assert.Equal(t, true, tk.PolicySubset([]string{"foo", "bar"}))
+	assert.Equal(t, true, tk.PolicySubset([]string{"foo"}))
+	assert.Equal(t, true, tk.PolicySubset([]string{}))
+	assert.Equal(t, false, tk.PolicySubset([]string{"foo", "bar", "new"}))
+	assert.Equal(t, false, tk.PolicySubset([]string{"new"}))
+
+	tk = &ACLToken{
+		Type: ACLManagementToken,
+	}
+
+	assert.Equal(t, true, tk.PolicySubset([]string{"foo", "bar", "baz"}))
+	assert.Equal(t, true, tk.PolicySubset([]string{"foo", "bar"}))
+	assert.Equal(t, true, tk.PolicySubset([]string{"foo"}))
+	assert.Equal(t, true, tk.PolicySubset([]string{}))
+	assert.Equal(t, true, tk.PolicySubset([]string{"foo", "bar", "new"}))
+	assert.Equal(t, true, tk.PolicySubset([]string{"new"}))
+}
+
+func TestACLTokenSetHash(t *testing.T) {
+	tk := &ACLToken{
+		Name:     "foo",
+		Type:     ACLClientToken,
+		Policies: []string{"foo", "bar"},
+		Global:   false,
+	}
+	out1 := tk.SetHash()
+	assert.NotNil(t, out1)
+	assert.NotNil(t, tk.Hash)
+	assert.Equal(t, out1, tk.Hash)
+
+	tk.Policies = []string{"foo"}
+	out2 := tk.SetHash()
+	assert.NotNil(t, out2)
+	assert.NotNil(t, tk.Hash)
+	assert.Equal(t, out2, tk.Hash)
+	assert.NotEqual(t, out1, out2)
+}
+
+func TestACLPolicySetHash(t *testing.T) {
+	ap := &ACLPolicy{
+		Name:        "foo",
+		Description: "great policy",
+		Rules:       "node { policy = \"read\" }",
+	}
+	out1 := ap.SetHash()
+	assert.NotNil(t, out1)
+	assert.NotNil(t, ap.Hash)
+	assert.Equal(t, out1, ap.Hash)
+
+	ap.Rules = "node { policy = \"write\" }"
+	out2 := ap.SetHash()
+	assert.NotNil(t, out2)
+	assert.NotNil(t, ap.Hash)
+	assert.Equal(t, out2, ap.Hash)
+	assert.NotEqual(t, out1, out2)
 }

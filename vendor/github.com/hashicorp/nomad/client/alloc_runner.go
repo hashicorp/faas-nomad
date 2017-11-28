@@ -20,16 +20,6 @@ import (
 	cstructs "github.com/hashicorp/nomad/client/structs"
 )
 
-const (
-	// taskReceivedSyncLimit is how long the client will wait before sending
-	// that a task was received to the server. The client does not immediately
-	// send that the task was received to the server because another transition
-	// to running or failed is likely to occur immediately after and a single
-	// update will transfer all past state information. If not other transition
-	// has occurred up to this limit, we will send to the server.
-	taskReceivedSyncLimit = 30 * time.Second
-)
-
 var (
 	// The following are the key paths written to the state database
 	allocRunnerStateAllocKey     = []byte("alloc")
@@ -336,7 +326,8 @@ func (r *AllocRunner) RestoreState() error {
 			// Restart task runner if RestoreState gave a reason
 			if restartReason != "" {
 				r.logger.Printf("[INFO] client: restarting alloc %s task %s: %v", r.allocID, name, restartReason)
-				tr.Restart("upgrade", restartReason)
+				const failure = false
+				tr.Restart("upgrade", restartReason, failure)
 			}
 		} else {
 			tr.Destroy(taskDestroyEvent)
