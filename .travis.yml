@@ -23,6 +23,8 @@ script:
   - make build_docker
   - echo "Run Functional Tests"
   - source ./startNomad.sh
+  - cat ./consul.hcl
+  - cat ./nomad.hcl
   - nomad run nomad_job_files/faas.hcl
   - sleep 10
   - nomad status faas-nomadd
@@ -30,5 +32,6 @@ script:
   - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=$FAAS_GATEWAY go test ./tests -v
   - nomad status
   - cat $HOME/log/nomad.log
+  - cat $HOME/log/consul.log
   - ps -aux | grep nomad
   - ps -aux | grep consul
