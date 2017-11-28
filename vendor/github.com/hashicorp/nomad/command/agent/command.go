@@ -15,12 +15,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/armon/go-metrics"
+	metrics "github.com/armon/go-metrics"
 	"github.com/armon/go-metrics/circonus"
 	"github.com/armon/go-metrics/datadog"
+	"github.com/armon/go-metrics/prometheus"
 	"github.com/hashicorp/consul/lib"
-	"github.com/hashicorp/go-checkpoint"
-	"github.com/hashicorp/go-syslog"
+	checkpoint "github.com/hashicorp/go-checkpoint"
+	gsyslog "github.com/hashicorp/go-syslog"
 	"github.com/hashicorp/logutils"
 	"github.com/hashicorp/nomad/helper/flag-helpers"
 	"github.com/hashicorp/nomad/helper/gated-writer"
@@ -64,9 +65,11 @@ func (c *Command) readConfig() *Config {
 	cmdConfig := &Config{
 		Atlas:  &AtlasConfig{},
 		Client: &ClientConfig{},
+		Consul: &config.ConsulConfig{},
 		Ports:  &Ports{},
 		Server: &ServerConfig{},
 		Vault:  &config.VaultConfig{},
+		ACL:    &ACLConfig{},
 	}
 
 	flags := flag.NewFlagSet("agent", flag.ContinueOnError)
@@ -109,6 +112,39 @@ func (c *Command) readConfig() *Config {
 	flags.BoolVar(&cmdConfig.Atlas.Join, "atlas-join", false, "")
 	flags.StringVar(&cmdConfig.Atlas.Token, "atlas-token", "", "")
 
+	// Consul options
+	flags.StringVar(&cmdConfig.Consul.Auth, "consul-auth", "", "")
+	flags.Var((flaghelper.FuncBoolVar)(func(b bool) error {
+		cmdConfig.Consul.AutoAdvertise = &b
+		return nil
+	}), "consul-auto-advertise", "")
+	flags.StringVar(&cmdConfig.Consul.CAFile, "consul-ca-file", "", "")
+	flags.StringVar(&cmdConfig.Consul.CertFile, "consul-cert-file", "", "")
+	flags.Var((flaghelper.FuncBoolVar)(func(b bool) error {
+		cmdConfig.Consul.ChecksUseAdvertise = &b
+		return nil
+	}), "consul-checks-use-advertise", "")
+	flags.Var((flaghelper.FuncBoolVar)(func(b bool) error {
+		cmdConfig.Consul.ClientAutoJoin = &b
+		return nil
+	}), "consul-client-auto-join", "")
+	flags.StringVar(&cmdConfig.Consul.ClientServiceName, "consul-client-service-name", "", "")
+	flags.StringVar(&cmdConfig.Consul.KeyFile, "consul-key-file", "", "")
+	flags.StringVar(&cmdConfig.Consul.ServerServiceName, "consul-server-service-name", "", "")
+	flags.Var((flaghelper.FuncBoolVar)(func(b bool) error {
+		cmdConfig.Consul.ServerAutoJoin = &b
+		return nil
+	}), "consul-server-auto-join", "")
+	flags.Var((flaghelper.FuncBoolVar)(func(b bool) error {
+		cmdConfig.Consul.EnableSSL = &b
+		return nil
+	}), "consul-ssl", "")
+	flags.StringVar(&cmdConfig.Consul.Token, "consul-token", "", "")
+	flags.Var((flaghelper.FuncBoolVar)(func(b bool) error {
+		cmdConfig.Consul.VerifySSL = &b
+		return nil
+	}), "consul-verify-ssl", "")
+
 	// Vault options
 	flags.Var((flaghelper.FuncBoolVar)(func(b bool) error {
 		cmdConfig.Vault.Enabled = &b
@@ -130,6 +166,10 @@ func (c *Command) readConfig() *Config {
 		return nil
 	}), "vault-tls-skip-verify", "")
 	flags.StringVar(&cmdConfig.Vault.TLSServerName, "vault-tls-server-name", "", "")
+
+	// ACL options
+	flags.BoolVar(&cmdConfig.ACL.Enabled, "acl-enabled", false, "")
+	flags.StringVar(&cmdConfig.ACL.ReplicationToken, "acl-replication-token", "", "")
 
 	if err := flags.Parse(c.args); err != nil {
 		return nil
@@ -331,9 +371,9 @@ func (c *Command) setupLoggers(config *Config) (*gatedwriter.Writer, *logWriter,
 }
 
 // setupAgent is used to start the agent and various interfaces
-func (c *Command) setupAgent(config *Config, logOutput io.Writer) error {
+func (c *Command) setupAgent(config *Config, logOutput io.Writer, inmem *metrics.InmemSink) error {
 	c.Ui.Output("Starting Nomad agent...")
-	agent, err := NewAgent(config, logOutput)
+	agent, err := NewAgent(config, logOutput, inmem)
 	if err != nil {
 		c.Ui.Error(fmt.Sprintf("Error starting agent: %s", err))
 		return err
@@ -444,13 +484,14 @@ func (c *Command) Run(args []string) int {
 	}
 
 	// Initialize the telemetry
-	if err := c.setupTelemetry(config); err != nil {
+	inmem, err := c.setupTelemetry(config)
+	if err != nil {
 		c.Ui.Error(fmt.Sprintf("Error initializing telemetry: %s", err))
 		return 1
 	}
 
 	// Create the agent
-	if err := c.setupAgent(config, logOutput); err != nil {
+	if err := c.setupAgent(config, logOutput, inmem); err != nil {
 		logGate.Flush()
 		return 1
 	}
@@ -619,7 +660,7 @@ func (c *Command) handleReload(config *Config) *Config {
 }
 
 // setupTelemetry is used ot setup the telemetry sub-systems
-func (c *Command) setupTelemetry(config *Config) error {
+func (c *Command) setupTelemetry(config *Config) (*metrics.InmemSink, error) {
 	/* Setup telemetry
 	Aggregate on 10 second intervals for 1 minute. Expose the
 	metrics over stderr when there is a SIGUSR1 received.
@@ -646,7 +687,7 @@ func (c *Command) setupTelemetry(config *Config) error {
 	if telConfig.StatsiteAddr != "" {
 		sink, err := metrics.NewStatsiteSink(telConfig.StatsiteAddr)
 		if err != nil {
-			return err
+			return inm, err
 		}
 		fanout = append(fanout, sink)
 	}
@@ -655,16 +696,25 @@ func (c *Command) setupTelemetry(config *Config) error {
 	if telConfig.StatsdAddr != "" {
 		sink, err := metrics.NewStatsdSink(telConfig.StatsdAddr)
 		if err != nil {
-			return err
+			return inm, err
 		}
 		fanout = append(fanout, sink)
+	}
+
+	// Configure the prometheus sink
+	if telConfig.PrometheusMetrics {
+		promSink, err := prometheus.NewPrometheusSink()
+		if err != nil {
+			return inm, err
+		}
+		fanout = append(fanout, promSink)
 	}
 
 	// Configure the datadog sink
 	if telConfig.DataDogAddr != "" {
 		sink, err := datadog.NewDogStatsdSink(telConfig.DataDogAddr, config.NodeName)
 		if err != nil {
-			return err
+			return inm, err
 		}
 		fanout = append(fanout, sink)
 	}
@@ -700,7 +750,7 @@ func (c *Command) setupTelemetry(config *Config) error {
 
 		sink, err := circonus.NewCirconusSink(cfg)
 		if err != nil {
-			return err
+			return inm, err
 		}
 		sink.Start()
 		fanout = append(fanout, sink)
@@ -714,7 +764,7 @@ func (c *Command) setupTelemetry(config *Config) error {
 		metricsConf.EnableHostname = false
 		metrics.NewGlobal(metricsConf, inm)
 	}
-	return nil
+	return inm, nil
 }
 
 // setupSCADA is used to start a new SCADA provider and listener,
@@ -938,6 +988,77 @@ Client Options:
   -network-speed
     The default speed for network interfaces in MBits if the link speed can not
     be determined dynamically.
+
+ACL Options:
+
+  -acl-enabled
+    Specifies whether the agent should enable ACLs.
+
+  -acl-replication-token
+    The replication token for servers to use when replicating from the
+    authoratative region. The token must be a valid management token from the
+    authoratative region.
+
+Consul Options:
+
+  -consul-address=<addr>
+    Specifies the address to the local Consul agent, given in the format host:port.
+    Supports Unix sockets with the format: unix:///tmp/consul/consul.sock
+
+  -consul-auth=<auth>
+    Specifies the HTTP Basic Authentication information to use for access to the
+    Consul Agent, given in the format username:password.
+
+  -consul-auto-advertise
+    Specifies if Nomad should advertise its services in Consul. The services
+    are named according to server_service_name and client_service_name. Nomad
+    servers and clients advertise their respective services, each tagged
+    appropriately with either http or rpc tag. Nomad servers also advertise a
+    serf tagged service.
+
+  -consul-ca-file=<path>
+    Specifies an optional path to the CA certificate used for Consul communication.
+    This defaults to the system bundle if unspecified.
+
+  -consul-cert-file=<path>
+    Specifies the path to the certificate used for Consul communication. If this
+    is set then you need to also set key_file.
+
+  -consul-checks-use-advertise
+    Specifies if Consul heath checks should bind to the advertise address. By
+    default, this is the bind address.
+
+  -consul-client-auto-join
+    Specifies if the Nomad clients should automatically discover servers in the
+    same region by searching for the Consul service name defined in the
+    server_service_name option.
+
+  -consul-client-service-name=<name>
+    Specifies the name of the service in Consul for the Nomad clients.
+
+  -consul-key-file=<path>
+    Specifies the path to the private key used for Consul communication. If this
+    is set then you need to also set cert_file.
+
+  -consul-server-service-name=<name>
+    Specifies the name of the service in Consul for the Nomad servers.
+
+  -consul-server-auto-join
+    Specifies if the Nomad servers should automatically discover and join other
+    Nomad servers by searching for the Consul service name defined in the
+    server_service_name option. This search only happens if the server does not
+    have a leader.
+
+  -consul-ssl
+    Specifies if the transport scheme should use HTTPS to communicate with the
+    Consul agent.
+
+  -consul-token=<token>
+    Specifies the token used to provide a per-request ACL token.
+
+  -consul-verify-ssl
+    Specifies if SSL peer verification should be used when communicating to the
+    Consul API client over HTTPS.
 
 Vault Options:
 

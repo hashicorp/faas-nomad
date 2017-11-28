@@ -16,20 +16,8 @@
 [[projects]]
   name = "github.com/alexellis/faas"
   packages = ["gateway/requests"]
-  revision = "5a58db2c5006695c2e1fa08f291513933b469e85"
-  version = "0.6.5"
-
-[[projects]]
-  name = "github.com/alexellis/faas-provider"
-  packages = ["types"]
-  revision = "e29c512428c07b7ad7617523bf939581eade1e56"
-  version = "0.1"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/armon/go-metrics"
-  packages = ["."]
-  revision = "023a4bbe4bb9bfb23ee7e1afc8d0abad217641f3"
+  revision = "62a5cfc385c39331e9d301c7077bfb1c0d7f020b"
+  version = "0.6.12"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -53,7 +41,7 @@
   branch = "master"
   name = "github.com/golang/protobuf"
   packages = ["proto","ptypes","ptypes/any","ptypes/duration","ptypes/timestamp"]
-  revision = "130e6b02ab059e7b717a096f397c5b60111cae74"
+  revision = "1e59b77b52bf8e4b449a57e6f79f21226d571845"
 
 [[projects]]
   branch = "master"
@@ -76,20 +64,20 @@
 [[projects]]
   name = "github.com/gorilla/mux"
   packages = ["."]
-  revision = "bcd8bc72b08df0f70df986b97f95590779502d31"
-  version = "v1.4.0"
+  revision = "7f08801859139f86dfafd1c296e2cba9a80d292e"
+  version = "v1.6.0"
 
 [[projects]]
+  branch = "master"
   name = "github.com/hashicorp/consul"
   packages = ["api"]
-  revision = "112c0603d3d6fb23ab5f15e8fdb1a761da8eaf9a"
-  version = "v0.9.3"
+  revision = "9f2989424e75ecbcaecb990cf7616ea8ad128adf"
 
 [[projects]]
   name = "github.com/hashicorp/consul-template"
   packages = ["dependency","watch"]
-  revision = "e08c9043f75346825b122c4b2f9d3dfe27e75c7a"
-  version = "v0.19.3"
+  revision = "111a80441153783544817b7c6a9c08633308b9a8"
+  version = "v0.19.4"
 
 [[projects]]
   branch = "master"
@@ -111,18 +99,6 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/hashicorp/go-immutable-radix"
-  packages = ["."]
-  revision = "8aac2701530899b64bdea735a1de8da899815220"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/hashicorp/go-msgpack"
-  packages = ["codec"]
-  revision = "fa3f63826f7c23912c15263591e65d54d080b458"
-
-[[projects]]
-  branch = "master"
   name = "github.com/hashicorp/go-multierror"
   packages = ["."]
   revision = "83588e72410abfbe4df460eeb6f30841ae47d4c4"
@@ -131,7 +107,7 @@
   branch = "master"
   name = "github.com/hashicorp/go-plugin"
   packages = ["."]
-  revision = "3e6d191694b5a3a2b99755f31b47fa209e4bcd09"
+  revision = "e2fbc6864d18d3c37b6cde4297ec9fca266d28f1"
 
 [[projects]]
   branch = "master"
@@ -141,33 +117,15 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/hashicorp/go-version"
-  packages = ["."]
-  revision = "03c5bf6be031b6dd45afec16b1cf94fc8938bc77"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/hashicorp/golang-lru"
-  packages = ["simplelru"]
-  revision = "0a025b7e63adc15a622f29b0b2c4c3848243bbf6"
-
-[[projects]]
-  branch = "master"
   name = "github.com/hashicorp/hcl"
   packages = [".","hcl/ast","hcl/parser","hcl/scanner","hcl/strconv","hcl/token","json/parser","json/scanner","json/token"]
-  revision = "8f6b1344a92ff8877cf24a5de9177bf7d0a2a187"
+  revision = "23c074d0eceb2b8a5bfdbb271ab780cde70f05a8"
 
 [[projects]]
   name = "github.com/hashicorp/nomad"
-  packages = ["api","api/contexts","helper","helper/args","helper/flatmap","nomad/structs"]
-  revision = "ac9d8f5f46c83e96670241c0929e63f69b2f2f99"
-  version = "v0.6.3"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/hashicorp/raft"
-  packages = ["."]
-  revision = "3a6f3bdfe4fc69e300c6d122b1a92051af6f0b95"
+  packages = ["api","api/contexts","helper","helper/uuid"]
+  revision = "1292569ac11aacfe8555a6bd94c0faedae2138e7"
+  version = "v0.7.0"
 
 [[projects]]
   name = "github.com/hashicorp/serf"
@@ -178,20 +136,14 @@
 [[projects]]
   name = "github.com/hashicorp/vault"
   packages = ["api","helper/compressutil","helper/jsonutil","helper/parseutil"]
-  revision = "9afe7330e06e486ee326621624f2077d88bc9511"
-  version = "v0.8.2"
+  revision = "6b29fb2b7f70ed538ee2b3c057335d706b6d4e36"
+  version = "v0.8.3"
 
 [[projects]]
   branch = "master"
   name = "github.com/hashicorp/yamux"
   packages = ["."]
   revision = "f5742cb6b85602e7fa834e9d5d91a7d7fa850824"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/mitchellh/copystructure"
-  packages = ["."]
-  revision = "d23ffcb85de31694d6ccaa23ccb4a03e55c1303f"
 
 [[projects]]
   branch = "master"
@@ -207,21 +159,9 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/mitchellh/hashstructure"
-  packages = ["."]
-  revision = "2bca23e0e452137f789efbc8610126fd8b94f73b"
-
-[[projects]]
-  branch = "master"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
-  revision = "d0303fe809921458f417bcf828397a65db30a7e4"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/mitchellh/reflectwalk"
-  packages = ["."]
-  revision = "63d60e9d0dbc60cf9164e6510889b0db6683d98c"
+  revision = "06020f85339e21b2478f756a78e295255ffa4d6a"
 
 [[projects]]
   name = "github.com/nicholasjackson/bench"
@@ -238,20 +178,20 @@
 [[projects]]
   name = "github.com/openfaas/faas"
   packages = ["gateway/requests"]
-  revision = "5a58db2c5006695c2e1fa08f291513933b469e85"
-  version = "0.6.5"
+  revision = "62a5cfc385c39331e9d301c7077bfb1c0d7f020b"
+  version = "0.6.12"
 
 [[projects]]
   name = "github.com/openfaas/faas-provider"
   packages = [".","types"]
-  revision = "e29c512428c07b7ad7617523bf939581eade1e56"
-  version = "0.1"
+  revision = "b9f261986a88ce62bbca20af2ff2dcf1d46a8df8"
+  version = "0.4"
 
 [[projects]]
   name = "github.com/patrickmn/go-cache"
   packages = ["."]
-  revision = "1881a9bccb818787f68c52bfba648c6cf34c34fa"
-  version = "v2.0.0"
+  revision = "a3647f8e31d79543b2d0f0ae2fe5c379d72cedc0"
+  version = "v2.1.0"
 
 [[projects]]
   name = "github.com/pkg/errors"
@@ -269,7 +209,7 @@
   branch = "master"
   name = "github.com/sethgrid/pester"
   packages = ["."]
-  revision = "a86a2d88f4dc3c7dbf3a6a6bbbfb095690b834b6"
+  revision = "760f8913c0483b776294e1bee43f1d687527127b"
 
 [[projects]]
   branch = "master"
@@ -285,37 +225,31 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/ugorji/go"
-  packages = ["codec"]
-  revision = "8c0409fcbb70099c748d71f714529204975f6c3f"
-
-[[projects]]
-  branch = "master"
   name = "golang.org/x/net"
   packages = ["context","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "66aacef3dd8a676686c7ae3716979581e8b03c47"
+  revision = "fc492d2e106922eb3aa4bca863d55e882c087ae3"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/text"
-  packages = ["internal/gen","internal/triegen","internal/ucd","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
-  revision = "bd91bbf73e9a4a801adbfb97133c992678533126"
+  packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
+  revision = "a352c5cd197410fb50acfd80644a31f30f381cc1"
 
 [[projects]]
   branch = "master"
   name = "google.golang.org/genproto"
   packages = ["googleapis/rpc/status"]
-  revision = "f676e0f3ac6395ff1a529ae59a6670878a8371a6"
+  revision = "7f0da29060c682909f650ad8ed4e515bd74fa12a"
 
 [[projects]]
   name = "google.golang.org/grpc"
-  packages = [".","codes","connectivity","credentials","grpclb/grpc_lb_v1/messages","grpclog","health","health/grpc_health_v1","internal","keepalive","metadata","naming","peer","stats","status","tap","transport"]
-  revision = "f92cdcd7dcdc69e81b2d7b338479a19a8723cfa3"
-  version = "v1.6.0"
+  packages = [".","balancer","balancer/roundrobin","codes","connectivity","credentials","encoding","grpclb/grpc_lb_v1/messages","grpclog","health","health/grpc_health_v1","internal","keepalive","metadata","naming","peer","resolver","resolver/dns","resolver/passthrough","stats","status","tap","transport"]
+  revision = "5a9f7b402fe85096d2e1d0383435ee1876e863d0"
+  version = "v1.8.0"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "aa439f840d3a24aff703a4545a9ea917dec11f878cf43ee5be5cddab8acc2b5a"
+  inputs-digest = "4707f8e59a4feab5c6bfa50af365f162dd7c5230b9aed30c81c419bac69a78a6"
   solver-name = "gps-cdcl"
   solver-version = 1

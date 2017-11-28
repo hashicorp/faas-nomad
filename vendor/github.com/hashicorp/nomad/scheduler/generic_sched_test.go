@@ -9,6 +9,7 @@ import (
 
 	memdb "github.com/hashicorp/go-memdb"
 	"github.com/hashicorp/nomad/helper"
+	"github.com/hashicorp/nomad/helper/uuid"
 	"github.com/hashicorp/nomad/nomad/mock"
 	"github.com/hashicorp/nomad/nomad/structs"
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,8 @@ func TestServiceSched_JobRegister(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -71,7 +73,7 @@ func TestServiceSched_JobRegister(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -111,7 +113,8 @@ func TestServiceSched_JobRegister_StickyAllocs(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -141,7 +144,8 @@ func TestServiceSched_JobRegister_StickyAllocs(t *testing.T) {
 
 	// Create a mock evaluation to handle the update
 	eval = &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerNodeUpdate,
 		JobID:       job.ID,
@@ -197,7 +201,8 @@ func TestServiceSched_JobRegister_DiskConstraints(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -236,7 +241,7 @@ func TestServiceSched_JobRegister_DiskConstraints(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure only one allocation was placed
@@ -265,7 +270,8 @@ func TestServiceSched_JobRegister_DistinctHosts(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -305,7 +311,7 @@ func TestServiceSched_JobRegister_DistinctHosts(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -353,7 +359,8 @@ func TestServiceSched_JobRegister_DistinctProperty(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -398,7 +405,7 @@ func TestServiceSched_JobRegister_DistinctProperty(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -444,7 +451,8 @@ func TestServiceSched_JobRegister_DistinctProperty_TaskGroup(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -483,7 +491,7 @@ func TestServiceSched_JobRegister_DistinctProperty_TaskGroup(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -535,7 +543,8 @@ func TestServiceSched_JobRegister_DistinctProperty_TaskGroup_Incr(t *testing.T) 
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -563,7 +572,7 @@ func TestServiceSched_JobRegister_DistinctProperty_TaskGroup_Incr(t *testing.T) 
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	assert.Nil(err, "AllocsByJob")
 
 	// Ensure all allocations placed
@@ -587,7 +596,8 @@ func TestServiceSched_JobRegister_Annotate(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:           structs.GenerateUUID(),
+		Namespace:    structs.DefaultNamespace,
+		ID:           uuid.Generate(),
 		Priority:     job.Priority,
 		TriggeredBy:  structs.EvalTriggerJobRegister,
 		JobID:        job.ID,
@@ -617,7 +627,7 @@ func TestServiceSched_JobRegister_Annotate(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -664,7 +674,8 @@ func TestServiceSched_JobRegister_CountZero(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -683,7 +694,7 @@ func TestServiceSched_JobRegister_CountZero(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure no allocations placed
@@ -704,7 +715,8 @@ func TestServiceSched_JobRegister_AllocFail(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -785,7 +797,8 @@ func TestServiceSched_JobRegister_CreateBlockedEval(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -881,7 +894,8 @@ func TestServiceSched_JobRegister_FeasibleAndInfeasibleTG(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -910,7 +924,7 @@ func TestServiceSched_JobRegister_FeasibleAndInfeasibleTG(t *testing.T) {
 
 	// Ensure two allocations placed
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 	if len(out) != 2 {
 		t.Fatalf("bad: %#v", out)
@@ -956,7 +970,8 @@ func TestServiceSched_EvaluateMaxPlanEval(t *testing.T) {
 
 	// Create a mock blocked evaluation
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Status:      structs.EvalStatusBlocked,
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerMaxPlans,
@@ -996,7 +1011,8 @@ func TestServiceSched_Plan_Partial_Progress(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -1030,7 +1046,7 @@ func TestServiceSched_Plan_Partial_Progress(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure only one allocations placed
@@ -1055,7 +1071,8 @@ func TestServiceSched_EvaluateBlockedEval(t *testing.T) {
 
 	// Create a mock blocked evaluation
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Status:      structs.EvalStatusBlocked,
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
@@ -1105,7 +1122,8 @@ func TestServiceSched_EvaluateBlockedEval_Finished(t *testing.T) {
 
 	// Create a mock blocked evaluation
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Status:      structs.EvalStatusBlocked,
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
@@ -1151,7 +1169,7 @@ func TestServiceSched_EvaluateBlockedEval_Finished(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -1222,7 +1240,8 @@ func TestServiceSched_JobModify(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -1260,7 +1279,7 @@ func TestServiceSched_JobModify(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -1305,7 +1324,8 @@ func TestServiceSched_JobModify_IncrCount_NodeLimit(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -1352,7 +1372,7 @@ func TestServiceSched_JobModify_IncrCount_NodeLimit(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -1411,7 +1431,8 @@ func TestServiceSched_JobModify_CountZero(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -1449,7 +1470,7 @@ func TestServiceSched_JobModify_CountZero(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -1504,7 +1525,8 @@ func TestServiceSched_JobModify_Rolling(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -1608,7 +1630,8 @@ func TestServiceSched_JobModify_Rolling_FullNode(t *testing.T) {
 	noErr(t, h.State.UpsertJob(h.NextIndex(), job2))
 
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -1708,7 +1731,8 @@ func TestServiceSched_JobModify_Canaries(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -1815,7 +1839,8 @@ func TestServiceSched_JobModify_InPlace(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -1858,7 +1883,7 @@ func TestServiceSched_JobModify_InPlace(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -1928,7 +1953,8 @@ func TestServiceSched_JobModify_DistinctProperty(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -1973,7 +1999,7 @@ func TestServiceSched_JobModify_DistinctProperty(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -2013,7 +2039,8 @@ func TestServiceSched_JobDeregister_Purged(t *testing.T) {
 
 	// Create a mock evaluation to deregister the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobDeregister,
 		JobID:       job.ID,
@@ -2038,7 +2065,7 @@ func TestServiceSched_JobDeregister_Purged(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure that the job field on the allocation is still populated
@@ -2079,7 +2106,8 @@ func TestServiceSched_JobDeregister_Stopped(t *testing.T) {
 
 	// Create a mock evaluation to deregister the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobDeregister,
 		JobID:       job.ID,
@@ -2104,7 +2132,7 @@ func TestServiceSched_JobDeregister_Stopped(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure that the job field on the allocation is still populated
@@ -2167,7 +2195,8 @@ func TestServiceSched_NodeDown(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerNodeUpdate,
 		JobID:       job.ID,
@@ -2232,7 +2261,8 @@ func TestServiceSched_NodeUpdate(t *testing.T) {
 
 	// Create a mock evaluation which won't trigger any new placements
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerNodeUpdate,
 		JobID:       job.ID,
@@ -2282,7 +2312,8 @@ func TestServiceSched_NodeDrain(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerNodeUpdate,
 		JobID:       job.ID,
@@ -2317,7 +2348,7 @@ func TestServiceSched_NodeDrain(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure all allocations placed
@@ -2382,7 +2413,8 @@ func TestServiceSched_NodeDrain_Down(t *testing.T) {
 
 	// Create a mock evaluation to deal with the node update
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerNodeUpdate,
 		JobID:       job.ID,
@@ -2455,7 +2487,8 @@ func TestServiceSched_NodeDrain_Queued_Allocations(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerNodeUpdate,
 		JobID:       job.ID,
@@ -2511,7 +2544,8 @@ func TestServiceSched_NodeDrain_UpdateStrategy(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerNodeUpdate,
 		JobID:       job.ID,
@@ -2569,7 +2603,8 @@ func TestServiceSched_RetryLimit(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -2588,7 +2623,7 @@ func TestServiceSched_RetryLimit(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure no allocations placed
@@ -2609,6 +2644,7 @@ func TestBatchSched_Run_CompleteAlloc(t *testing.T) {
 
 	// Create a job
 	job := mock.Job()
+	job.Type = structs.JobTypeBatch
 	job.TaskGroups[0].Count = 1
 	noErr(t, h.State.UpsertJob(h.NextIndex(), job))
 
@@ -2623,7 +2659,8 @@ func TestBatchSched_Run_CompleteAlloc(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -2642,65 +2679,11 @@ func TestBatchSched_Run_CompleteAlloc(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure no allocations placed
 	if len(out) != 1 {
-		t.Fatalf("bad: %#v", out)
-	}
-
-	h.AssertEvalStatus(t, structs.EvalStatusComplete)
-}
-
-func TestBatchSched_Run_DrainedAlloc(t *testing.T) {
-	h := NewHarness(t)
-
-	// Create a node
-	node := mock.Node()
-	noErr(t, h.State.UpsertNode(h.NextIndex(), node))
-
-	// Create a job
-	job := mock.Job()
-	job.TaskGroups[0].Count = 1
-	noErr(t, h.State.UpsertJob(h.NextIndex(), job))
-
-	// Create a complete alloc
-	alloc := mock.Alloc()
-	alloc.Job = job
-	alloc.JobID = job.ID
-	alloc.NodeID = node.ID
-	alloc.Name = "my-job.web[0]"
-	alloc.DesiredStatus = structs.AllocDesiredStatusStop
-	alloc.ClientStatus = structs.AllocClientStatusComplete
-	noErr(t, h.State.UpsertAllocs(h.NextIndex(), []*structs.Allocation{alloc}))
-
-	// Create a mock evaluation to register the job
-	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
-		Priority:    job.Priority,
-		TriggeredBy: structs.EvalTriggerJobRegister,
-		JobID:       job.ID,
-	}
-
-	// Process the evaluation
-	err := h.Process(NewBatchScheduler, eval)
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-
-	// Ensure a plan
-	if len(h.Plans) != 1 {
-		t.Fatalf("bad: %#v", h.Plans)
-	}
-
-	// Lookup the allocations by JobID
-	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
-	noErr(t, err)
-
-	// Ensure a replacement alloc was placed.
-	if len(out) != 2 {
 		t.Fatalf("bad: %#v", out)
 	}
 
@@ -2716,6 +2699,7 @@ func TestBatchSched_Run_FailedAlloc(t *testing.T) {
 
 	// Create a job
 	job := mock.Job()
+	job.Type = structs.JobTypeBatch
 	job.TaskGroups[0].Count = 1
 	noErr(t, h.State.UpsertJob(h.NextIndex(), job))
 
@@ -2730,7 +2714,8 @@ func TestBatchSched_Run_FailedAlloc(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -2749,7 +2734,7 @@ func TestBatchSched_Run_FailedAlloc(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure a replacement alloc was placed.
@@ -2776,6 +2761,7 @@ func TestBatchSched_Run_FailedAllocQueuedAllocations(t *testing.T) {
 
 	// Create a job
 	job := mock.Job()
+	job.Type = structs.JobTypeBatch
 	job.TaskGroups[0].Count = 1
 	noErr(t, h.State.UpsertJob(h.NextIndex(), job))
 
@@ -2790,7 +2776,8 @@ func TestBatchSched_Run_FailedAllocQueuedAllocations(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -2835,7 +2822,7 @@ func TestBatchSched_ReRun_SuccessfullyFinishedAlloc(t *testing.T) {
 	alloc.Name = "my-job.web[0]"
 	alloc.ClientStatus = structs.AllocClientStatusComplete
 	alloc.TaskStates = map[string]*structs.TaskState{
-		"web": &structs.TaskState{
+		"web": {
 			State: structs.TaskStateDead,
 			Events: []*structs.TaskEvent{
 				{
@@ -2849,7 +2836,8 @@ func TestBatchSched_ReRun_SuccessfullyFinishedAlloc(t *testing.T) {
 
 	// Create a mock evaluation to rerun the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -2868,7 +2856,7 @@ func TestBatchSched_ReRun_SuccessfullyFinishedAlloc(t *testing.T) {
 
 	// Lookup the allocations by JobID
 	ws := memdb.NewWatchSet()
-	out, err := h.State.AllocsByJob(ws, job.ID, false)
+	out, err := h.State.AllocsByJob(ws, job.Namespace, job.ID, false)
 	noErr(t, err)
 
 	// Ensure no replacement alloc was placed.
@@ -2909,15 +2897,209 @@ func TestBatchSched_JobModify_InPlace_Terminal(t *testing.T) {
 	}
 	noErr(t, h.State.UpsertAllocs(h.NextIndex(), allocs))
 
+	// Create a mock evaluation to trigger the job
+	eval := &structs.Evaluation{
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
+		Priority:    50,
+		TriggeredBy: structs.EvalTriggerJobRegister,
+		JobID:       job.ID,
+	}
+
+	// Process the evaluation
+	err := h.Process(NewBatchScheduler, eval)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Ensure no plan
+	if len(h.Plans) != 0 {
+		t.Fatalf("bad: %#v", h.Plans[0])
+	}
+}
+
+// This test ensures that terminal jobs from older versions are ignored.
+func TestBatchSched_JobModify_Destructive_Terminal(t *testing.T) {
+	h := NewHarness(t)
+
+	// Create some nodes
+	var nodes []*structs.Node
+	for i := 0; i < 10; i++ {
+		node := mock.Node()
+		nodes = append(nodes, node)
+		noErr(t, h.State.UpsertNode(h.NextIndex(), node))
+	}
+
+	// Generate a fake job with allocations
+	job := mock.Job()
+	job.Type = structs.JobTypeBatch
+	noErr(t, h.State.UpsertJob(h.NextIndex(), job))
+
+	var allocs []*structs.Allocation
+	for i := 0; i < 10; i++ {
+		alloc := mock.Alloc()
+		alloc.Job = job
+		alloc.JobID = job.ID
+		alloc.NodeID = nodes[i].ID
+		alloc.Name = fmt.Sprintf("my-job.web[%d]", i)
+		alloc.ClientStatus = structs.AllocClientStatusComplete
+		allocs = append(allocs, alloc)
+	}
+	noErr(t, h.State.UpsertAllocs(h.NextIndex(), allocs))
+
 	// Update the job
 	job2 := mock.Job()
 	job2.ID = job.ID
+	job2.Type = structs.JobTypeBatch
+	job2.Version++
+	job2.TaskGroups[0].Tasks[0].Env = map[string]string{"foo": "bar"}
 	noErr(t, h.State.UpsertJob(h.NextIndex(), job2))
+
+	allocs = nil
+	for i := 0; i < 10; i++ {
+		alloc := mock.Alloc()
+		alloc.Job = job2
+		alloc.JobID = job2.ID
+		alloc.NodeID = nodes[i].ID
+		alloc.Name = fmt.Sprintf("my-job.web[%d]", i)
+		alloc.ClientStatus = structs.AllocClientStatusComplete
+		alloc.TaskStates = map[string]*structs.TaskState{
+			"web": {
+				State: structs.TaskStateDead,
+				Events: []*structs.TaskEvent{
+					{
+						Type:     structs.TaskTerminated,
+						ExitCode: 0,
+					},
+				},
+			},
+		}
+		allocs = append(allocs, alloc)
+	}
+	noErr(t, h.State.UpsertAllocs(h.NextIndex(), allocs))
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
+		TriggeredBy: structs.EvalTriggerJobRegister,
+		JobID:       job.ID,
+	}
+
+	// Process the evaluation
+	err := h.Process(NewBatchScheduler, eval)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Ensure a plan
+	if len(h.Plans) != 0 {
+		t.Fatalf("bad: %#v", h.Plans)
+	}
+}
+
+// This test asserts that an allocation from an old job that is running on a
+// drained node is cleaned up.
+func TestBatchSched_NodeDrain_Running_OldJob(t *testing.T) {
+	h := NewHarness(t)
+
+	// Create two nodes, one that is drained and has a successfully finished
+	// alloc and a fresh undrained one
+	node := mock.Node()
+	node.Drain = true
+	node2 := mock.Node()
+	noErr(t, h.State.UpsertNode(h.NextIndex(), node))
+	noErr(t, h.State.UpsertNode(h.NextIndex(), node2))
+
+	// Create a job
+	job := mock.Job()
+	job.Type = structs.JobTypeBatch
+	job.TaskGroups[0].Count = 1
+	noErr(t, h.State.UpsertJob(h.NextIndex(), job))
+
+	// Create a running alloc
+	alloc := mock.Alloc()
+	alloc.Job = job
+	alloc.JobID = job.ID
+	alloc.NodeID = node.ID
+	alloc.Name = "my-job.web[0]"
+	alloc.ClientStatus = structs.AllocClientStatusRunning
+	noErr(t, h.State.UpsertAllocs(h.NextIndex(), []*structs.Allocation{alloc}))
+
+	// Create an update job
+	job2 := job.Copy()
+	job2.TaskGroups[0].Tasks[0].Env = map[string]string{"foo": "bar"}
+	noErr(t, h.State.UpsertJob(h.NextIndex(), job2))
+
+	// Create a mock evaluation to register the job
+	eval := &structs.Evaluation{
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
+		Priority:    job.Priority,
+		TriggeredBy: structs.EvalTriggerJobRegister,
+		JobID:       job.ID,
+	}
+
+	// Process the evaluation
+	err := h.Process(NewBatchScheduler, eval)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Ensure a plan
+	if len(h.Plans) != 1 {
+		t.Fatalf("bad: %#v", h.Plans)
+	}
+
+	plan := h.Plans[0]
+
+	// Ensure the plan evicted 1
+	if len(plan.NodeUpdate[node.ID]) != 1 {
+		t.Fatalf("bad: %#v", plan)
+	}
+
+	// Ensure the plan places 1
+	if len(plan.NodeAllocation[node2.ID]) != 1 {
+		t.Fatalf("bad: %#v", plan)
+	}
+
+	h.AssertEvalStatus(t, structs.EvalStatusComplete)
+}
+
+// This test asserts that an allocation from a job that is complete on a
+// drained node is ignored up.
+func TestBatchSched_NodeDrain_Complete(t *testing.T) {
+	h := NewHarness(t)
+
+	// Create two nodes, one that is drained and has a successfully finished
+	// alloc and a fresh undrained one
+	node := mock.Node()
+	node.Drain = true
+	node2 := mock.Node()
+	noErr(t, h.State.UpsertNode(h.NextIndex(), node))
+	noErr(t, h.State.UpsertNode(h.NextIndex(), node2))
+
+	// Create a job
+	job := mock.Job()
+	job.Type = structs.JobTypeBatch
+	job.TaskGroups[0].Count = 1
+	noErr(t, h.State.UpsertJob(h.NextIndex(), job))
+
+	// Create a complete alloc
+	alloc := mock.Alloc()
+	alloc.Job = job
+	alloc.JobID = job.ID
+	alloc.NodeID = node.ID
+	alloc.Name = "my-job.web[0]"
+	alloc.ClientStatus = structs.AllocClientStatusComplete
+	noErr(t, h.State.UpsertAllocs(h.NextIndex(), []*structs.Allocation{alloc}))
+
+	// Create a mock evaluation to register the job
+	eval := &structs.Evaluation{
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
+		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
 	}
@@ -2932,103 +3114,67 @@ func TestBatchSched_JobModify_InPlace_Terminal(t *testing.T) {
 	if len(h.Plans) != 0 {
 		t.Fatalf("bad: %#v", h.Plans)
 	}
+
+	h.AssertEvalStatus(t, structs.EvalStatusComplete)
 }
 
-func TestGenericSched_FilterCompleteAllocs(t *testing.T) {
-	running := mock.Alloc()
-	desiredStop := mock.Alloc()
-	desiredStop.DesiredStatus = structs.AllocDesiredStatusStop
+// This is a slightly odd test but it ensures that we handle a scale down of a
+// task group's count and that it works even if all the allocs have the same
+// name.
+func TestBatchSched_ScaleDown_SameName(t *testing.T) {
+	h := NewHarness(t)
 
-	new := mock.Alloc()
-	new.CreateIndex = 10000
+	// Create a node
+	node := mock.Node()
+	noErr(t, h.State.UpsertNode(h.NextIndex(), node))
 
-	oldSuccessful := mock.Alloc()
-	oldSuccessful.CreateIndex = 30
-	oldSuccessful.DesiredStatus = structs.AllocDesiredStatusStop
-	oldSuccessful.ClientStatus = structs.AllocClientStatusComplete
-	oldSuccessful.TaskStates = make(map[string]*structs.TaskState, 1)
-	oldSuccessful.TaskStates["foo"] = &structs.TaskState{
-		State:  structs.TaskStateDead,
-		Events: []*structs.TaskEvent{{Type: structs.TaskTerminated, ExitCode: 0}},
+	// Create a job
+	job := mock.Job()
+	job.Type = structs.JobTypeBatch
+	job.TaskGroups[0].Count = 1
+	noErr(t, h.State.UpsertJob(h.NextIndex(), job))
+
+	// Create a few running alloc
+	var allocs []*structs.Allocation
+	for i := 0; i < 5; i++ {
+		alloc := mock.Alloc()
+		alloc.Job = job
+		alloc.JobID = job.ID
+		alloc.NodeID = node.ID
+		alloc.Name = "my-job.web[0]"
+		alloc.ClientStatus = structs.AllocClientStatusRunning
+		allocs = append(allocs, alloc)
+	}
+	noErr(t, h.State.UpsertAllocs(h.NextIndex(), allocs))
+
+	// Create a mock evaluation to register the job
+	eval := &structs.Evaluation{
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
+		Priority:    job.Priority,
+		TriggeredBy: structs.EvalTriggerJobRegister,
+		JobID:       job.ID,
 	}
 
-	unsuccessful := mock.Alloc()
-	unsuccessful.DesiredStatus = structs.AllocDesiredStatusRun
-	unsuccessful.ClientStatus = structs.AllocClientStatusFailed
-	unsuccessful.TaskStates = make(map[string]*structs.TaskState, 1)
-	unsuccessful.TaskStates["foo"] = &structs.TaskState{
-		State:  structs.TaskStateDead,
-		Events: []*structs.TaskEvent{{Type: structs.TaskTerminated, ExitCode: 1}},
+	// Process the evaluation
+	err := h.Process(NewBatchScheduler, eval)
+	if err != nil {
+		t.Fatalf("err: %v", err)
 	}
 
-	cases := []struct {
-		Batch          bool
-		Input, Output  []*structs.Allocation
-		TerminalAllocs map[string]*structs.Allocation
-	}{
-		{
-			Input:          []*structs.Allocation{running},
-			Output:         []*structs.Allocation{running},
-			TerminalAllocs: map[string]*structs.Allocation{},
-		},
-		{
-			Input:  []*structs.Allocation{running, desiredStop},
-			Output: []*structs.Allocation{running},
-			TerminalAllocs: map[string]*structs.Allocation{
-				desiredStop.Name: desiredStop,
-			},
-		},
-		{
-			Batch:          true,
-			Input:          []*structs.Allocation{running},
-			Output:         []*structs.Allocation{running},
-			TerminalAllocs: map[string]*structs.Allocation{},
-		},
-		{
-			Batch:          true,
-			Input:          []*structs.Allocation{new, oldSuccessful},
-			Output:         []*structs.Allocation{new},
-			TerminalAllocs: map[string]*structs.Allocation{},
-		},
-		{
-			Batch:  true,
-			Input:  []*structs.Allocation{unsuccessful},
-			Output: []*structs.Allocation{},
-			TerminalAllocs: map[string]*structs.Allocation{
-				unsuccessful.Name: unsuccessful,
-			},
-		},
+	// Ensure a plan
+	if len(h.Plans) != 1 {
+		t.Fatalf("bad: %#v", h.Plans)
 	}
 
-	for i, c := range cases {
-		g := &GenericScheduler{batch: c.Batch}
-		out, terminalAllocs := g.filterCompleteAllocs(c.Input)
+	plan := h.Plans[0]
 
-		if !reflect.DeepEqual(out, c.Output) {
-			t.Log("Got:")
-			for i, a := range out {
-				t.Logf("%d: %#v", i, a)
-			}
-			t.Log("Want:")
-			for i, a := range c.Output {
-				t.Logf("%d: %#v", i, a)
-			}
-			t.Fatalf("Case %d failed", i+1)
-		}
-
-		if !reflect.DeepEqual(terminalAllocs, c.TerminalAllocs) {
-			t.Log("Got:")
-			for n, a := range terminalAllocs {
-				t.Logf("%v: %#v", n, a)
-			}
-			t.Log("Want:")
-			for n, a := range c.TerminalAllocs {
-				t.Logf("%v: %#v", n, a)
-			}
-			t.Fatalf("Case %d failed", i+1)
-		}
-
+	// Ensure the plan evicted 4 of the 5
+	if len(plan.NodeUpdate[node.ID]) != 4 {
+		t.Fatalf("bad: %#v", plan)
 	}
+
+	h.AssertEvalStatus(t, structs.EvalStatusComplete)
 }
 
 func TestGenericSched_ChainedAlloc(t *testing.T) {
@@ -3046,7 +3192,8 @@ func TestGenericSched_ChainedAlloc(t *testing.T) {
 
 	// Create a mock evaluation to register the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -3074,7 +3221,8 @@ func TestGenericSched_ChainedAlloc(t *testing.T) {
 
 	// Create a mock evaluation to update the job
 	eval1 := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    job1.Priority,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job1.ID,
@@ -3133,7 +3281,8 @@ func TestServiceSched_NodeDrain_Sticky(t *testing.T) {
 
 	// Create a mock evaluation to deal with drain
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerNodeUpdate,
 		JobID:       alloc.Job.ID,
@@ -3190,7 +3339,8 @@ func TestServiceSched_CancelDeployment_Stopped(t *testing.T) {
 
 	// Create a mock evaluation to deregister the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobDeregister,
 		JobID:       job.ID,
@@ -3210,7 +3360,7 @@ func TestServiceSched_CancelDeployment_Stopped(t *testing.T) {
 
 	// Ensure the plan cancelled the existing deployment
 	ws := memdb.NewWatchSet()
-	out, err := h.State.LatestDeploymentByJobID(ws, job.ID)
+	out, err := h.State.LatestDeploymentByJobID(ws, job.Namespace, job.ID)
 	noErr(t, err)
 
 	if out == nil {
@@ -3258,7 +3408,8 @@ func TestServiceSched_CancelDeployment_NewerJob(t *testing.T) {
 
 	// Create a mock evaluation to kick the job
 	eval := &structs.Evaluation{
-		ID:          structs.GenerateUUID(),
+		Namespace:   structs.DefaultNamespace,
+		ID:          uuid.Generate(),
 		Priority:    50,
 		TriggeredBy: structs.EvalTriggerJobRegister,
 		JobID:       job.ID,
@@ -3278,7 +3429,7 @@ func TestServiceSched_CancelDeployment_NewerJob(t *testing.T) {
 
 	// Ensure the plan cancelled the existing deployment
 	ws := memdb.NewWatchSet()
-	out, err := h.State.LatestDeploymentByJobID(ws, job.ID)
+	out, err := h.State.LatestDeploymentByJobID(ws, job.Namespace, job.ID)
 	noErr(t, err)
 
 	if out == nil {

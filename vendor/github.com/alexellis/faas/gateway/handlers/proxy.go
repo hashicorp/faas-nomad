@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -17,11 +17,12 @@ import (
 	"os"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/alexellis/faas/gateway/metrics"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/gorilla/mux"
+	"github.com/openfaas/faas/gateway/metrics"
+	"github.com/openfaas/faas/gateway/requests"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -44,12 +45,13 @@ func MakeProxy(metrics metrics.MetricOptions, wildcard bool, client *client.Clie
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
-		if r.Method == "POST" {
+		switch r.Method {
+		case "POST", "GET":
 			logger.Infoln(r.Header)
 
-			xfunctionHeader := r.Header["X-Function"]
-			if len(xfunctionHeader) > 0 {
-				logger.Infoln(xfunctionHeader)
+			xFunctionHeader := r.Header["X-Function"]
+			if len(xFunctionHeader) > 0 {
+				logger.Infoln(xFunctionHeader)
 			}
 
 			// getServiceName
@@ -58,8 +60,8 @@ func MakeProxy(metrics metrics.MetricOptions, wildcard bool, client *client.Clie
 				vars := mux.Vars(r)
 				name := vars["name"]
 				serviceName = name
-			} else if len(xfunctionHeader) > 0 {
-				serviceName = xfunctionHeader[0]
+			} else if len(xFunctionHeader) > 0 {
+				serviceName = xFunctionHeader[0]
 			}
 
 			if len(serviceName) > 0 {
@@ -68,8 +70,8 @@ func MakeProxy(metrics metrics.MetricOptions, wildcard bool, client *client.Clie
 				w.WriteHeader(http.StatusBadRequest)
 				w.Write([]byte("Provide an x-function header or valid route /function/function_name."))
 			}
-
-		} else {
+			break
+		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	}
@@ -90,8 +92,9 @@ func lookupInvoke(w http.ResponseWriter, r *http.Request, metrics metrics.Metric
 
 	if exists {
 		defer trackTime(time.Now(), metrics, name)
-		requestBody, _ := ioutil.ReadAll(r.Body)
-		invokeService(w, r, metrics, name, requestBody, logger, proxyClient)
+		forwardReq := requests.NewForwardRequest(r.Method, *r.URL)
+
+		invokeService(w, r, metrics, name, forwardReq, logger, proxyClient)
 	}
 }
 
@@ -104,7 +107,7 @@ func lookupSwarmService(serviceName string, c *client.Client) (bool, error) {
 	return len(services) > 0, err
 }
 
-func invokeService(w http.ResponseWriter, r *http.Request, metrics metrics.MetricOptions, service string, requestBody []byte, logger *logrus.Logger, proxyClient *http.Client) {
+func invokeService(w http.ResponseWriter, r *http.Request, metrics metrics.MetricOptions, service string, forwardReq requests.ForwardRequest, logger *logrus.Logger, proxyClient *http.Client) {
 	stamp := strconv.FormatInt(time.Now().Unix(), 10)
 
 	defer func(when time.Time) {
@@ -131,16 +134,19 @@ func invokeService(w http.ResponseWriter, r *http.Request, metrics metrics.Metri
 			addr = entries[index].String()
 		}
 	}
-	url := fmt.Sprintf("http://%s:%d/", addr, watchdogPort)
+
+	url := forwardReq.ToURL(addr, watchdogPort)
 
 	contentType := r.Header.Get("Content-Type")
 	fmt.Printf("[%s] Forwarding request [%s] to: %s\n", stamp, contentType, url)
 
-	request, err := http.NewRequest("POST", url, bytes.NewReader(requestBody))
+	if r.Body != nil {
+		defer r.Body.Close()
+	}
+
+	request, err := http.NewRequest(r.Method, url, r.Body)
 
 	copyHeaders(&request.Header, &r.Header)
-
-	defer request.Body.Close()
 
 	response, err := proxyClient.Do(request)
 	if err != nil {
@@ -151,25 +157,34 @@ func invokeService(w http.ResponseWriter, r *http.Request, metrics metrics.Metri
 		return
 	}
 
-	responseBody, readErr := ioutil.ReadAll(response.Body)
-	if readErr != nil {
-		fmt.Println(readErr)
-
-		writeHead(service, metrics, http.StatusInternalServerError, w)
-		buf := bytes.NewBufferString("Error reading response from service: " + service)
-		w.Write(buf.Bytes())
-		return
-	}
-
 	clientHeader := w.Header()
 	copyHeaders(&clientHeader, &response.Header)
 
-	// TODO: copyHeaders removes the need for this line - test removal.
-	// Match header for strict services
-	w.Header().Set("Content-Type", r.Header.Get("Content-Type"))
+	defaultHeader := "text/plain"
 
-	writeHead(service, metrics, http.StatusOK, w)
-	w.Write(responseBody)
+	w.Header().Set("Content-Type", GetContentType(response.Header, r.Header, defaultHeader))
+
+	writeHead(service, metrics, response.StatusCode, w)
+	if response.Body != nil {
+		io.Copy(w, response.Body)
+	}
+}
+
+// GetContentType resolves the correct Content-Tyoe for a proxied function
+func GetContentType(request http.Header, proxyResponse http.Header, defaultValue string) string {
+	responseHeader := proxyResponse.Get("Content-Type")
+	requestHeader := request.Get("Content-Type")
+
+	var headerContentType string
+	if len(responseHeader) > 0 {
+		headerContentType = responseHeader
+	} else if len(requestHeader) > 0 {
+		headerContentType = requestHeader
+	} else {
+		headerContentType = defaultValue
+	}
+
+	return headerContentType
 }
 
 func copyHeaders(destination *http.Header, source *http.Header) {
@@ -198,4 +213,8 @@ func trackInvocation(service string, metrics metrics.MetricOptions, code int) {
 func trackTime(then time.Time, metrics metrics.MetricOptions, name string) {
 	since := time.Since(then)
 	metrics.GatewayFunctionsHistogram.WithLabelValues(name).Observe(since.Seconds())
+}
+
+func trackTimeExact(duration time.Duration, metrics metrics.MetricOptions, name string) {
+	metrics.GatewayFunctionsHistogram.WithLabelValues(name).Observe(float64(duration))
 }

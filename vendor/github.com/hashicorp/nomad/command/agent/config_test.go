@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
@@ -27,12 +26,14 @@ func TestConfig_Merge(t *testing.T) {
 		Telemetry:      &Telemetry{},
 		Client:         &ClientConfig{},
 		Server:         &ServerConfig{},
+		ACL:            &ACLConfig{},
 		Ports:          &Ports{},
 		Addresses:      &Addresses{},
 		AdvertiseAddrs: &AdvertiseAddrs{},
 		Atlas:          &AtlasConfig{},
 		Vault:          &config.VaultConfig{},
 		Consul:         &config.ConsulConfig{},
+		Sentinel:       &config.SentinelConfig{},
 	}
 
 	c2 := &Config{
@@ -53,7 +54,10 @@ func TestConfig_Merge(t *testing.T) {
 			StatsiteAddr:                       "127.0.0.1:8125",
 			StatsdAddr:                         "127.0.0.1:8125",
 			DataDogAddr:                        "127.0.0.1:8125",
+			PrometheusMetrics:                  true,
 			DisableHostname:                    false,
+			DisableTaggedMetrics:               true,
+			BackwardsCompatibleMetrics:         true,
 			CirconusAPIToken:                   "0",
 			CirconusAPIApp:                     "nomadic",
 			CirconusAPIURL:                     "http://api.circonus.com/v2",
@@ -91,6 +95,7 @@ func TestConfig_Merge(t *testing.T) {
 		},
 		Server: &ServerConfig{
 			Enabled:                false,
+			AuthoritativeRegion:    "global",
 			BootstrapExpect:        1,
 			DataDir:                "/tmp/data1",
 			ProtocolVersion:        1,
@@ -99,6 +104,12 @@ func TestConfig_Merge(t *testing.T) {
 			HeartbeatGrace:         30 * time.Second,
 			MinHeartbeatTTL:        30 * time.Second,
 			MaxHeartbeatsPerSecond: 30.0,
+		},
+		ACL: &ACLConfig{
+			Enabled:          true,
+			TokenTTL:         60 * time.Second,
+			PolicyTTL:        60 * time.Second,
+			ReplicationToken: "foo",
 		},
 		Ports: &Ports{
 			HTTP: 4646,
@@ -172,9 +183,12 @@ func TestConfig_Merge(t *testing.T) {
 			StatsiteAddr:                       "127.0.0.2:8125",
 			StatsdAddr:                         "127.0.0.2:8125",
 			DataDogAddr:                        "127.0.0.1:8125",
+			PrometheusMetrics:                  true,
 			DisableHostname:                    true,
 			PublishNodeMetrics:                 true,
 			PublishAllocationMetrics:           true,
+			DisableTaggedMetrics:               true,
+			BackwardsCompatibleMetrics:         true,
 			CirconusAPIToken:                   "1",
 			CirconusAPIApp:                     "nomad",
 			CirconusAPIURL:                     "https://api.circonus.com/v2",
@@ -223,6 +237,7 @@ func TestConfig_Merge(t *testing.T) {
 		},
 		Server: &ServerConfig{
 			Enabled:                true,
+			AuthoritativeRegion:    "global2",
 			BootstrapExpect:        2,
 			DataDir:                "/tmp/data2",
 			ProtocolVersion:        2,
@@ -237,6 +252,12 @@ func TestConfig_Merge(t *testing.T) {
 			RetryJoin:              []string{"1.1.1.1"},
 			RetryInterval:          "10s",
 			retryInterval:          time.Second * 10,
+		},
+		ACL: &ACLConfig{
+			Enabled:          true,
+			TokenTTL:         20 * time.Second,
+			PolicyTTL:        20 * time.Second,
+			ReplicationToken: "foobar",
 		},
 		Ports: &Ports{
 			HTTP: 20000,
@@ -290,6 +311,15 @@ func TestConfig_Merge(t *testing.T) {
 			ServerAutoJoin:     &trueValue,
 			ClientAutoJoin:     &trueValue,
 			ChecksUseAdvertise: &trueValue,
+		},
+		Sentinel: &config.SentinelConfig{
+			Imports: []*config.SentinelImport{
+				{
+					Name: "foo",
+					Path: "foo",
+					Args: []string{"a", "b", "c"},
+				},
+			},
 		},
 	}
 
@@ -733,7 +763,7 @@ func TestConfig_normalizeAddrs(t *testing.T) {
 		},
 		Addresses: &Addresses{},
 		AdvertiseAddrs: &AdvertiseAddrs{
-			RPC: "{{ GetPrivateIP }}:8888",
+			RPC: "{{ GetPrivateIP }}",
 		},
 		Server: &ServerConfig{
 			Enabled: true,
@@ -744,16 +774,19 @@ func TestConfig_normalizeAddrs(t *testing.T) {
 		t.Fatalf("unable to normalize addresses: %s", err)
 	}
 
-	if c.AdvertiseAddrs.HTTP != fmt.Sprintf("%s:4646", c.BindAddr) {
-		t.Fatalf("expected HTTP advertise address %s:4646, got %s", c.BindAddr, c.AdvertiseAddrs.HTTP)
+	exp := net.JoinHostPort(c.BindAddr, "4646")
+	if c.AdvertiseAddrs.HTTP != exp {
+		t.Fatalf("expected HTTP advertise address %s, got %s", exp, c.AdvertiseAddrs.HTTP)
 	}
 
-	if c.AdvertiseAddrs.RPC != fmt.Sprintf("%s:8888", c.BindAddr) {
-		t.Fatalf("expected RPC advertise address %s:8888, got %s", c.BindAddr, c.AdvertiseAddrs.RPC)
+	exp = net.JoinHostPort(c.BindAddr, "4647")
+	if c.AdvertiseAddrs.RPC != exp {
+		t.Fatalf("expected RPC advertise address %s, got %s", exp, c.AdvertiseAddrs.RPC)
 	}
 
-	if c.AdvertiseAddrs.Serf != fmt.Sprintf("%s:4648", c.BindAddr) {
-		t.Fatalf("expected Serf advertise address %s:4648, got %s", c.BindAddr, c.AdvertiseAddrs.Serf)
+	exp = net.JoinHostPort(c.BindAddr, "4648")
+	if c.AdvertiseAddrs.Serf != exp {
+		t.Fatalf("expected Serf advertise address %s, got %s", exp, c.AdvertiseAddrs.Serf)
 	}
 
 	// allow to advertise 127.0.0.1 in non-dev mode, if explicitly configured to do so

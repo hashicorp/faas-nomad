@@ -9,6 +9,7 @@ fi
 
 # Set IP Address in config
 sed "s/##HOST_IP##/${IP_ADDRESS}/g" < nomad_config.hcl.tmpl > nomad.hcl
+sed "s/##HOST_IP##/${IP_ADDRESS}/g" < consul_config.hcl.tmpl > consul.hcl
 echo "Discovered IP Address: ${IP_ADDRESS}"
 
 # Create logs folder if needed
@@ -18,7 +19,7 @@ fi
 
 # Start Consul
 echo "Starting Consul, redirecting logs to $HOME/log/consul.log"
-nohup consul agent -dev -advertise ${IP_ADDRESS} -client ${IP_ADDRESS} >~/log/consul.log 2>&1 &
+nohup consul agent --config-file=consul.hcl >~/log/consul.log 2>&1 &
 
 # Start Nomad
 echo "Starting Nomad, redirecting logs to $HOME/log/nomad.log"

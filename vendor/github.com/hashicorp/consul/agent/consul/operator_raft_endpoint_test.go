@@ -3,15 +3,17 @@ package consul
 import (
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/consul/acl"
 	"github.com/hashicorp/consul/agent/structs"
+	"github.com/hashicorp/consul/lib/freeport"
 	"github.com/hashicorp/consul/testrpc"
 	"github.com/hashicorp/net-rpc-msgpackrpc"
 	"github.com/hashicorp/raft"
+	"github.com/pascaldekloe/goe/verify"
 )
 
 func TestOperator_RaftGetConfiguration(t *testing.T) {
@@ -43,18 +45,17 @@ func TestOperator_RaftGetConfiguration(t *testing.T) {
 	expected := structs.RaftConfigurationResponse{
 		Servers: []*structs.RaftServer{
 			&structs.RaftServer{
-				ID:      me.ID,
-				Node:    s1.config.NodeName,
-				Address: me.Address,
-				Leader:  true,
-				Voter:   true,
+				ID:              me.ID,
+				Node:            s1.config.NodeName,
+				Address:         me.Address,
+				Leader:          true,
+				Voter:           true,
+				ProtocolVersion: "3",
 			},
 		},
 		Index: future.Index(),
 	}
-	if !reflect.DeepEqual(reply, expected) {
-		t.Fatalf("bad: %v", reply)
-	}
+	verify.Values(t, "", reply, expected)
 }
 
 func TestOperator_RaftGetConfiguration_ACLDeny(t *testing.T) {
@@ -120,18 +121,17 @@ func TestOperator_RaftGetConfiguration_ACLDeny(t *testing.T) {
 	expected := structs.RaftConfigurationResponse{
 		Servers: []*structs.RaftServer{
 			&structs.RaftServer{
-				ID:      me.ID,
-				Node:    s1.config.NodeName,
-				Address: me.Address,
-				Leader:  true,
-				Voter:   true,
+				ID:              me.ID,
+				Node:            s1.config.NodeName,
+				Address:         me.Address,
+				Leader:          true,
+				Voter:           true,
+				ProtocolVersion: "3",
 			},
 		},
 		Index: future.Index(),
 	}
-	if !reflect.DeepEqual(reply, expected) {
-		t.Fatalf("bad: %v", reply)
-	}
+	verify.Values(t, "", reply, expected)
 }
 
 func TestOperator_RaftRemovePeerByAddress(t *testing.T) {
@@ -147,7 +147,7 @@ func TestOperator_RaftRemovePeerByAddress(t *testing.T) {
 	// Try to remove a peer that's not there.
 	arg := structs.RaftRemovePeerRequest{
 		Datacenter: "dc1",
-		Address:    raft.ServerAddress(fmt.Sprintf("127.0.0.1:%d", getPort())),
+		Address:    raft.ServerAddress(fmt.Sprintf("127.0.0.1:%d", freeport.Get(1)[0])),
 	}
 	var reply struct{}
 	err := msgpackrpc.CallWithCodec(codec, "Operator.RaftRemovePeerByAddress", &arg, &reply)
@@ -157,7 +157,8 @@ func TestOperator_RaftRemovePeerByAddress(t *testing.T) {
 
 	// Add it manually to Raft.
 	{
-		future := s1.raft.AddPeer(arg.Address)
+		id := raft.ServerID("fake-node-id")
+		future := s1.raft.AddVoter(id, arg.Address, 0, time.Second)
 		if err := future.Error(); err != nil {
 			t.Fatalf("err: %v", err)
 		}
@@ -274,7 +275,7 @@ func TestOperator_RaftRemovePeerByID(t *testing.T) {
 
 	// Add it manually to Raft.
 	{
-		future := s1.raft.AddVoter(arg.ID, raft.ServerAddress(fmt.Sprintf("127.0.0.1:%d", getPort())), 0, 0)
+		future := s1.raft.AddVoter(arg.ID, raft.ServerAddress(fmt.Sprintf("127.0.0.1:%d", freeport.Get(1)[0])), 0, 0)
 		if err := future.Error(); err != nil {
 			t.Fatalf("err: %v", err)
 		}

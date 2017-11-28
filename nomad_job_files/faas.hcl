@@ -5,8 +5,8 @@ job "faas-nomadd" {
 
   constraint {
     attribute = "${attr.cpu.arch}"
-    operator  = "!="
-    value     = "arm"
+    operator  = "="
+    value     = "amd64"
   }
 
   group "faas-nomadd" {
@@ -30,7 +30,7 @@ job "faas-nomadd" {
       }
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:0.2.7"
+        image = "quay.io/nicholasjackson/faas-nomad:0.2.9"
 
         port_map {
           http = 8080
@@ -65,7 +65,7 @@ job "faas-nomadd" {
       }
 
       config {
-        image = "functions/gateway:0.6.1"
+        image = "functions/gateway:0.6.12"
 
         port_map {
           http = 8080

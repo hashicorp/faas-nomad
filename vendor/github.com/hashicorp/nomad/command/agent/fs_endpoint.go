@@ -1,6 +1,6 @@
 package agent
 
-//go:generate codecgen -o fs_endpoint.generated.go fs_endpoint.go
+//go:generate codecgen -d 101 -o fs_endpoint.generated.go fs_endpoint.go
 
 import (
 	"bytes"
@@ -20,6 +20,7 @@ import (
 	"gopkg.in/tomb.v1"
 
 	"github.com/docker/docker/pkg/ioutils"
+	"github.com/hashicorp/nomad/acl"
 	"github.com/hashicorp/nomad/client/allocdir"
 	"github.com/hashicorp/nomad/nomad/structs"
 	"github.com/hpcloud/tail/watch"
@@ -70,19 +71,53 @@ func (s *HTTPServer) FsRequest(resp http.ResponseWriter, req *http.Request) (int
 		return nil, clientNotRunning
 	}
 
+	var secret string
+	s.parseToken(req, &secret)
+
+	var namespace string
+	parseNamespace(req, &namespace)
+
+	aclObj, err := s.agent.Client().ResolveToken(secret)
+	if err != nil {
+		return nil, err
+	}
+
 	path := strings.TrimPrefix(req.URL.Path, "/v1/client/fs/")
 	switch {
 	case strings.HasPrefix(path, "ls/"):
+		if aclObj != nil && !aclObj.AllowNsOp(namespace, acl.NamespaceCapabilityReadFS) {
+			return nil, structs.ErrPermissionDenied
+		}
 		return s.DirectoryListRequest(resp, req)
 	case strings.HasPrefix(path, "stat/"):
+		if aclObj != nil && !aclObj.AllowNsOp(namespace, acl.NamespaceCapabilityReadFS) {
+			return nil, structs.ErrPermissionDenied
+		}
 		return s.FileStatRequest(resp, req)
 	case strings.HasPrefix(path, "readat/"):
+		if aclObj != nil && !aclObj.AllowNsOp(namespace, acl.NamespaceCapabilityReadFS) {
+			return nil, structs.ErrPermissionDenied
+		}
 		return s.FileReadAtRequest(resp, req)
 	case strings.HasPrefix(path, "cat/"):
+		if aclObj != nil && !aclObj.AllowNsOp(namespace, acl.NamespaceCapabilityReadFS) {
+			return nil, structs.ErrPermissionDenied
+		}
 		return s.FileCatRequest(resp, req)
 	case strings.HasPrefix(path, "stream/"):
+		if aclObj != nil && !aclObj.AllowNsOp(namespace, acl.NamespaceCapabilityReadFS) {
+			return nil, structs.ErrPermissionDenied
+		}
 		return s.Stream(resp, req)
 	case strings.HasPrefix(path, "logs/"):
+		// Logs can be accessed with ReadFS or ReadLogs caps
+		if aclObj != nil {
+			readfs := aclObj.AllowNsOp(namespace, acl.NamespaceCapabilityReadFS)
+			logs := aclObj.AllowNsOp(namespace, acl.NamespaceCapabilityReadLogs)
+			if !readfs && !logs {
+				return nil, structs.ErrPermissionDenied
+			}
+		}
 		return s.Logs(resp, req)
 	default:
 		return nil, CodedError(404, ErrInvalidMethod)
@@ -1004,7 +1039,7 @@ func findClosest(entries []*allocdir.AllocFileInfo, desiredIdx, desiredOffset in
 	}
 
 	// Binary search the indexes to get the desiredIdx
-	sort.Sort(indexTupleArray(indexes))
+	sort.Sort(indexes)
 	i := sort.Search(len(indexes), func(i int) bool { return indexes[i].idx >= desiredIdx })
 	l := len(indexes)
 	if i == l {

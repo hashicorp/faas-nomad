@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/consul/agent/structs"
@@ -17,8 +16,7 @@ import (
 // This supports the stale query mode in case the cluster doesn't have a leader.
 func (s *HTTPServer) OperatorRaftConfiguration(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
 	if req.Method != "GET" {
-		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return nil, nil
+		return nil, MethodNotAllowedError{req.Method, []string{"GET"}}
 	}
 
 	var args structs.DCSpecificRequest
@@ -38,8 +36,7 @@ func (s *HTTPServer) OperatorRaftConfiguration(resp http.ResponseWriter, req *ht
 // removing peers by address.
 func (s *HTTPServer) OperatorRaftPeer(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
 	if req.Method != "DELETE" {
-		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return nil, nil
+		return nil, MethodNotAllowedError{req.Method, []string{"DELETE"}}
 	}
 
 	var args structs.RaftRemovePeerRequest
@@ -125,8 +122,7 @@ func (s *HTTPServer) OperatorKeyringEndpoint(resp http.ResponseWriter, req *http
 	case "DELETE":
 		return s.KeyringRemove(resp, req, &args)
 	default:
-		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return nil, nil
+		return nil, MethodNotAllowedError{req.Method, []string{"GET", "POST", "PUT", "DELETE"}}
 	}
 }
 
@@ -223,7 +219,8 @@ func (s *HTTPServer) OperatorAutopilotConfiguration(resp http.ResponseWriter, re
 		s.parseToken(req, &args.Token)
 
 		var conf api.AutopilotConfiguration
-		if err := decodeBody(req, &conf, FixupConfigDurations); err != nil {
+		durations := NewDurationFixer("lastcontactthreshold", "serverstabilizationtime")
+		if err := decodeBody(req, &conf, durations.FixupDurations); err != nil {
 			resp.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(resp, "Error parsing autopilot config: %v", err)
 			return nil, nil
@@ -264,39 +261,14 @@ func (s *HTTPServer) OperatorAutopilotConfiguration(resp http.ResponseWriter, re
 		return reply, nil
 
 	default:
-		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return nil, nil
+		return nil, MethodNotAllowedError{req.Method, []string{"GET", "PUT"}}
 	}
-}
-
-// FixupConfigDurations is used to handle parsing the duration fields in
-// the Autopilot config struct
-func FixupConfigDurations(raw interface{}) error {
-	rawMap, ok := raw.(map[string]interface{})
-	if !ok {
-		return nil
-	}
-	for key, val := range rawMap {
-		if strings.ToLower(key) == "lastcontactthreshold" ||
-			strings.ToLower(key) == "serverstabilizationtime" {
-			// Convert a string value into an integer
-			if vStr, ok := val.(string); ok {
-				dur, err := time.ParseDuration(vStr)
-				if err != nil {
-					return err
-				}
-				rawMap[key] = dur
-			}
-		}
-	}
-	return nil
 }
 
 // OperatorServerHealth is used to get the health of the servers in the local DC
 func (s *HTTPServer) OperatorServerHealth(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
 	if req.Method != "GET" {
-		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return nil, nil
+		return nil, MethodNotAllowedError{req.Method, []string{"GET"}}
 	}
 
 	var args structs.DCSpecificRequest

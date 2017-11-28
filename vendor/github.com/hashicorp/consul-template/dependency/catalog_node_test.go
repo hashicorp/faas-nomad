@@ -51,6 +51,15 @@ func TestNewCatalogNodeQuery(t *testing.T) {
 			},
 			false,
 		},
+		{
+			"periods",
+			"node.bar.com@dc1",
+			&CatalogNodeQuery{
+				name: "node.bar.com",
+				dc:   "dc1",
+			},
+			false,
+		},
 	}
 
 	for i, tc := range cases {
@@ -89,7 +98,9 @@ func TestCatalogNodeQuery_Fetch(t *testing.T) {
 						"lan": "127.0.0.1",
 						"wan": "127.0.0.1",
 					},
-					Meta: map[string]string{},
+					Meta: map[string]string{
+						"consul-network-segment": "",
+					},
 				},
 				Services: []*CatalogNodeService{
 					&CatalogNodeService{
