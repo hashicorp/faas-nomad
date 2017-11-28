@@ -123,9 +123,11 @@ func (sr *Resolver) watch() {
 			}
 
 			if len(cs) > 0 {
-				ci, _ := sr.cache.Get(cs[0].ServiceName)
-				ci.(*cacheItem).addresses = addresses
-				sr.cache.Set(cs[0].ServiceName, ci, cache.DefaultExpiration)
+				ci, ok := sr.cache.Get(cs[0].ServiceName)
+				if ok {
+					ci.(*cacheItem).addresses = addresses
+					sr.cache.Set(cs[0].ServiceName, ci, cache.DefaultExpiration)
+				}
 			}
 		}
 	}()
