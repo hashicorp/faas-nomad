@@ -29,19 +29,16 @@ scrape_configs:
     scrape_interval: 5s
     consul_sd_configs:
       - server: {{ env "NOMAD_IP_http" }}:8500
-        type: SRV
         services: ["gateway"]
   
   - job_name: "statsd"
     scrape_interval: 5s
     consul_sd_configs:
       - server: {{ env "NOMAD_IP_http" }}:8500
-        type: SRV
         services: ["statsd"]
 
 alerting:
   alertmanagers:
     - consul_sd_configs:
       - server: {{ env "NOMAD_IP_http" }}:8500
-        type: SRV
         services: ["alertmanager"]
