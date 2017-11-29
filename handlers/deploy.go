@@ -80,6 +80,10 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 	logSize := 2
 	envVars := r.EnvVars
 
+	if envVars == nil {
+		envVars = map[string]string{}
+	}
+
 	// add constraints
 	job.Constraints = append(job.Constraints,
 		&api.Constraint{
@@ -95,11 +99,6 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 		AutoRevert:      &updateAutoRevert,
 		Stagger:         &updateStagger,
 		HealthyDeadline: &updateHealthyDeadline,
-	}
-
-	envVars := r.EnvVars
-	if envVars == nil {
-		envVars = map[string]string{}
 	}
 
 	if r.EnvProcess != "" {
