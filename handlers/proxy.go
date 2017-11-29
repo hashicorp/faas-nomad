@@ -66,6 +66,10 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	lb := p.getLoadbalancer(service, urls, p.statsDAddress)
 	lb.Do(func(endpoint url.URL) error {
+
+		// add the querystring from the request
+		endpoint.RawQuery = r.URL.RawQuery
+
 		respBody, respHeaders, err = p.client.CallAndReturnResponse(endpoint.String(), reqBody, reqHeaders)
 		if err != nil {
 			return err

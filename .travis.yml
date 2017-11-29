@@ -9,8 +9,8 @@ go:
 before_install:
   - sudo apt-get update
   - sudo apt-get install unzip curl
-  - curl https://releases.hashicorp.com/nomad/0.6.3/nomad_0.6.3_linux_amd64.zip -o nomad.zip
-  - curl https://releases.hashicorp.com/consul/0.9.3/consul_0.9.3_linux_amd64.zip -o consul.zip
+  - curl https://releases.hashicorp.com/nomad/0.7.0/nomad_0.7.0_linux_amd64.zip -o nomad.zip
+  - curl https://releases.hashicorp.com/consul/1.0.0/consul_1.0.0_linux_amd64.zip -o consul.zip
   - sudo unzip -o -d  /usr/local/bin ./nomad.zip
   - sudo unzip -o -d  /usr/local/bin ./consul.zip
   - sudo chmod +x /usr/local/bin/consul
