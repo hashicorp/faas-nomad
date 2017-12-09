@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/alexellis/faas/gateway/requests"
@@ -70,8 +71,6 @@ func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 func createJob(r requests.CreateFunctionRequest) *api.Job {
 	jobname := nomad.JobPrefix + r.Service
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
-
-	job.Datacenters = []string{"dc1"}
 	count := 1
 	restartDelay := 1 * time.Second
 	restartMode := "delay"
@@ -81,6 +80,20 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 	logFiles := 5
 	logSize := 2
 	envVars := r.EnvVars
+
+	if r.Labels != nil && (*r.Labels)["datacenters"] != "" {
+		lbls := (*r.Labels)["datacenters"]
+		dcs := []string{}
+
+		for _, dc := range strings.Split(lbls, ",") {
+			dcs = append(dcs, strings.Trim(dc, " "))
+		}
+
+		job.Datacenters = dcs
+	} else {
+		// default datacenter
+		job.Datacenters = []string{"dc1"}
+	}
 
 	if r.Limits != nil {
 		if r.Limits.CPU != "" {

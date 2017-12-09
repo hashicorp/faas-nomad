@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	"github.com/hashicorp/nomad/api"
+	"github.com/openfaas/faas/gateway/requests"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -71,4 +72,83 @@ func TestHandlerRegistersWithFunctionProcess(t *testing.T) {
 	jobEnv := job.TaskGroups[0].Tasks[0].Env
 
 	assert.Equal(t, "env", jobEnv["fprocess"])
+}
+
+func TestHandlesDataCentreLabelWithSingleDC(t *testing.T) {
+	fr := createRequest()
+	(*fr.Labels)["datacenters"] = "test"
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	dcs := job.Datacenters
+
+	assert.Equal(t, "test", dcs[0])
+}
+
+func TestHandlesDataCentreLabelWithMultipleDC(t *testing.T) {
+	fr := createRequest()
+	(*fr.Labels)["datacenters"] = "test1,test2"
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	dcs := job.Datacenters
+
+	assert.Equal(t, "test1", dcs[0])
+	assert.Equal(t, "test2", dcs[1])
+}
+
+func TestHandlesBlankDataCentreLabel(t *testing.T) {
+	fr := createRequest()
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	dcs := job.Datacenters
+
+	assert.Equal(t, "dc1", dcs[0])
+}
+
+func TestHandlesRequestWithCPULimit(t *testing.T) {
+	fr := createRequest()
+	fr.Limits = &requests.FunctionResources{
+		CPU: "1000",
+	}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	cpu := job.TaskGroups[0].Tasks[0].Resources.CPU
+
+	assert.Equal(t, 1000, *cpu)
+}
+
+func TestHandlesRequestWithMemoryLimit(t *testing.T) {
+	fr := createRequest()
+	fr.Limits = &requests.FunctionResources{
+		Memory: "256",
+	}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	mem := job.TaskGroups[0].Tasks[0].Resources.MemoryMB
+
+	assert.Equal(t, 256, *mem)
 }

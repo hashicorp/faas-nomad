@@ -241,3 +241,25 @@ Hello, Go. You said: Nic
 
 That is all there is to it, checkout the OpenFaaS community page for some inspiration and other demos.
 [faas/community.md at master · openfaas/faas · GitHub](https://github.com/openfaas/faas/blob/master/community.md)
+
+### Datacenters
+By default the Nomad provider will use a default datacenter for a deployed function of `dc1`, this can be overridden by setting the label `datacenters`, which takes a comma separated list of datacenters to deploy the funtion into.
+
+i.e.
+```bash
+$ faas-cli deploy -l datacenters=dc1,dc2
+```
+
+or from a stack file...
+```yaml
+functions:
+  facedetect:
+    lang: go-opencv
+    handler: ./facedetect
+    image: nicholasjackson/func_facedetect
+    limits:
+      memory: 512
+      cpu: 1000
+    labels:
+      datacentres: "dc1"
+```

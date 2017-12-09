@@ -23,6 +23,7 @@ func (r testFunctionRequest) String() string {
 func createRequest() testFunctionRequest {
 	req := testFunctionRequest{}
 	req.Service = "TestFunction"
+	req.Labels = &map[string]string{}
 	return req
 }
 
