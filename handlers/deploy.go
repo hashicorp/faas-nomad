@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/alexellis/faas/gateway/requests"
@@ -76,9 +77,26 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 	restartMode := "delay"
 	restartAttempts := 25
 	taskMemory := 128
+	taskCPU := 100
 	logFiles := 5
 	logSize := 2
 	envVars := r.EnvVars
+
+	if r.Limits != nil {
+		if r.Limits.CPU != "" {
+			v, err := strconv.ParseInt(r.Limits.CPU, 10, 32)
+			if err == nil {
+				taskCPU = int(v)
+			}
+		}
+
+		if r.Limits.Memory != "" {
+			v, err := strconv.ParseInt(r.Limits.Memory, 10, 32)
+			if err == nil {
+				taskMemory = int(v)
+			}
+		}
+	}
 
 	if envVars == nil {
 		envVars = map[string]string{}
@@ -121,6 +139,7 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 				},
 			},
 			MemoryMB: &taskMemory,
+			CPU:      &taskCPU,
 		},
 		Services: []*api.Service{
 			&api.Service{

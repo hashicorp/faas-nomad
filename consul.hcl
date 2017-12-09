@@ -4,7 +4,7 @@ ui = true
 server = true
 bootstrap_expect = 1
 
-advertise_addr = "192.168.1.113"
+advertise_addr = "192.168.0.100"
 
 addresses = {
   http = "0.0.0.0"
