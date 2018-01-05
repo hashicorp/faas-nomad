@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/faas-nomad/consul"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -25,7 +26,9 @@ func setupProxy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *htt
 	r = r.WithContext(context.WithValue(r.Context(), FunctionNameCTXKey, "function"))
 	rr := httptest.NewRecorder()
 
-	return MakeProxy(mockProxyClient, mockServiceResolver, "", nil), rr, r
+	logger := hclog.Default()
+
+	return MakeProxy(mockProxyClient, mockServiceResolver, "", logger, nil), rr, r
 }
 
 func TestProxyHandlerOnGETReturnsBadRequest(t *testing.T) {

@@ -7,7 +7,7 @@ module "open-faas-nomad" {
 
   ssh_key = "~/.ssh/id_rsa.pub"
 
-  min_servers = "3"
+  min_servers = "1"
   max_servers = "5"
   min_agents  = "3"
   max_agents  = "5"

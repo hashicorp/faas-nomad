@@ -11,6 +11,7 @@ import (
 
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas-provider/types"
 	"github.com/stretchr/testify/assert"
@@ -36,7 +37,9 @@ func setupReplicationWriter(t *testing.T, functionName string, req *types.ScaleS
 	r := httptest.NewRequest("POST", "/test/test_function", bytes.NewReader(body))
 	r = r.WithContext(context.WithValue(r.Context(), FunctionNameCTXKey, functionName))
 
-	h := MakeReplicationWriter(mockJob, mockStats)
+	logger := hclog.Default()
+
+	h := MakeReplicationWriter(mockJob, logger, mockStats)
 
 	return h, rr, r
 }

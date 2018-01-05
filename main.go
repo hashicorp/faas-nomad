@@ -12,12 +12,44 @@ import (
 	"github.com/hashicorp/faas-nomad/handlers"
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 	bootstrap "github.com/openfaas/faas-provider"
 	"github.com/openfaas/faas-provider/types"
 )
 
-const version = "0.2.12"
+const version = "0.2.15"
+
+func setupLogging() hclog.Logger {
+	logJSON := false
+	if os.Getenv("logger_format") == "json" {
+		logJSON = true
+	}
+
+	logLevel := "INFO"
+	if level := os.Getenv("logger_level"); level != "" {
+		logLevel = level
+	}
+
+	output := os.Stdout
+	if logFile := os.Getenv("logger_output"); logFile != "" {
+		f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
+		if err == nil {
+			output = f
+		} else {
+			log.Printf("Unable to open file for output, defaulting to std out: %s\n", err.Error())
+		}
+	}
+
+	appLogger := hclog.New(&hclog.LoggerOptions{
+		Name:       "nomadd",
+		Level:      hclog.LevelFromString(logLevel),
+		JSONFormat: logJSON,
+		Output:     output,
+	})
+
+	return appLogger
+}
 
 func main() {
 	region := os.Getenv("NOMAD_REGION")
@@ -26,8 +58,10 @@ func main() {
 	statsDAddr := os.Getenv("STATSD_ADDR")
 	thisAddr := os.Getenv("NOMAD_ADDR_http")
 
-	log.Println("Started version:", version)
-	log.Println("Using StatsD server:", statsDAddr)
+	logger := setupLogging()
+
+	logger.Info("Started version: " + version)
+	logger.Info("Using StatsD server:" + statsDAddr)
 
 	stats, err := statsd.New(statsDAddr)
 	if err != nil {
@@ -52,12 +86,12 @@ func main() {
 	cr := consul.NewResolver(consulAddr)
 
 	handlers := &types.FaaSHandlers{
-		FunctionReader: handlers.MakeReader(nomadClient.Jobs(), stats),
-		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs(), stats),
-		DeleteHandler:  handlers.MakeDelete(cr, nomadClient.Jobs(), stats),
-		ReplicaReader:  makeReplicationReader(nomadClient.Jobs(), stats),
-		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), stats),
-		FunctionProxy:  makeFunctionProxyHandler(cr, statsDAddr, stats),
+		FunctionReader: handlers.MakeReader(nomadClient.Jobs(), logger, stats),
+		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
+		DeleteHandler:  handlers.MakeDelete(cr, nomadClient.Jobs(), logger, stats),
+		ReplicaReader:  makeReplicationReader(nomadClient.Jobs(), logger, stats),
+		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), logger, stats),
+		FunctionProxy:  makeFunctionProxyHandler(cr, statsDAddr, logger, stats),
 	}
 
 	config := &types.FaaSConfig{}
@@ -65,29 +99,29 @@ func main() {
 	bootstrap.Serve(handlers, config)
 }
 
-func makeFunctionProxyHandler(r consul.ServiceResolver, statsDAddr string, s *statsd.Client) http.HandlerFunc {
+func makeFunctionProxyHandler(r consul.ServiceResolver, statsDAddr string, logger hclog.Logger, s *statsd.Client) http.HandlerFunc {
 	return handlers.MakeExtractFunctionMiddleWare(
 		func(r *http.Request) map[string]string {
 			return mux.Vars(r)
 		},
-		handlers.MakeProxy(handlers.MakeProxyClient(), r, statsDAddr, s),
+		handlers.MakeProxy(handlers.MakeProxyClient(), r, statsDAddr, logger, s),
 	)
 }
 
-func makeReplicationReader(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
+func makeReplicationReader(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) http.HandlerFunc {
 	return handlers.MakeExtractFunctionMiddleWare(
 		func(r *http.Request) map[string]string {
 			return mux.Vars(r)
 		},
-		handlers.MakeReplicationReader(client, stats),
+		handlers.MakeReplicationReader(client, logger, stats),
 	)
 }
 
-func makeReplicationUpdater(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
+func makeReplicationUpdater(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) http.HandlerFunc {
 	return handlers.MakeExtractFunctionMiddleWare(
 		func(r *http.Request) map[string]string {
 			return mux.Vars(r)
 		},
-		handlers.MakeReplicationWriter(client, stats),
+		handlers.MakeReplicationWriter(client, logger, stats),
 	)
 }

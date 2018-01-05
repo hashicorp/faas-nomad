@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas/gateway/requests"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +25,9 @@ func setupReplicationReader(functionName string) (http.HandlerFunc, *httptest.Re
 	r := httptest.NewRequest("POST", "/test/test_function", nil)
 	r = r.WithContext(context.WithValue(r.Context(), FunctionNameCTXKey, functionName))
 
-	h := MakeReplicationReader(mockJob, mockStats)
+	logger := hclog.Default()
+
+	h := MakeReplicationReader(mockJob, logger, mockStats)
 
 	return h, rr, r
 }

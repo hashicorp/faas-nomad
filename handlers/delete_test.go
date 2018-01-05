@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/faas-nomad/consul"
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -23,7 +24,9 @@ func setupDelete(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 	mockServiceResolver = &consul.MockResolver{}
 	mockServiceResolver.On("RemoveCacheItem", mock.Anything)
 
-	return MakeDelete(mockServiceResolver, mockJob, mockStats),
+	logger := hclog.Default()
+
+	return MakeDelete(mockServiceResolver, mockJob, logger, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("DELETE", "/system/functions", bytes.NewReader([]byte(body)))
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas/gateway/requests"
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,9 @@ func setupReader() (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request)
 	mockStatsD := &metrics.MockStatsD{}
 	mockStatsD.On("Incr", mock.Anything, mock.Anything, mock.Anything)
 
-	return MakeReader(mockJob, mockStatsD),
+	logger := hclog.Default()
+
+	return MakeReader(mockJob, logger, mockStatsD),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte("")))
 }

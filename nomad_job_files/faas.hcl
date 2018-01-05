@@ -30,7 +30,7 @@ job "faas-nomadd" {
       }
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:0.2.12"
+        image = "quay.io/nicholasjackson/faas-nomad:0.2.15"
 
         port_map {
           http = 8080
@@ -39,7 +39,7 @@ job "faas-nomadd" {
 
       resources {
         cpu    = 500 # 500 MHz
-        memory = 256 # 256MB
+        memory = 128 # 128MB
 
         network {
           mbits = 10
@@ -59,13 +59,20 @@ job "faas-nomadd" {
 
     task "gateway" {
       driver = "docker"
+      template {
+        env = true
+        destination   = "secrets/gateway.env"
 
-      env {
-        functions_provider_url = "http://${NOMAD_IP_http}:8081/"
+        data = <<EOH
+functions_provider_url="http://{{ env "NOMAD_IP_http" }}:8081/"
+{{ range service "prometheus" }}
+faas_prometheus_host="{{ .Address }}"
+faas_prometheus_port="{{ .Port }}"{{ end }}
+EOH
       }
 
       config {
-        image = "functions/gateway:0.6.12"
+        image = "nicholasjackson/gateway:latest-dev"
 
         port_map {
           http = 8080
@@ -74,7 +81,7 @@ job "faas-nomadd" {
 
       resources {
         cpu    = 500 # 500 MHz
-        memory = 256 # 256MB
+        memory = 128 # 128MB
 
         network {
           mbits = 10
@@ -105,7 +112,7 @@ job "faas-nomadd" {
 
       resources {
         cpu    = 100 # 100 MHz
-        memory = 128 # 128MB
+        memory = 36 # 36MB
 
         network {
           mbits = 1

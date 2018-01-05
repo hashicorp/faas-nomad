@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas/gateway/requests"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +23,9 @@ func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 	mockStats.On("Incr", mock.Anything, mock.Anything, mock.Anything)
 	mockStats.On("Gauge", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 
-	return MakeDeploy(mockJob, mockStats),
+	logger := hclog.Default()
+
+	return MakeDeploy(mockJob, logger, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte(body)))
 }
