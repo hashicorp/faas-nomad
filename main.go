@@ -18,7 +18,7 @@ import (
 	"github.com/openfaas/faas-provider/types"
 )
 
-const version = "0.2.15"
+const version = "0.2.16"
 
 func setupLogging() hclog.Logger {
 	logJSON := false
