@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 )
 
@@ -35,7 +35,9 @@ var (
 )
 
 // MakeDeploy creates a handler for deploying functions
-func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
+func MakeDeploy(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) http.HandlerFunc {
+	log := logger.Named("deploy_handler")
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		stats.Incr("deploy.called", nil, 1)
 
@@ -57,8 +59,8 @@ func MakeDeploy(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
-			log.Println(err)
 
+			log.Error("Error registering job", "error", err.Error())
 			stats.Incr("deploy.error.createjob", []string{"job:" + req.Service}, 1)
 			return
 		}

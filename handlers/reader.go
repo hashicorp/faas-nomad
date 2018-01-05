@@ -8,12 +8,15 @@ import (
 
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas/gateway/requests"
 )
 
 // MakeReader implements the OpenFaaS reader handler
-func MakeReader(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
+func MakeReader(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) http.HandlerFunc {
+	log := logger.Named("reader_handler")
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Not sure if prefix is the right option
 		options := &api.QueryOptions{}
@@ -33,6 +36,7 @@ func MakeReader(client nomad.Job, stats metrics.StatsD) http.HandlerFunc {
 		if err != nil {
 			writeError(w, err)
 
+			log.Error("Error getting functions", "error", err.Error())
 			stats.Incr("reader.error.getfunctions", nil, 1)
 			return
 		}

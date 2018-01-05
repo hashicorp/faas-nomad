@@ -9,12 +9,13 @@ import (
 
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/hashicorp/faas-nomad/consul"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/nicholasjackson/ultraclient"
 	cache "github.com/patrickmn/go-cache"
 )
 
 // MakeProxy creates a proxy for HTTP web requests which can be routed to a function.
-func MakeProxy(client ProxyClient, resolver consul.ServiceResolver, statsDAddress string, stats *statsd.Client) http.HandlerFunc {
+func MakeProxy(client ProxyClient, resolver consul.ServiceResolver, statsDAddress string, logger hclog.Logger, stats *statsd.Client) http.HandlerFunc {
 	c := cache.New(5*time.Minute, 10*time.Minute)
 	p := &Proxy{
 		lbCache:       c,
@@ -22,6 +23,7 @@ func MakeProxy(client ProxyClient, resolver consul.ServiceResolver, statsDAddres
 		resolver:      resolver,
 		stats:         stats,
 		statsDAddress: statsDAddress,
+		logger:        logger.Named("proxy_client"),
 	}
 
 	return func(rw http.ResponseWriter, r *http.Request) {
@@ -36,6 +38,7 @@ type Proxy struct {
 	resolver      consul.ServiceResolver
 	stats         *statsd.Client
 	statsDAddress string
+	logger        hclog.Logger
 }
 
 func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
@@ -43,6 +46,7 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
 		p.stats.Incr("proxy.badrequest", []string{}, 1)
+		p.logger.Error("Bad request", "request", r)
 
 		rw.WriteHeader(http.StatusBadRequest)
 		return
@@ -80,6 +84,8 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		p.logger.Error("Internal server error", "error", err)
+
 		return
 	}
 
@@ -109,18 +115,19 @@ func (p *Proxy) getLoadbalancer(service string, endpoints []string, statsAddress
 		return l
 	}
 
-	lb := createLoadbalancer(urls, statsAddress, service)
+	lb := createLoadbalancer(urls, statsAddress, p.logger, service)
 	p.lbCache.Set(service, lb, cache.DefaultExpiration)
 
 	return lb
 }
 
-func createLoadbalancer(endpoints []url.URL, statsDAddr, service string) ultraclient.Client {
+func createLoadbalancer(endpoints []url.URL, statsDAddr string, logger hclog.Logger, service string) ultraclient.Client {
+	log := logger.Named("load_balancer")
 	lb := ultraclient.RoundRobinStrategy{}
 	bs := ultraclient.ExponentialBackoff{}
 	sd, err := ultraclient.NewDogStatsD(url.URL{Host: statsDAddr})
 	if err != nil {
-		log.Println(err)
+		log.Error("Error creating statsD connection", "error", err)
 	}
 
 	config := ultraclient.Config{
