@@ -16,12 +16,13 @@ import (
 )
 
 var (
-	count           = 1
-	restartDelay    = 1 * time.Second
-	restartMode     = "delay"
-	restartAttempts = 25
-	logFiles        = 5
-	logSize         = 2
+	count               = 1
+	restartDelay        = 1 * time.Second
+	restartMode         = "delay"
+	restartAttempts     = 25
+	logFiles            = 5
+	logSize             = 2
+	ephermerialDiskSize = 10
 
 	// Constraints
 	constraintCPUArch = "amd64"
@@ -177,6 +178,9 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 				Delay:    &restartDelay,
 				Mode:     &restartMode,
 				Attempts: &restartAttempts,
+			},
+			EphemeralDisk: &api.EphemeralDisk{
+				SizeMB: &ephermerialDiskSize,
 			},
 			Tasks: []*api.Task{task},
 		},
