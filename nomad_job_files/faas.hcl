@@ -39,7 +39,7 @@ job "faas-nomadd" {
 
       resources {
         cpu    = 500 # 500 MHz
-        memory = 256 # 256MB
+        memory = 128 # 128MB
 
         network {
           mbits = 10
@@ -81,7 +81,7 @@ EOH
 
       resources {
         cpu    = 500 # 500 MHz
-        memory = 256 # 256MB
+        memory = 128 # 128MB
 
         network {
           mbits = 10
@@ -112,7 +112,7 @@ EOH
 
       resources {
         cpu    = 100 # 100 MHz
-        memory = 128 # 128MB
+        memory = 36 # 36MB
 
         network {
           mbits = 1
