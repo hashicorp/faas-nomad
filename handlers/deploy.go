@@ -22,7 +22,7 @@ var (
 	restartAttempts     = 25
 	logFiles            = 5
 	logSize             = 2
-	ephermerialDiskSize = 10
+	ephermerialDiskSize = 20
 
 	// Constraints
 	constraintCPUArch = "amd64"
@@ -80,8 +80,6 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 	restartAttempts := 25
 	taskMemory := 128
 	taskCPU := 100
-	logFiles := 5
-	logSize := 2
 	envVars := r.EnvVars
 
 	if r.Labels != nil && (*r.Labels)["datacenters"] != "" {
