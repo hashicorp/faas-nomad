@@ -41,5 +41,9 @@ script:
   - ps -aux | grep consul
 
 after_success:
-- docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD";
-- test "$TRAVIS_OS_NAME" = "linux" -a -n "$TRAVIS_TAG" && curl -sL https://git.io/goreleaser | bash
+  if ([ "$TRAVIS_BRANCH" == "master" ] || [ ! -z "$TRAVIS_TAG" ]) && 
+      [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
+    cd $GOPATH/src/github.com/hashicorp/faas-nomad;
+    docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD" quay.io;
+    curl -sL https://git.io/goreleaser | bash;
+  fi
