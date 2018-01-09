@@ -1,8 +1,8 @@
-FROM alpine
+FROM arm32v6/alpine
 
 RUN adduser -h /home/faasnomad -D faasnomad faasnomad
 
-COPY faas-nomad /home/faasnomad/
+COPY ./dist/linuxarm7/faas-nomad /home/faasnomad/
 RUN chmod +x /home/faasnomad/faas-nomad
 
 USER faasnomad

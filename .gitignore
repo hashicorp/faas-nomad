@@ -13,10 +13,11 @@
 # Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
 .glide/
 
-faas-nomad
-main
 benchmark/faas
 .envrc
 terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 terraform/.terraform
+dist
+consul.hcl
+nomad.hcl

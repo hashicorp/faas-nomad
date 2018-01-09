@@ -1,0 +1,31 @@
+builds:
+  - binary: faas-nomad
+    goos:
+      - windows
+      - linux
+    goarch:
+      - amd64
+      - arm
+    goarm:
+      - 6
+      - 7
+    env:
+      - CGO_ENABLED=0
+      - arm64
+dockers:
+  - 
+    binary: faas-nomad
+    image: quay.io/nicholasjackson/faas-nomad
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile
+    latest: true
+    tag_template: "{{ .Tag }}"
+  - 
+    binary: faas-nomad
+    image: quay.io/nicholasjackson/faas-nomad
+    goos: linux
+    goarch: arm
+    goarm: 7
+    dockerfile: Dockerfile
+    tag_template: "arm7-{{ .Tag }}"
