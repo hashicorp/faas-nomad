@@ -239,6 +239,12 @@ $ curl http://192.168.1.113:8080/function/gofunction -d 'Nic'
 Hello, Go. You said: Nic
 ```
 
+or you can use the cli
+
+```bash
+$ echo "Nic" | faas-cli --gateway http://192.168.1.113:8080/ invoke gofunction
+```
+
 That is all there is to it, checkout the OpenFaaS community page for some inspiration and other demos.
 [faas/community.md at master · openfaas/faas · GitHub](https://github.com/openfaas/faas/blob/master/community.md)
 
