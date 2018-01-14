@@ -273,6 +273,11 @@ functions:
 ### Contributing
 The application including docker containers is built using goreleaser [https://goreleaser.com](https://goreleaser.com).  
 
+#### Setup
+* Clone this repo: `go get github.com/hashicorp/faas-nomad`
+* Create a fork in your own github account
+* Add a new git remote to $GOPATH/src/hashicorp/faas-nomad with your fork `git remote add fork git@github.com:/yourname/faas-nomad.git`
+
 #### Building the application
 `make build_all` this runs the command `goreleaser -snapshot -rm-dist -skip-validate`
 
