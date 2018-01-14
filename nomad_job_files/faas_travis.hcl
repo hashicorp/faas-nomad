@@ -1,7 +1,7 @@
 job "faas-nomadd" {
   datacenters = ["dc1"]
 
-  type = "system"
+  type = "service"
 
   constraint {
     attribute = "${attr.cpu.arch}"
@@ -29,13 +29,8 @@ job "faas-nomadd" {
         STATSD_ADDR  = "${NOMAD_ADDR_statsd_statsd}"
       }
 
-      artifact {
-        source = "/images/faas-nomadd.tar"
-      }
-
       config {
-        load = "faas-nomadd.tar"
-        image = "faas-nomadd"
+        image = "localhost:5000/faas-nomad:latest"
 
         port_map {
           http = 8080

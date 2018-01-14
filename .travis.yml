@@ -14,7 +14,7 @@ env:
 before_install:
   - sudo apt-get update
   - sudo apt-get install unzip curl
-  - curl https://releases.hashicorp.com/nomad/0.7.0/nomad_0.7.0_linux_amd64.zip -o nomad.zip
+  - curl https://releases.hashicorp.com/nomad/0.7.1/nomad_0.7.1_linux_amd64.zip -o nomad.zip
   - curl https://releases.hashicorp.com/consul/1.0.0/consul_1.0.0_linux_amd64.zip -o consul.zip
   - sudo unzip -o -d  /usr/local/bin ./nomad.zip
   - sudo unzip -o -d  /usr/local/bin ./consul.zip
@@ -22,12 +22,14 @@ before_install:
   - sudo chmod +x /usr/local/bin/nomad
   - make deps
   - git clone -b additions https://github.com/nicholasjackson/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
+  - docker run -d -p 5000:5000 --restart=always --name registry registry:2
 
 script:
   - echo "Build and Test"
   - make test
   - make build_all
-  - echo "Export image to tar for Nomad"
+  - docker tag quay.io/nicholasjackson/faas-nomad:latest localhost:5000/faas-nomad:latest
+  - docker push localhost:5000/faas-nomad:latest
   - sudo IMAGE_OUTPUT=/images make export_docker_image_tar
   - echo "Run Functional Tests"
   - source ./startNomad.sh
@@ -39,15 +41,10 @@ script:
   - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=$FAAS_GATEWAY
     go test ./tests -v
   - nomad status
-  - cat $HOME/log/nomad.log
-  - cat $HOME/log/consul.log
-  - ps -aux | grep nomad
-  - ps -aux | grep consul
 
 after_success:
   if ([ "$TRAVIS_BRANCH" == "master" ] || [ ! -z "$TRAVIS_TAG" ]) && 
       [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
     cd $GOPATH/src/github.com/hashicorp/faas-nomad;
-    docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD" quay.io;
     curl -sL https://git.io/goreleaser | bash;
   fi
