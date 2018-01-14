@@ -269,3 +269,12 @@ functions:
     labels:
       datacentres: "dc1"
 ```
+
+### Contributing
+The application including docker containers is built using goreleaser [https://goreleaser.com](https://goreleaser.com).  
+
+#### Building the application
+`make build_all` this runs the command `goreleaser -snapshot -rm-dist -skip-validate`
+
+#### Testing the application
+`make test` runs all unit tests in the application, for continuous test running try [http://goconvey.co](http://goconvey.co)
