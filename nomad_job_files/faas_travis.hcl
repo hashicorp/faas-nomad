@@ -29,8 +29,13 @@ job "faas-nomadd" {
         STATSD_ADDR  = "${NOMAD_ADDR_statsd_statsd}"
       }
 
+      artifact {
+        source = "/images/faas-nomadd.tar"
+      }
+
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:latest"
+        load = "faas-nomadd.tar"
+        image = "faas-nomadd"
 
         port_map {
           http = 8080

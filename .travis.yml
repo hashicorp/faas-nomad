@@ -27,11 +27,14 @@ script:
   - echo "Build and Test"
   - make test
   - make build_all
+  - echo "Export image to tar for Nomad"
+  - sudo IMAGE_OUTPUT=/images make export_docker_image_tar
   - echo "Run Functional Tests"
   - source ./startNomad.sh
-  - nomad run nomad_job_files/faas.hcl
+  - nomad run nomad_job_files/faas_travis.hcl
   - sleep 10
   - nomad status faas-nomadd
+  - nomad logs -job faas-nomadd nomadd
   - docker ps
   - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=$FAAS_GATEWAY
     go test ./tests -v
