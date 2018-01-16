@@ -31,7 +31,7 @@ before_install:
 script:
   - echo "Build and Test"
   - make test
-  - go test -race -coverprofile=coverage.txt -covermode=atomic
+  - go test -race -coverprofile=coverage.txt -covermode=atomic ./handlers
   - make build_all
   - docker tag quay.io/nicholasjackson/faas-nomad:latest localhost:5000/faas-nomad:latest
   - docker push localhost:5000/faas-nomad:latest
@@ -47,5 +47,6 @@ script:
 
 after_success: 
   - cd $GOPATH/src/github.com/hashicorp/faas-nomad
+  - pwd
   - bash <(curl -s https://codecov.io/bash)
   - travis_deploy.sh
