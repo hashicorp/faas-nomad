@@ -49,5 +49,5 @@ after_success:
       [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
     cd $GOPATH/src/github.com/hashicorp/faas-nomad;
     docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD" quay.io;
-    curl -sL https://git.io/goreleaser | bash;
+    goreleaser --rm-dist
   fi
