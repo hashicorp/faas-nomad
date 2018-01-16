@@ -74,47 +74,9 @@ func MakeDeploy(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) htt
 func createJob(r requests.CreateFunctionRequest) *api.Job {
 	jobname := nomad.JobPrefix + r.Service
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
-	count := 1
-	restartDelay := 1 * time.Second
-	restartMode := "delay"
-	restartAttempts := 25
-	taskMemory := 128
-	taskCPU := 100
-	envVars := r.EnvVars
 
-	if r.Labels != nil && (*r.Labels)["datacenters"] != "" {
-		lbls := (*r.Labels)["datacenters"]
-		dcs := []string{}
-
-		for _, dc := range strings.Split(lbls, ",") {
-			dcs = append(dcs, strings.Trim(dc, " "))
-		}
-
-		job.Datacenters = dcs
-	} else {
-		// default datacenter
-		job.Datacenters = []string{"dc1"}
-	}
-
-	if r.Limits != nil {
-		if r.Limits.CPU != "" {
-			v, err := strconv.ParseInt(r.Limits.CPU, 10, 32)
-			if err == nil {
-				taskCPU = int(v)
-			}
-		}
-
-		if r.Limits.Memory != "" {
-			v, err := strconv.ParseInt(r.Limits.Memory, 10, 32)
-			if err == nil {
-				taskMemory = int(v)
-			}
-		}
-	}
-
-	if envVars == nil {
-		envVars = map[string]string{}
-	}
+	job.Datacenters = createDataCenters(r)
+	job.Update = createUpdateStrategy()
 
 	// add constraints
 	job.Constraints = append(job.Constraints,
@@ -125,50 +87,19 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 		},
 	)
 
-	// add rolling update
-	job.Update = &api.UpdateStrategy{
-		MinHealthyTime:  &updateMinHealthyTime,
-		AutoRevert:      &updateAutoRevert,
-		Stagger:         &updateStagger,
-		HealthyDeadline: &updateHealthyDeadline,
-	}
+	job.TaskGroups = createTaskGroup(r)
 
-	if r.EnvProcess != "" {
-		envVars["fprocess"] = r.EnvProcess
-	}
+	return job
+}
 
-	task := &api.Task{
-		Name:   r.Service,
-		Driver: "docker",
-		Config: map[string]interface{}{
-			"image": r.Image,
-			"port_map": []map[string]interface{}{
-				map[string]interface{}{"http": 8080},
-			},
-		},
-		Resources: &api.Resources{
-			Networks: []*api.NetworkResource{
-				&api.NetworkResource{
-					DynamicPorts: []api.Port{api.Port{Label: "http"}},
-				},
-			},
-			MemoryMB: &taskMemory,
-			CPU:      &taskCPU,
-		},
-		Services: []*api.Service{
-			&api.Service{
-				Name:      r.Service,
-				PortLabel: "http",
-			},
-		},
-		LogConfig: &api.LogConfig{
-			MaxFiles:      &logFiles,
-			MaxFileSizeMB: &logSize,
-		},
-		Env: envVars,
-	}
+func createTaskGroup(r requests.CreateFunctionRequest) []*api.TaskGroup {
+	count := 1
+	restartDelay := 1 * time.Second
+	restartMode := "delay"
+	restartAttempts := 25
+	task := createTask(r)
 
-	tg := []*api.TaskGroup{
+	return []*api.TaskGroup{
 		&api.TaskGroup{
 			Name:  &r.Service,
 			Count: &count,
@@ -183,8 +114,105 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 			Tasks: []*api.Task{task},
 		},
 	}
+}
 
-	job.TaskGroups = tg
+func createTask(r requests.CreateFunctionRequest) *api.Task {
+	envVars := createEnvVars(r)
 
-	return job
+	return &api.Task{
+		Name:   r.Service,
+		Driver: "docker",
+		Config: map[string]interface{}{
+			"image": r.Image,
+			"port_map": []map[string]interface{}{
+				map[string]interface{}{"http": 8080},
+			},
+		},
+		Resources: createResources(r),
+		Services: []*api.Service{
+			&api.Service{
+				Name:      r.Service,
+				PortLabel: "http",
+			},
+		},
+		LogConfig: &api.LogConfig{
+			MaxFiles:      &logFiles,
+			MaxFileSizeMB: &logSize,
+		},
+		Env: envVars,
+	}
+}
+
+func createResources(r requests.CreateFunctionRequest) *api.Resources {
+	taskMemory, taskCPU := createLimits(r)
+
+	return &api.Resources{
+		Networks: []*api.NetworkResource{
+			&api.NetworkResource{
+				DynamicPorts: []api.Port{api.Port{Label: "http"}},
+			},
+		},
+		MemoryMB: &taskMemory,
+		CPU:      &taskCPU,
+	}
+}
+
+func createLimits(r requests.CreateFunctionRequest) (taskMemory, taskCPU int) {
+	taskMemory = 128
+	taskCPU = 100
+
+	if r.Limits == nil {
+		return taskMemory, taskCPU
+	}
+
+	cpu, err := strconv.ParseInt(r.Limits.CPU, 10, 32)
+	if err == nil {
+		taskCPU = int(cpu)
+	}
+
+	mem, err := strconv.ParseInt(r.Limits.Memory, 10, 32)
+	if err == nil {
+		taskMemory = int(mem)
+	}
+
+	return taskMemory, taskCPU
+}
+
+func createDataCenters(r requests.CreateFunctionRequest) []string {
+	if r.Labels != nil && (*r.Labels)["datacenters"] != "" {
+		lbls := (*r.Labels)["datacenters"]
+		dcs := []string{}
+
+		for _, dc := range strings.Split(lbls, ",") {
+			dcs = append(dcs, strings.Trim(dc, " "))
+		}
+
+		return dcs
+	}
+
+	// default datacenter
+	return []string{"dc1"}
+}
+
+func createEnvVars(r requests.CreateFunctionRequest) map[string]string {
+	envVars := map[string]string{}
+
+	if r.EnvVars != nil {
+		envVars = r.EnvVars
+	}
+
+	if r.EnvProcess != "" {
+		envVars["fprocess"] = r.EnvProcess
+	}
+
+	return envVars
+}
+
+func createUpdateStrategy() *api.UpdateStrategy {
+	return &api.UpdateStrategy{
+		MinHealthyTime:  &updateMinHealthyTime,
+		AutoRevert:      &updateAutoRevert,
+		Stagger:         &updateStagger,
+		HealthyDeadline: &updateHealthyDeadline,
+	}
 }
