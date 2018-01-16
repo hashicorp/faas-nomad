@@ -12,10 +12,6 @@ builds:
       - 7
     env:
       - CGO_ENABLED=0
-      - arm64
-
-release:
-	name_template: "{{.ProjectName}}-v{{.Version}}"
 
 dockers:
   - 
