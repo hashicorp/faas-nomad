@@ -107,28 +107,34 @@ func (sr *Resolver) RemoveCacheItem(function string) {
 
 // watch watches consul for changes and updates the cache on change
 func (sr *Resolver) watch() {
-	go func() {
-		dc := sr.watcher.DataCh()
-		for w := range dc {
-			log.Println("Service catalog updated", w.Data())
+	dc := sr.watcher.DataCh()
+	for w := range dc {
+		sr.updateCatalog(w)
+	}
+}
 
-			cs := w.Data().([]*dependency.CatalogService)
+func (sr *Resolver) updateCatalog(w *watch.View) {
+	log.Println("Service catalog updated", w.Data())
 
-			addresses := make([]string, 0)
-			for _, addr := range cs {
-				addresses = append(
-					addresses,
-					fmt.Sprintf("http://%v:%v", addr.Address, addr.ServicePort),
-				)
-			}
+	cs := w.Data().([]*dependency.CatalogService)
+	if len(cs) == 0 {
+		return
+	}
 
-			if len(cs) > 0 {
-				ci, ok := sr.cache.Get(cs[0].ServiceName)
-				if ok {
-					ci.(*cacheItem).addresses = addresses
-					sr.cache.Set(cs[0].ServiceName, ci, cache.DefaultExpiration)
-				}
-			}
-		}
-	}()
+	addresses := make([]string, 0)
+	for _, addr := range cs {
+		addresses = append(
+			addresses,
+			fmt.Sprintf("http://%v:%v", addr.Address, addr.ServicePort),
+		)
+	}
+
+	sr.upsertCache(cs[0].ServiceName, addresses)
+}
+
+func (sr *Resolver) upsertCache(key string, value []string) {
+	if ci, ok := sr.cache.Get(key); ok {
+		ci.(*cacheItem).addresses = value
+		sr.cache.Set(key, ci, cache.DefaultExpiration)
+	}
 }
