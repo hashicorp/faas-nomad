@@ -12,7 +12,3 @@ build:
 
 build_all:
 	goreleaser -snapshot -rm-dist -skip-validate
-
-export_docker_image_tar:
-	mkdir -p ${IMAGE_OUTPUT}
-	docker save quay.io/nicholasjackson/faas-nomad:latest > ${IMAGE_OUTPUT}/faas-nomadd.tar
