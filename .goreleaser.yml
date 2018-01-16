@@ -1,5 +1,6 @@
 builds:
   - binary: faas-nomad
+    ldflags: -s -w -X main.version={{.Version}}
     goos:
       - windows
       - linux
@@ -27,5 +28,5 @@ dockers:
     goos: linux
     goarch: arm
     goarm: 7
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile_arm7
     tag_template: "arm7-{{ .Tag }}"

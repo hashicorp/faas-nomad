@@ -1,7 +1,7 @@
 job "faas-nomadd" {
   datacenters = ["dc1"]
 
-  type = "system"
+  type = "service"
 
   constraint {
     attribute = "${attr.cpu.arch}"
@@ -30,7 +30,7 @@ job "faas-nomadd" {
       }
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:0.2.16"
+        image = "localhost:5000/faas-nomad:latest"
 
         port_map {
           http = 8080
