@@ -1,6 +1,5 @@
 group: travis_latest
 sudo: required
-
 language: go
 
 services:
@@ -13,6 +12,7 @@ env:
   global:
     - secure: Z69lHUit3l6f4mhM8A+5mrsuMW+LD00UBv9Nx2xwtqdqQOrDO9DviSKzqioDSztwz/rG+/oZ6OWasQSlZYkPDhFjtVbWaH2S/hKn86Uwd11NVNmWyEKgHt5CIUCXJ5hqUQuJb5U94c5U8Y8nIJUB4rxtcjpw88yN+0rsGTLaO/yodz/0tG7LCuHScTxmF0mfeUyvDW+y6uGXoxJaVENZE5zkAB/7nmWhUWT8bhJq68Y9uY0F4LkyR37N+m81yRDeQQ6UnCqPMAUoskqINApHKNoa0xaFQ1EOsBBFw+WOsrSzFsKPlbN2DliXFqQcLyhhoxGkoip8wT8OsVVcsI5JZVQ+afBPPya1z9e8/ngUIBL7T8xnsIW3zorPxSjRP3+qdnbMQeLVZddOeJRzZe6VTtCqDrdJBnrso3j9CYrZ/OJqCWbU/UZ0DvwkmsmWxTmxytJ+pjG0p1lV4+b/AkIYMpzX2/cqJChA7X+dYUiAHDp8MHQ4nIchbJUA9XZmcSRCaQYgyk5PnAoCUaZHihHqWmRI3iiSDBetlbP25E+lxtTnFT0pySynXpaUvWDVzFrIefNCJMiZFI+omw8mrxrfigV/QeWKKFsIqtBpfLJ8XzMJkAZGWhZcXcjGcESNkRoYIVD9HKgyuOI1bJnMyInT4mDDZwdWUJe7cqqO7Z/uZ6Q=
     - secure: XSGbatvifbM6EpC4oAaiEe/Hm00+xJl4RtqcVJOUET5gLevk6OtZnu2nEguuulHelJDrb69tv+1UOv54oSnSd8Kl1ag0sqyZ6lOgF5Xw1pvpYh5LGlQuMINUIRGFp/TS1DQ9Kx8KoG33c3AcQreq6uxu04dnRsjU4oX2xV5vKQbsBv+yJenG5dYE+d4awce69hjHFTh5T6v58lzM359SV76K5xj/58jKEuwI+XSS7cDNFO3tjUl7b0A1BdG+Y/SwEijGTCo926T1XqR0RxcRhpgdwhXNTktVEKVeEg4UK8e7qG5/8AyE8QtN2VslR2qbAVJXriupxOOz43/6URQy8LbKefBQPW9JuDeayM1ElYSwkF0uF0tnf9XEw8eMjblEQTG+fIdP9iMo9gjn/UKcNPwBR/+ymZG0UPNYHeJwZE1J16q9QJND2ouOcXKSBSy0IqWzpH1bJtvZqdrnL8u+mdYrKJG5x78aBMqMugd6lnv+ZwryWCV1xz+6ooWHti2G0151Ou3XHY4+sC4d6Vyynq4AJk5KSRl/5vhiDi7WRvgZ1ncEBJvMax8g+1THvlaRINOXUGZJwazUvoubaL1BYa5i0klPVrLpH4aes9CYz0lpc15+kT2zMDV27VJyxi786lMdKTUu95m1DQn2be7TvzE8QvnHaCjdfTf/ImkTnmY=
+    - secure: sVpni9TT4B8+G3U3RWCCyewMS3/VwfTajuByFVyoLp1vR0eROo6uroKebjQXlMx4pYaDUn8tVCWM9G95TGg+vUvquTKI8ibdjhOvY/r6KR9LJ15m6UAOcyI+quGaQ523Sf3/l/L3LRx4ToVnClt25/HXasrg3DB30j3iZmzak6K5WPd2Vr3YuQPRa+BKIltVMBFOjdxQ9tR3U1xfMGv0Jb1pTEOzoanDgxk2gq9E5uosg9e6B/JLJURRHs0BBAxjEpoKArTzCdt5QoSXt1TqvxIzw54gnwwfguSIJd8Tig1XnGVlWBccrjDQfyAV8YdAFDrOIaZnzOV4XEZ4k8eWqgK/mpDvJIHdN1r5SLzzGpjQ4QAY1sNitqq4ti9k+lv0fdfbGPyIv5VqGDSb18aGJvT5/wIGKqwiQO8JepzvuhFFd+YpI8iOOzj95tPHv6VXHRZ3vs98ujHOfha4iKQwAjIsG1CXiE4ScUoDhQ8BiKGx6Ne76TnoKBZUrBDCX2YmeG8CmBCAVB8u49aFhiA1hEQ2D1MIs9m+/s+MthPi/KbvR5JM01mSnKji5+jP63ZDmrvtKqFUttIY1Uhye2cjcymxQp+0CbIN0jiUKCzXUcpFDw5XbSN81QmcYVRhJspNzn3+07h1CSvuBDLRi1jzpAUWLjbHSOHj2Fw1fo5qQ5M=
 
 before_install:
   - sudo apt-get update
@@ -40,14 +40,8 @@ script:
   - nomad status faas-nomadd
   - nomad logs -job faas-nomadd nomadd
   - docker ps
-  - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=$FAAS_GATEWAY
-    go test ./tests -v
+  - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=$FAAS_GATEWAY go test ./tests -v
   - nomad status
 
-after_success:
-  if ([ "$TRAVIS_BRANCH" == "master" ] || [ ! -z "$TRAVIS_TAG" ]) && 
-      [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
-    cd $GOPATH/src/github.com/hashicorp/faas-nomad;
-    docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD" quay.io;
-    goreleaser --rm-dist
-  fi
+after_success: 
+  - travis_deploy.sh
