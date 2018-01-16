@@ -40,10 +40,11 @@ script:
   - nomad run nomad_job_files/faas_travis.hcl || true
   - sleep 10
   - nomad status faas-nomadd
-  - nomad logs -job faas-nomadd nomadd
   - docker ps
   - cd $GOPATH/src/github.com/openfaas/certify-incubator && gateway_url=$FAAS_GATEWAY go test ./tests -v
   - nomad status
+  - nomad logs -job faas-nomadd nomadd
+  - nomad logs -stderr -job faas-nomadd nomadd
 
 after_success: 
   - cd $GOPATH/src/github.com/hashicorp/faas-nomad

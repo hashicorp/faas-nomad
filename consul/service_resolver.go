@@ -115,13 +115,14 @@ func (sr *Resolver) watch() {
 
 func (sr *Resolver) updateCatalog(w *watch.View) {
 	log.Println("Service catalog updated", w.Data())
+	addresses := make([]string, 0)
 
 	cs := w.Data().([]*dependency.CatalogService)
-	if len(cs) == 0 {
+	if len(cs) < 1 {
+		sr.upsertCache(cs[0].ServiceName, addresses)
 		return
 	}
 
-	addresses := make([]string, 0)
 	for _, addr := range cs {
 		addresses = append(
 			addresses,
