@@ -1,3 +1,5 @@
+group: travis_latest
+
 language: go
 
 services:
@@ -12,14 +14,14 @@ env:
     - secure: XSGbatvifbM6EpC4oAaiEe/Hm00+xJl4RtqcVJOUET5gLevk6OtZnu2nEguuulHelJDrb69tv+1UOv54oSnSd8Kl1ag0sqyZ6lOgF5Xw1pvpYh5LGlQuMINUIRGFp/TS1DQ9Kx8KoG33c3AcQreq6uxu04dnRsjU4oX2xV5vKQbsBv+yJenG5dYE+d4awce69hjHFTh5T6v58lzM359SV76K5xj/58jKEuwI+XSS7cDNFO3tjUl7b0A1BdG+Y/SwEijGTCo926T1XqR0RxcRhpgdwhXNTktVEKVeEg4UK8e7qG5/8AyE8QtN2VslR2qbAVJXriupxOOz43/6URQy8LbKefBQPW9JuDeayM1ElYSwkF0uF0tnf9XEw8eMjblEQTG+fIdP9iMo9gjn/UKcNPwBR/+ymZG0UPNYHeJwZE1J16q9QJND2ouOcXKSBSy0IqWzpH1bJtvZqdrnL8u+mdYrKJG5x78aBMqMugd6lnv+ZwryWCV1xz+6ooWHti2G0151Ou3XHY4+sC4d6Vyynq4AJk5KSRl/5vhiDi7WRvgZ1ncEBJvMax8g+1THvlaRINOXUGZJwazUvoubaL1BYa5i0klPVrLpH4aes9CYz0lpc15+kT2zMDV27VJyxi786lMdKTUu95m1DQn2be7TvzE8QvnHaCjdfTf/ImkTnmY=
 
 before_install:
-  - sudo apt-get update
-  - sudo apt-get install unzip curl
+  - apt-get update
+  - apt-get install unzip curl
   - curl https://releases.hashicorp.com/nomad/0.7.1/nomad_0.7.1_linux_amd64.zip -o nomad.zip
   - curl https://releases.hashicorp.com/consul/1.0.0/consul_1.0.0_linux_amd64.zip -o consul.zip
-  - sudo unzip -o -d  /usr/local/bin ./nomad.zip
-  - sudo unzip -o -d  /usr/local/bin ./consul.zip
-  - sudo chmod +x /usr/local/bin/consul
-  - sudo chmod +x /usr/local/bin/nomad
+  - unzip -o -d  /usr/local/bin ./nomad.zip
+  - unzip -o -d  /usr/local/bin ./consul.zip
+  - chmod +x /usr/local/bin/consul
+  - chmod +x /usr/local/bin/nomad
   - make deps
   - git clone -b additions https://github.com/nicholasjackson/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
   - docker run -d -p 5000:5000 --restart=always --name registry registry:2
@@ -30,7 +32,7 @@ script:
   - make build_all
   - docker tag quay.io/nicholasjackson/faas-nomad:latest localhost:5000/faas-nomad:latest
   - docker push localhost:5000/faas-nomad:latest
-  - sudo IMAGE_OUTPUT=/images make export_docker_image_tar
+  - IMAGE_OUTPUT=/images make export_docker_image_tar
   - echo "Run Functional Tests"
   - source ./startNomad.sh
   - nomad run nomad_job_files/faas_travis.hcl

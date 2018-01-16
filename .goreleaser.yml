@@ -1,5 +1,6 @@
 builds:
   - binary: faas-nomad
+    ldflags: -s -w -X main.version={{.Version}}
     goos:
       - windows
       - linux
