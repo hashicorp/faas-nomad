@@ -56,10 +56,26 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	urls, _ := p.resolver.Resolve(service)
 	if len(urls) == 0 {
-		rw.WriteHeader(http.StatusNotFound)
+		http.Error(rw, "Function Not Found", http.StatusNotFound)
+		p.logger.Error("Function Not Found", service)
+
 		return
 	}
 
+	respBody, respHeaders, err := p.callDownstreamFunction(service, urls, r)
+
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		p.logger.Error("Internal server error", "error", err)
+
+		return
+	}
+
+	setHeaders(respHeaders, rw)
+	rw.Write(respBody)
+}
+
+func (p *Proxy) callDownstreamFunction(service string, urls []string, r *http.Request) ([]byte, http.Header, error) {
 	reqBody, _ := ioutil.ReadAll(r.Body)
 	reqHeaders := r.Header
 	defer r.Body.Close()
@@ -73,7 +89,6 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 		// add the querystring from the request
 		endpoint.RawQuery = r.URL.RawQuery
-
 		respBody, respHeaders, err = p.client.CallAndReturnResponse(endpoint.String(), reqBody, reqHeaders)
 		if err != nil {
 			return err
@@ -82,20 +97,15 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		p.logger.Error("Internal server error", "error", err)
+	return respBody, respHeaders, err
+}
 
-		return
-	}
-
-	for k, v := range respHeaders {
+func setHeaders(headers http.Header, rw http.ResponseWriter) {
+	for k, v := range headers {
 		if len(v) > 0 {
 			rw.Header().Set(k, v[0])
 		}
 	}
-
-	rw.Write(respBody)
 }
 
 func (p *Proxy) getLoadbalancer(service string, endpoints []string, statsAddress string) ultraclient.Client {
