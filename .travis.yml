@@ -33,7 +33,6 @@ script:
   - make build_all
   - docker tag quay.io/nicholasjackson/faas-nomad:latest localhost:5000/faas-nomad:latest
   - docker push localhost:5000/faas-nomad:latest
-  - sudo IMAGE_OUTPUT=/images make export_docker_image_tar
   - echo "Run Functional Tests"
   - source ./startNomad.sh
   - nomad run nomad_job_files/faas_travis.hcl || true
