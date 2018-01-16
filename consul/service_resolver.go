@@ -54,7 +54,7 @@ func NewResolver(address string) *Resolver {
 		cache:     pc,
 	}
 
-	cr.watch()
+	go cr.watch()
 
 	return cr
 }
