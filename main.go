@@ -31,24 +31,27 @@ func setupLogging() hclog.Logger {
 		logLevel = level
 	}
 
-	output := os.Stdout
-	if logFile := os.Getenv("logger_output"); logFile != "" {
-		f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
-		if err == nil {
-			output = f
-		} else {
-			log.Printf("Unable to open file for output, defaulting to std out: %s\n", err.Error())
-		}
-	}
-
 	appLogger := hclog.New(&hclog.LoggerOptions{
 		Name:       "nomadd",
 		Level:      hclog.LevelFromString(logLevel),
 		JSONFormat: logJSON,
-		Output:     output,
+		Output:     createLogFile(),
 	})
 
 	return appLogger
+}
+
+func createLogFile() *os.File {
+	if logFile := os.Getenv("logger_output"); logFile != "" {
+		f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
+		if err == nil {
+			return f
+		}
+
+		log.Printf("Unable to open file for output, defaulting to std out: %s\n", err.Error())
+	}
+
+	return os.Stdout
 }
 
 func main() {
