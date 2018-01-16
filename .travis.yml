@@ -49,4 +49,4 @@ after_success:
   - cd $GOPATH/src/github.com/hashicorp/faas-nomad
   - pwd
   - bash <(curl -s https://codecov.io/bash)
-  - travis_deploy.sh
+  - ./travis_deploy.sh
