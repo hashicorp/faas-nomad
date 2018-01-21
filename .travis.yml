@@ -28,7 +28,7 @@ before_install:
   - make deps
   - git clone -b additions https://github.com/nicholasjackson/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
   - docker run -d -p 5000:5000 --restart=always --name registry registry:2
-  - go get github.com/axw/gocov/gocov
+  - go get github.com/wadey/gocovmerge
 
 before_script:
   - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
@@ -38,7 +38,6 @@ before_script:
 script:
   - echo "Build and Test"
   - make test
-  - go test -race -coverprofile=coverage.txt -covermode=atomic ./handlers
   - make build_all
   - docker tag quay.io/nicholasjackson/faas-nomad:latest localhost:5000/faas-nomad:latest
   - docker push localhost:5000/faas-nomad:latest
@@ -54,11 +53,10 @@ script:
   - nomad logs -stderr -job faas-nomadd nomadd
 
 after_script:
-  - gocov test ./... > c.out
+  - make cover
   - ./cc-test-reporter after-build -t gocov --exit-code $TRAVIS_TEST_RESULT
 
 after_success: 
   - cd $GOPATH/src/github.com/hashicorp/faas-nomad
   - pwd
-  - bash <(curl -s https://codecov.io/bash)
   - ./travis_deploy.sh
