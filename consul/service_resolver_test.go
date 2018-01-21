@@ -26,10 +26,7 @@ func setup(t *testing.T, queryError error) (*Resolver, *MockWatcher, *cache.Cach
 	watcher := &MockWatcher{data: make(chan []*dependency.CatalogService)}
 	watcher.On("Add", mock.Anything).Return(true, nil)
 	watcher.On("Remove", mock.Anything).Return(true)
-	watcher.On("ItterateDataCh", mock.Anything).Return(
-		make(chan []*dependency.CatalogService),
-		serviceQuery,
-	)
+	watcher.On("ItterateDataCh", mock.Anything).Return(serviceQuery)
 
 	pc := cache.New(5*time.Minute, 10*time.Minute)
 	return &Resolver{
@@ -122,10 +119,9 @@ func TestResolveWithUnableToFetchReturnsError(t *testing.T) {
 
 func TestWatchWithNewServicesUpdatesCatalog(t *testing.T) {
 	r, w, _, _ := setup(t, nil)
-
 	go r.watch()
-	time.Sleep(1 * time.Millisecond)
 
+	time.Sleep(1 * time.Millisecond)
 	r.Resolve("test")
 
 	w.data <- []*dependency.CatalogService{

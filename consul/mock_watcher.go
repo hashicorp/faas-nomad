@@ -1,8 +1,6 @@
 package consul
 
 import (
-	"log"
-
 	"github.com/hashicorp/consul-template/dependency"
 	"github.com/stretchr/testify/mock"
 )
@@ -30,10 +28,9 @@ func (m *MockWatcher) Remove(d dependency.Dependency) bool {
 // ItterateDataCh itterates over the watchers data channel and calls a function
 func (m *MockWatcher) ItterateDataCh(f itterateFunc) {
 	args := m.Mock.Called(f)
-	m.data = args.Get(0).(chan []*dependency.CatalogService)
+	dep := args.Get(0).(dependency.Dependency)
 
 	for cs := range m.data {
-		log.Println("dep:", args.Get(1).(dependency.Dependency).String())
-		f(args.Get(1).(dependency.Dependency), cs)
+		f(dep, cs)
 	}
 }
