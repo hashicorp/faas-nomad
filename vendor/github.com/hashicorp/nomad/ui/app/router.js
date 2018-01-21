@@ -16,8 +16,8 @@ Router.map(function() {
     });
   });
 
-  this.route('nodes', function() {
-    this.route('node', { path: '/:node_id' });
+  this.route('clients', function() {
+    this.route('client', { path: '/:node_id' });
   });
 
   this.route('servers', function() {
@@ -25,7 +25,11 @@ Router.map(function() {
   });
 
   this.route('allocations', function() {
-    this.route('allocation', { path: '/:allocation_id' });
+    this.route('allocation', { path: '/:allocation_id' }, function() {
+      this.route('task', { path: '/:name' }, function() {
+        this.route('logs');
+      });
+    });
   });
 
   this.route('settings', function() {

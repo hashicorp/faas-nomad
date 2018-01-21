@@ -34,6 +34,9 @@ func (s *HTTPServer) AllocsRequest(resp http.ResponseWriter, req *http.Request) 
 	if out.Allocations == nil {
 		out.Allocations = make([]*structs.AllocListStub, 0)
 	}
+	for _, alloc := range out.Allocations {
+		alloc.SetEventDisplayMessages()
+	}
 	return out.Allocations, nil
 }
 
@@ -70,6 +73,7 @@ func (s *HTTPServer) AllocSpecificRequest(resp http.ResponseWriter, req *http.Re
 		alloc = alloc.Copy()
 		alloc.Job.Payload = decoded
 	}
+	alloc.SetEventDisplayMessages()
 
 	return alloc, nil
 }
@@ -115,7 +119,8 @@ func (s *HTTPServer) ClientGCRequest(resp http.ResponseWriter, req *http.Request
 		return nil, structs.ErrPermissionDenied
 	}
 
-	return nil, s.agent.Client().CollectAllAllocs()
+	s.agent.Client().CollectAllAllocs()
+	return nil, nil
 }
 
 func (s *HTTPServer) allocGC(allocID string, resp http.ResponseWriter, req *http.Request) (interface{}, error) {
@@ -131,7 +136,12 @@ func (s *HTTPServer) allocGC(allocID string, resp http.ResponseWriter, req *http
 	} else if aclObj != nil && !aclObj.AllowNsOp(namespace, acl.NamespaceCapabilitySubmitJob) {
 		return nil, structs.ErrPermissionDenied
 	}
-	return nil, s.agent.Client().CollectAllocation(allocID)
+
+	if !s.agent.Client().CollectAllocation(allocID) {
+		// Could not find alloc
+		return nil, fmt.Errorf("unable to collect allocation: not present")
+	}
+	return nil, nil
 }
 
 func (s *HTTPServer) allocSnapshot(allocID string, resp http.ResponseWriter, req *http.Request) (interface{}, error) {

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-	"github.com/elazarl/go-bindata-assetfs"
+	assetfs "github.com/elazarl/go-bindata-assetfs"
 	"github.com/hashicorp/nomad/helper/tlsutil"
 	"github.com/hashicorp/nomad/nomad/structs"
 	"github.com/rs/cors"
@@ -24,12 +24,6 @@ import (
 const (
 	// ErrInvalidMethod is used if the HTTP method is not supported
 	ErrInvalidMethod = "Invalid method"
-
-	// scadaHTTPAddr is the address associated with the
-	// HTTPServer. When populating an ACL token for a request,
-	// this is checked to switch between the ACLToken and
-	// AtlasACLToken
-	scadaHTTPAddr = "SCADA"
 
 	// ErrEntOnly is the error returned if accessing an enterprise only
 	// endpoint
@@ -81,6 +75,7 @@ func NewHTTPServer(agent *Agent, config *Config) (*HTTPServer, error) {
 			CAFile:               config.TLSConfig.CAFile,
 			CertFile:             config.TLSConfig.CertFile,
 			KeyFile:              config.TLSConfig.KeyFile,
+			KeyLoader:            config.TLSConfig.GetKeyLoader(),
 		}
 		tlsConfig, err := tlsConf.IncomingTLSConfig()
 		if err != nil {
@@ -111,28 +106,6 @@ func NewHTTPServer(agent *Agent, config *Config) (*HTTPServer, error) {
 	go http.Serve(ln, gzip(mux))
 
 	return srv, nil
-}
-
-// newScadaHttp creates a new HTTP server wrapping the SCADA
-// listener such that HTTP calls can be sent from the brokers.
-func newScadaHttp(agent *Agent, list net.Listener) *HTTPServer {
-	// Create the mux
-	mux := http.NewServeMux()
-
-	// Create the server
-	srv := &HTTPServer{
-		agent:    agent,
-		mux:      mux,
-		listener: list,
-		logger:   agent.logger,
-		Addr:     scadaHTTPAddr,
-	}
-	srv.registerHandlers(false) // Never allow debug for SCADA
-
-	// Handle requests with gzip compression
-	go http.Serve(list, gziphandler.GzipHandler(mux))
-
-	return srv
 }
 
 // tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
@@ -185,7 +158,7 @@ func (s *HTTPServer) registerHandlers(enableDebug bool) {
 	s.mux.HandleFunc("/v1/acl/token", s.wrap(s.ACLTokenSpecificRequest))
 	s.mux.HandleFunc("/v1/acl/token/", s.wrap(s.ACLTokenSpecificRequest))
 
-	s.mux.HandleFunc("/v1/client/fs/", s.wrap(s.FsRequest))
+	s.mux.Handle("/v1/client/fs/", wrapCORS(s.wrap(s.FsRequest)))
 	s.mux.HandleFunc("/v1/client/gc", s.wrap(s.ClientGCRequest))
 	s.mux.Handle("/v1/client/stats", wrapCORS(s.wrap(s.ClientStatsRequest)))
 	s.mux.Handle("/v1/client/allocation/", wrapCORS(s.wrap(s.ClientAllocRequest)))
@@ -278,7 +251,7 @@ func (e *codedError) Code() int {
 func handleUI(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		header := w.Header()
-		header.Add("Content-Security-Policy", "default-src 'none'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'none'; frame-ancestors 'none'")
+		header.Add("Content-Security-Policy", "default-src 'none'; connect-src *; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'none'; frame-ancestors 'none'")
 		h.ServeHTTP(w, req)
 		return
 	})

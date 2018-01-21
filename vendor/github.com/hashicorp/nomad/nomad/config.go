@@ -245,6 +245,18 @@ type Config struct {
 
 	// SentinelConfig is this Agent's Sentinel configuration
 	SentinelConfig *config.SentinelConfig
+
+	// StatsCollectionInterval is the interval at which the Nomad server
+	// publishes metrics which are periodic in nature like updating gauges
+	StatsCollectionInterval time.Duration
+
+	// DisableTaggedMetrics determines whether metrics will be displayed via a
+	// key/value/tag format, or simply a key/value format
+	DisableTaggedMetrics bool
+
+	// BackwardsCompatibleMetrics determines whether to show methods of
+	// displaying metrics for older verions, or to only show the new format
+	BackwardsCompatibleMetrics bool
 }
 
 // CheckVersion is used to check if the ProtocolVersion is valid
@@ -300,6 +312,7 @@ func DefaultConfig() *Config {
 		ConsulConfig:                     config.DefaultConsulConfig(),
 		VaultConfig:                      config.DefaultVaultConfig(),
 		RPCHoldTimeout:                   5 * time.Second,
+		StatsCollectionInterval:          1 * time.Minute,
 		TLSConfig:                        &config.TLSConfig{},
 		ReplicationBackoff:               30 * time.Second,
 		SentinelGCInterval:               30 * time.Second,
@@ -335,13 +348,13 @@ func DefaultConfig() *Config {
 
 // tlsConfig returns a TLSUtil Config based on the server configuration
 func (c *Config) tlsConfig() *tlsutil.Config {
-	tlsConf := &tlsutil.Config{
+	return &tlsutil.Config{
 		VerifyIncoming:       true,
 		VerifyOutgoing:       true,
 		VerifyServerHostname: c.TLSConfig.VerifyServerHostname,
 		CAFile:               c.TLSConfig.CAFile,
 		CertFile:             c.TLSConfig.CertFile,
 		KeyFile:              c.TLSConfig.KeyFile,
+		KeyLoader:            c.TLSConfig.GetKeyLoader(),
 	}
-	return tlsConf
 }

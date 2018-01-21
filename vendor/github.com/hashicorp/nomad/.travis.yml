@@ -32,7 +32,6 @@ matrix:
     - os: osx
       osx_image: xcode9.1
 
-
 cache:
   directories:
     - ui/node_modules
@@ -44,6 +43,7 @@ before_install:
 install:
   - if [[ -z "$SKIP_NOMAD_TESTS" ]]; then make deps ; fi
   - if [[ "$RUN_STATIC_CHECKS" ]]; then make lint-deps ; fi
+  - if [[ "$RUN_UI_TESTS" ]]; then . $HOME/.nvm/nvm.sh && cd ui && nvm use && cd .. ; fi
 
 script:
   - sudo -E "PATH=$PATH" make travis

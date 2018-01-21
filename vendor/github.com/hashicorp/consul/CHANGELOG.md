@@ -1,12 +1,22 @@
-## 1.0.2 (UNRELEASED)
-
-FEATURES:
+## 1.0.2 (December 15, 2017)
 
 IMPROVEMENTS:
+
+* agent: Updated Serf to activate a new feature that resizes its internal message broadcast queue size based on the cluster size. This helps control the amount of memory used by the agent, but prevents spurious warnings about dropped messages in very large Consul clusters. The intent queue warnings have also been disabled since queue telemetry was already available and a simple fixed limit isn't applicable to all clusters, so it could cause a high rate of warnings about intent queue depth that were not useful or indicative of an actual issue. [[GH-3705](https://github.com/hashicorp/consul/issues/3705)]
+* agent: Updates posener/complete library to 1.0, which allows autocomplete for flags after an equal sign, and simplifies autocomplete functions. [[GH-3646](https://github.com/hashicorp/consul/issues/3646)]
 
 BUG FIXES:
 
 * agent: Updated memberlist to pull in a fix for negative RTT measurements and their associated log messages about rejected coordinates. [[GH-3704](https://github.com/hashicorp/consul/issues/3704)]
+* agent: Fixed an issue where node metadata specified via command line arguments overrode node metadata specified by configuration files, instead of merging as was done in versions of Consul prior to 1.0. [[GH-3716](https://github.com/hashicorp/consul/issues/3716)]
+* agent: Fixed an issue with the /v1/session/create API where it wasn't possible to create a session without the `serfHealth` check. This is now possible again by including the `checks` key in the JSON body with an empty list. [[GH-3732](https://github.com/hashicorp/consul/issues/3732)]
+* agent: Fixed an issue with anti-entropy syncing where checks for services with tags would cause periodic updates to the catalog, even when nothing had changed, causing the Raft index to grow slowly (~2 minutes per node per check) over time, and causing unnecessary writes and wake ups for blocking queries. [[GH-3642](https://github.com/hashicorp/consul/issues/3642)], [[GH-3259](https://github.com/hashicorp/consul/issues/3259)]
+* cli: Added missing support for `-base64` option to `consul kv get` command. [[GH-3736](https://github.com/hashicorp/consul/issues/3736)]
+* server: Fixed an issue with KV store tombstone tracking where bin tracking was being confused by monotonic time information carried in time stamps, resulting in many unnecessary bins. [[GH-3670](https://github.com/hashicorp/consul/issues/3670)]
+* server: (Consul Enterprise) Fixed an issue with Network Segments where servers would not properly flood-join each other into all segments.
+* server: Fixed an issue where it wasn't possible to disable Autopilot's dead server cleanup behavior using configuration files. [[GH-3730](https://github.com/hashicorp/consul/issues/3730)]
+* server: Removed the 60 second timeout when restoring snapshots, which could cause large restores to fail on slower servers. [[GH-3326](https://github.com/hashicorp/consul/issues/3326)]
+* server: Fixed a goroutine leak during keyring operations when errors are encountered. [[GH-3728](https://github.com/hashicorp/consul/issues/3728)]
 
 ## 1.0.1 (November 20, 2017)
 

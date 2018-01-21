@@ -17,15 +17,14 @@ import (
 var retryDelay = 2 * time.Second
 
 // MakeProxy creates a proxy for HTTP web requests which can be routed to a function.
-func MakeProxy(client ProxyClient, resolver consul.ServiceResolver, statsDAddress string, logger hclog.Logger, stats *statsd.Client) http.HandlerFunc {
+func MakeProxy(client ProxyClient, resolver consul.ServiceResolver, logger hclog.Logger, stats *statsd.Client) http.HandlerFunc {
 	c := cache.New(5*time.Minute, 10*time.Minute)
 	p := &Proxy{
-		lbCache:       c,
-		client:        client,
-		resolver:      resolver,
-		stats:         stats,
-		statsDAddress: statsDAddress,
-		logger:        logger.Named("proxy_client"),
+		lbCache:  c,
+		client:   client,
+		resolver: resolver,
+		stats:    stats,
+		logger:   logger.Named("proxy_client"),
 	}
 
 	return func(rw http.ResponseWriter, r *http.Request) {
@@ -35,12 +34,11 @@ func MakeProxy(client ProxyClient, resolver consul.ServiceResolver, statsDAddres
 
 // Proxy is a http.Handler which implements the ability to call a downstream function
 type Proxy struct {
-	lbCache       *cache.Cache
-	client        ProxyClient
-	resolver      consul.ServiceResolver
-	stats         *statsd.Client
-	statsDAddress string
-	logger        hclog.Logger
+	lbCache  *cache.Cache
+	client   ProxyClient
+	resolver consul.ServiceResolver
+	stats    *statsd.Client
+	logger   hclog.Logger
 }
 
 func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
@@ -86,7 +84,7 @@ func (p *Proxy) callDownstreamFunction(service string, urls []string, r *http.Re
 	var respHeaders http.Header
 	var err error
 
-	lb := p.getLoadbalancer(service, urls, p.statsDAddress)
+	lb := p.getLoadbalancer(service, urls)
 	lb.Do(func(endpoint url.URL) error {
 		// add the querystring from the request
 		endpoint.RawQuery = r.URL.RawQuery
@@ -109,7 +107,7 @@ func setHeaders(headers http.Header, rw http.ResponseWriter) {
 	}
 }
 
-func (p *Proxy) getLoadbalancer(service string, endpoints []string, statsAddress string) ultraclient.Client {
+func (p *Proxy) getLoadbalancer(service string, endpoints []string) ultraclient.Client {
 	urls := make([]url.URL, 0)
 	for _, e := range endpoints {
 		url, err := url.Parse(e)
@@ -126,20 +124,16 @@ func (p *Proxy) getLoadbalancer(service string, endpoints []string, statsAddress
 		return l
 	}
 
-	lb := createLoadbalancer(urls, statsAddress, p.logger, service)
+	lb := createLoadbalancer(urls, p.stats, service)
 	p.lbCache.Set(service, lb, cache.DefaultExpiration)
 
 	return lb
 }
 
-func createLoadbalancer(endpoints []url.URL, statsDAddr string, logger hclog.Logger, service string) ultraclient.Client {
-	log := logger.Named("load_balancer")
+func createLoadbalancer(endpoints []url.URL, statsD *statsd.Client, service string) ultraclient.Client {
 	lb := ultraclient.RoundRobinStrategy{}
 	bs := ultraclient.ExponentialBackoff{}
-	sd, err := ultraclient.NewDogStatsD(url.URL{Host: statsDAddr})
-	if err != nil {
-		log.Error("Error creating statsD connection", "error", err)
-	}
+	sd := ultraclient.NewDogStatsDWithClient(statsD)
 
 	config := ultraclient.Config{
 		Timeout:                30 * time.Second,

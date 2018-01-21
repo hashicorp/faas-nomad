@@ -5,13 +5,58 @@ services:
             - "/var/run/docker.sock:/var/run/docker.sock"
         ports:
             - 8080:8080
-        image: functions/gateway:0.6.9
+        image: functions/gateway:0.6.15
         networks:
             - functions
         environment:
             read_timeout: 10    # set both here, and on your functions
             write_timeout: 10   # set both here, and on your functions
             dnsrr: "true"  # Temporarily use dnsrr in place of VIP while issue persists on PWD
+            faas_nats_address: "nats"
+            faas_nats_port: 4222
+        deploy:
+            resources:
+                limits:
+                    memory: 100M
+                reservations:
+                    memory: 50M
+            restart_policy:
+                condition: on-failure
+                delay: 5s
+                max_attempts: 20
+                window: 380s
+            placement:
+                constraints:
+                    - 'node.role == manager'
+                    - 'node.platform.os == linux'
+
+    nats:
+        image: nats-streaming:0.6.0
+        # Uncomment the following port mappings if you wish to expose the 
+        # NATS client and/or management ports
+        # ports:
+        #     - 4222:4222
+        #     - 8222:8222
+        command: "--store memory --cluster_id faas-cluster"
+        networks:
+            - functions
+        deploy:
+            resources:
+                limits:
+                    memory: 125M
+                reservations:
+                    memory: 50M
+            placement:
+                constraints:
+                    - 'node.platform.os == linux'
+
+    queue-worker:
+        image: functions/queue-worker:0.4
+        networks:
+            - functions
+        environment:
+            max_inflight: "1"
+            ack_timeout: "30s"    # Max duration of any async task / request
         deploy:
             resources:
                 limits:
@@ -25,8 +70,8 @@ services:
                 window: 380s
             placement:
                 constraints:
-                    - 'node.role == manager'
                     - 'node.platform.os == linux'
+
     # End
 
     # Start monitoring
@@ -59,8 +104,10 @@ services:
             - '-config.file=/alertmanager.yml'
         networks:
             - functions
-        ports:
-            - 9093:9093
+        # Uncomment the following port mapping if you wish to expose the Prometheus
+        # Alertmanager UI.
+        # ports:
+        #     - 9093:9093
         deploy:
             resources:
                 limits:
@@ -207,4 +254,4 @@ services:
 networks:
     functions:
         driver: overlay
-        #attachable: true
+        attachable: true

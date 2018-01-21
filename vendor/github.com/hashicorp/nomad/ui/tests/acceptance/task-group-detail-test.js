@@ -3,6 +3,7 @@ import { click, find, findAll, fillIn, currentURL, visit } from 'ember-native-do
 import { test } from 'qunit';
 import moduleForAcceptance from 'nomad-ui/tests/helpers/module-for-acceptance';
 import { formatBytes } from 'nomad-ui/helpers/format-bytes';
+import moment from 'moment';
 
 const { $ } = Ember;
 
@@ -157,8 +158,8 @@ test('each allocation should show basic information about the allocation', funct
         .find('td:eq(1)')
         .text()
         .trim(),
-      allocation.modifyIndex,
-      'Allocation modify index'
+      moment(allocation.modifyTime / 1000000).format('MM/DD HH:mm:ss'),
+      'Allocation modify time'
     );
     assert.equal(
       allocationRow
@@ -197,7 +198,7 @@ test('each allocation should show basic information about the allocation', funct
   click(allocationRow.find('td:eq(5) a').get(0));
 
   andThen(() => {
-    assert.equal(currentURL(), `/nodes/${allocation.nodeId}`, 'Node links to node page');
+    assert.equal(currentURL(), `/clients/${allocation.nodeId}`, 'Node links to node page');
   });
 });
 

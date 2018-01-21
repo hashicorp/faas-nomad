@@ -3,14 +3,15 @@ layout: "guides"
 page_title: "Resource Quotas"
 sidebar_current: "guides-quotas"
 description: |-
-  Nomad Enterprise provides support for resource quotas, which allows operators
+  Nomad Enterprise provides support for resource quotas, which allow operators
   to restrict the aggregate resource usage of namespaces.
 ---
 
 # Resource Quotas
 
-Nomad Enterprise provides support for resource quotas, which allows operators to
-restrict the aggregate resource usage of namespaces.
+[Nomad Enterprise](https://www.hashicorp.com/products/nomad/) provides support 
+for resource quotas, which allow operators to restrict the aggregate resource 
+usage of namespaces.
 
 ~> **Enterprise Only!** This functionality only exists in Nomad Enterprise.
 This is not present in the open source version of Nomad.
@@ -70,7 +71,7 @@ limit {
 
 A quota specification is composed of one or more resource limits. Each limit
 applies to a particular Nomad region. Within the limit object, operators can
-specify the allowed cpu and memory usage.
+specify the allowed CPU and memory usage.
 
 To create the particular quota, it is as simple as running:
 

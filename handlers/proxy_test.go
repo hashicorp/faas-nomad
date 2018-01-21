@@ -32,7 +32,7 @@ func setupProxy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *htt
 
 	logger := hclog.Default()
 
-	return MakeProxy(mockProxyClient, mockServiceResolver, "", logger, nil), rr, r
+	return MakeProxy(mockProxyClient, mockServiceResolver, logger, nil), rr, r
 }
 
 func TestProxyHandlerOnGETReturnsBadRequest(t *testing.T) {

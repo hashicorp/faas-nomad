@@ -149,7 +149,6 @@ paths:
     post:
       summary: 'Invoke a function asynchronously in OpenFaaS'
       description: >-
-        ### This endpoint requires the asynchronous stack.
         See https://github.com/openfaas/faas/blob/master/guide/asynchronous.md.
       parameters:
         - in: path
@@ -225,6 +224,11 @@ definitions:
         items:
           type: string
         description: Overrides to environmental variables
+      secrets:
+        type: array
+        items:
+          type: string
+        description: An array of names of secrets that are required to be loaded from the Docker Swarm.
       registryAuth:
         type: string
         description: >-

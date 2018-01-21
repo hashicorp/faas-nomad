@@ -14,6 +14,11 @@ type DogStatsD struct {
 	client *statsd.Client
 }
 
+// NewDogStatsDWithClient creates a new implementation of the DogStatsD metrics client with an exiting client
+func NewDogStatsDWithClient(c *statsd.Client) *DogStatsD {
+	return &DogStatsD{client: c}
+}
+
 // NewDogStatsD creates a new implementation of the DogStatsD metrics client
 func NewDogStatsD(server url.URL) (*DogStatsD, error) {
 	var err error

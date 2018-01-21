@@ -761,7 +761,8 @@ $ curl \
     },
     "CreateIndex": 9,
     "ModifyIndex": 13,
-    "CreateTime": 1495755675944527600
+    "CreateTime": 1495755675944527600,
+    "ModifyTime": 1495755675944527600
   }
 ]
 ```
@@ -1476,7 +1477,7 @@ $ curl \
       "NodesExhausted": 1,
       "ClassExhausted": null,
       "DimensionExhausted": {
-        "cpu exhausted": 1
+        "cpu": 1
       }
     }
   },

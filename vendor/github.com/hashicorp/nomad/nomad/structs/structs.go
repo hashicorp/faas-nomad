@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/base32"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ import (
 
 	"github.com/gorhill/cronexpr"
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/go-multierror"
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/go-version"
 	"github.com/hashicorp/nomad/acl"
 	"github.com/hashicorp/nomad/helper"
@@ -44,6 +45,9 @@ var (
 
 	// validPolicyName is used to validate a policy name
 	validPolicyName = regexp.MustCompile("^[a-zA-Z0-9-]{1,128}$")
+
+	// b32 is a lowercase base32 encoding for use in URL friendly service hashes
+	b32 = base32.NewEncoding(strings.ToLower("abcdefghijklmnopqrstuvwxyz234567"))
 )
 
 type MessageType uint8
@@ -510,6 +514,14 @@ type ApplyPlanResultsRequest struct {
 	// deployments. This allows the scheduler to cancel any unneeded deployment
 	// because the job is stopped or the update block is removed.
 	DeploymentUpdates []*DeploymentStatusUpdate
+
+	// EvalID is the eval ID of the plan being applied. The modify index of the
+	// evaluation is updated as part of applying the plan to ensure that subsequent
+	// scheduling events for the same job will wait for the index that last produced
+	// state changes. This is necessary for blocked evaluations since they can be
+	// processed many times, potentially making state updates, without the state of
+	// the evaluation itself being updated.
+	EvalID string
 }
 
 // AllocUpdateRequest is used to submit changes to allocations, either
@@ -1222,8 +1234,24 @@ const (
 	BytesInMegabyte = 1024 * 1024
 )
 
-// DefaultResources returns the default resources for a task.
+// DefaultResources is a small resources object that contains the
+// default resources requests that we will provide to an object.
+// ---  THIS FUNCTION IS REPLICATED IN api/resources.go and should
+// be kept in sync.
 func DefaultResources() *Resources {
+	return &Resources{
+		CPU:      100,
+		MemoryMB: 300,
+		IOPS:     0,
+	}
+}
+
+// MinResources is a small resources object that contains the
+// absolute minimum resources that we will provide to an object.
+// This should not be confused with the defaults which are
+// provided in Canonicalize() ---  THIS FUNCTION IS REPLICATED IN
+// api/resources.go and should be kept in sync.
+func MinResources() *Resources {
 	return &Resources{
 		CPU:      100,
 		MemoryMB: 10,
@@ -1269,16 +1297,18 @@ func (r *Resources) Canonicalize() {
 
 // MeetsMinResources returns an error if the resources specified are less than
 // the minimum allowed.
+// This is based on the minimums defined in the Resources type
 func (r *Resources) MeetsMinResources() error {
 	var mErr multierror.Error
-	if r.CPU < 20 {
-		mErr.Errors = append(mErr.Errors, fmt.Errorf("minimum CPU value is 20; got %d", r.CPU))
+	minResources := MinResources()
+	if r.CPU < minResources.CPU {
+		mErr.Errors = append(mErr.Errors, fmt.Errorf("minimum CPU value is %d; got %d", minResources.CPU, r.CPU))
 	}
-	if r.MemoryMB < 10 {
-		mErr.Errors = append(mErr.Errors, fmt.Errorf("minimum MemoryMB value is 10; got %d", r.MemoryMB))
+	if r.MemoryMB < minResources.MemoryMB {
+		mErr.Errors = append(mErr.Errors, fmt.Errorf("minimum MemoryMB value is %d; got %d", minResources.MemoryMB, r.MemoryMB))
 	}
-	if r.IOPS < 0 {
-		mErr.Errors = append(mErr.Errors, fmt.Errorf("minimum IOPS value is 0; got %d", r.IOPS))
+	if r.IOPS < minResources.IOPS {
+		mErr.Errors = append(mErr.Errors, fmt.Errorf("minimum IOPS value is %d; got %d", minResources.IOPS, r.IOPS))
 	}
 	for i, n := range r.Networks {
 		if err := n.MeetsMinResources(); err != nil {
@@ -1321,16 +1351,16 @@ func (r *Resources) NetIndex(n *NetworkResource) int {
 // should be used for that.
 func (r *Resources) Superset(other *Resources) (bool, string) {
 	if r.CPU < other.CPU {
-		return false, "cpu exhausted"
+		return false, "cpu"
 	}
 	if r.MemoryMB < other.MemoryMB {
-		return false, "memory exhausted"
+		return false, "memory"
 	}
 	if r.DiskMB < other.DiskMB {
-		return false, "disk exhausted"
+		return false, "disk"
 	}
 	if r.IOPS < other.IOPS {
-		return false, "iops exhausted"
+		return false, "iops"
 	}
 	return true, ""
 }
@@ -1917,6 +1947,12 @@ func (j *Job) IsPeriodic() bool {
 	return j.Periodic != nil
 }
 
+// IsPeriodicActive returns whether the job is an active periodic job that will
+// create child jobs
+func (j *Job) IsPeriodicActive() bool {
+	return j.IsPeriodic() && j.Periodic.Enabled && !j.Stopped() && !j.IsParameterized()
+}
+
 // IsParameterized returns whether a job is parameterized job.
 func (j *Job) IsParameterized() bool {
 	return j.ParameterizedJob != nil
@@ -1958,6 +1994,11 @@ func (j *Job) RequiredSignals() map[string]map[string][]string {
 			// Check if the Vault change mode uses signals
 			if task.Vault != nil && task.Vault.ChangeMode == VaultChangeModeSignal {
 				taskSignals[task.Vault.ChangeSignal] = struct{}{}
+			}
+
+			// If a user has specified a KillSignal, add it to required signals
+			if task.KillSignal != "" {
+				taskSignals[task.KillSignal] = struct{}{}
 			}
 
 			// Check if any template change mode uses signals
@@ -2484,6 +2525,9 @@ const (
 	// RestartPolicyMinInterval is the minimum interval that is accepted for a
 	// restart policy.
 	RestartPolicyMinInterval = 5 * time.Second
+
+	// ReasonWithinPolicy describes restart events that are within policy
+	ReasonWithinPolicy = "Restart within policy"
 )
 
 // RestartPolicy configures how Tasks are restarted when they crash or fail.
@@ -2840,6 +2884,7 @@ type ServiceCheck struct {
 	Path          string              // path of the health check url for http type check
 	Protocol      string              // Protocol to use if check is http, defaults to http
 	PortLabel     string              // The port to use for tcp/http checks
+	AddressMode   string              // 'host' to use host ip:port or 'driver' to use driver's
 	Interval      time.Duration       // Interval of the check
 	Timeout       time.Duration       // Timeout of the response from the check before consul fails the check
 	InitialStatus string              // Initial status of the check
@@ -2885,6 +2930,7 @@ func (sc *ServiceCheck) Canonicalize(serviceName string) {
 
 // validate a Service's ServiceCheck
 func (sc *ServiceCheck) validate() error {
+	// Validate Type
 	switch strings.ToLower(sc.Type) {
 	case ServiceCheckTCP:
 	case ServiceCheckHTTP:
@@ -2900,6 +2946,7 @@ func (sc *ServiceCheck) validate() error {
 		return fmt.Errorf(`invalid type (%+q), must be one of "http", "tcp", or "script" type`, sc.Type)
 	}
 
+	// Validate interval and timeout
 	if sc.Interval == 0 {
 		return fmt.Errorf("missing required value interval. Interval cannot be less than %v", minCheckInterval)
 	} else if sc.Interval < minCheckInterval {
@@ -2912,15 +2959,25 @@ func (sc *ServiceCheck) validate() error {
 		return fmt.Errorf("timeout (%v) is lower than required minimum timeout %v", sc.Timeout, minCheckInterval)
 	}
 
+	// Validate InitialStatus
 	switch sc.InitialStatus {
 	case "":
-		// case api.HealthUnknown: TODO: Add when Consul releases 0.7.1
 	case api.HealthPassing:
 	case api.HealthWarning:
 	case api.HealthCritical:
 	default:
 		return fmt.Errorf(`invalid initial check state (%s), must be one of %q, %q, %q or empty`, sc.InitialStatus, api.HealthPassing, api.HealthWarning, api.HealthCritical)
 
+	}
+
+	// Validate AddressMode
+	switch sc.AddressMode {
+	case "", AddressModeHost, AddressModeDriver:
+		// Ok
+	case AddressModeAuto:
+		return fmt.Errorf("invalid address_mode %q - %s only valid for services", sc.AddressMode, AddressModeAuto)
+	default:
+		return fmt.Errorf("invalid address_mode %q", sc.AddressMode)
 	}
 
 	return sc.CheckRestart.Validate()
@@ -2973,6 +3030,11 @@ func (sc *ServiceCheck) Hash(serviceID string) string {
 		}
 		sort.Strings(headers)
 		io.WriteString(h, strings.Join(headers, ""))
+	}
+
+	// Only include AddressMode if set to maintain ID stability with Nomad <0.7.1
+	if len(sc.AddressMode) > 0 {
+		io.WriteString(h, sc.AddressMode)
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil))
@@ -3053,12 +3115,11 @@ func (s *Service) Validate() error {
 	var mErr multierror.Error
 
 	// Ensure the service name is valid per the below RFCs but make an exception
-	// for our interpolation syntax
-	// RFC-952 §1 (https://tools.ietf.org/html/rfc952), RFC-1123 §2.1
-	// (https://tools.ietf.org/html/rfc1123), and RFC-2782
-	// (https://tools.ietf.org/html/rfc2782).
-	re := regexp.MustCompile(`^(?i:[a-z0-9]|[a-z0-9\$][a-zA-Z0-9\-\$\{\}\_\.]*[a-z0-9\}])$`)
-	if !re.MatchString(s.Name) {
+	// for our interpolation syntax by first stripping any environment variables from the name
+
+	serviceNameStripped := args.ReplaceEnvWithPlaceHolder(s.Name, "ENV-VAR")
+
+	if err := s.ValidateName(serviceNameStripped); err != nil {
 		mErr.Errors = append(mErr.Errors, fmt.Errorf("service name must be valid per RFC 1123 and can contain only alphanumeric characters or dashes: %q", s.Name))
 	}
 
@@ -3070,8 +3131,8 @@ func (s *Service) Validate() error {
 	}
 
 	for _, c := range s.Checks {
-		if s.PortLabel == "" && c.RequiresPort() {
-			mErr.Errors = append(mErr.Errors, fmt.Errorf("check %s invalid: check requires a port but the service %+q has no port", c.Name, s.Name))
+		if s.PortLabel == "" && c.PortLabel == "" && c.RequiresPort() {
+			mErr.Errors = append(mErr.Errors, fmt.Errorf("check %s invalid: check requires a port but neither check nor service %+q have a port", c.Name, s.Name))
 			continue
 		}
 
@@ -3097,15 +3158,24 @@ func (s *Service) ValidateName(name string) error {
 	return nil
 }
 
-// Hash calculates the hash of the check based on it's content and the service
-// which owns it
-func (s *Service) Hash() string {
+// Hash returns a base32 encoded hash of a Service's contents excluding checks
+// as they're hashed independently.
+func (s *Service) Hash(allocID, taskName string) string {
 	h := sha1.New()
+	io.WriteString(h, allocID)
+	io.WriteString(h, taskName)
 	io.WriteString(h, s.Name)
-	io.WriteString(h, strings.Join(s.Tags, ""))
 	io.WriteString(h, s.PortLabel)
 	io.WriteString(h, s.AddressMode)
-	return fmt.Sprintf("%x", h.Sum(nil))
+	for _, tag := range s.Tags {
+		io.WriteString(h, tag)
+	}
+
+	// Base32 is used for encoding the hash as sha1 hashes can always be
+	// encoded without padding, only 4 bytes larger than base64, and saves
+	// 8 bytes vs hex. Since these hashes are used in Consul URLs it's nice
+	// to have a reasonably compact URL-safe representation.
+	return b32.EncodeToString(h.Sum(nil))
 }
 
 const (
@@ -3201,6 +3271,12 @@ type Task struct {
 	// ShutdownDelay is the duration of the delay between deregistering a
 	// task from Consul and sending it a signal to shutdown. See #2441
 	ShutdownDelay time.Duration
+
+	// The kill signal to use for the task. This is an optional specification,
+
+	// KillSignal is the kill signal to use for the task. This is an optional
+	// specification and defaults to SIGINT
+	KillSignal string
 }
 
 func (t *Task) Copy() *Task {
@@ -3408,7 +3484,13 @@ func validateServices(t *Task) error {
 
 	// Ensure that services don't ask for non-existent ports and their names are
 	// unique.
-	servicePorts := make(map[string][]string)
+	servicePorts := make(map[string]map[string]struct{})
+	addServicePort := func(label, service string) {
+		if _, ok := servicePorts[label]; !ok {
+			servicePorts[label] = map[string]struct{}{}
+		}
+		servicePorts[label][service] = struct{}{}
+	}
 	knownServices := make(map[string]struct{})
 	for i, service := range t.Services {
 		if err := service.Validate(); err != nil {
@@ -3424,16 +3506,63 @@ func validateServices(t *Task) error {
 		knownServices[service.Name+service.PortLabel] = struct{}{}
 
 		if service.PortLabel != "" {
-			servicePorts[service.PortLabel] = append(servicePorts[service.PortLabel], service.Name)
+			if service.AddressMode == "driver" {
+				// Numeric port labels are valid for address_mode=driver
+				_, err := strconv.Atoi(service.PortLabel)
+				if err != nil {
+					// Not a numeric port label, add it to list to check
+					addServicePort(service.PortLabel, service.Name)
+				}
+			} else {
+				addServicePort(service.PortLabel, service.Name)
+			}
 		}
 
-		// Ensure that check names are unique.
+		// Ensure that check names are unique and have valid ports
 		knownChecks := make(map[string]struct{})
 		for _, check := range service.Checks {
 			if _, ok := knownChecks[check.Name]; ok {
 				mErr.Errors = append(mErr.Errors, fmt.Errorf("check %q is duplicate", check.Name))
 			}
 			knownChecks[check.Name] = struct{}{}
+
+			if !check.RequiresPort() {
+				// No need to continue validating check if it doesn't need a port
+				continue
+			}
+
+			effectivePort := check.PortLabel
+			if effectivePort == "" {
+				// Inherits from service
+				effectivePort = service.PortLabel
+			}
+
+			if effectivePort == "" {
+				mErr.Errors = append(mErr.Errors, fmt.Errorf("check %q is missing a port", check.Name))
+				continue
+			}
+
+			isNumeric := false
+			portNumber, err := strconv.Atoi(effectivePort)
+			if err == nil {
+				isNumeric = true
+			}
+
+			// Numeric ports are fine for address_mode = "driver"
+			if check.AddressMode == "driver" && isNumeric {
+				if portNumber <= 0 {
+					mErr.Errors = append(mErr.Errors, fmt.Errorf("check %q has invalid numeric port %d", check.Name, portNumber))
+				}
+				continue
+			}
+
+			if isNumeric {
+				mErr.Errors = append(mErr.Errors, fmt.Errorf(`check %q cannot use a numeric port %d without setting address_mode="driver"`, check.Name, portNumber))
+				continue
+			}
+
+			// PortLabel must exist, report errors by its parent service
+			addServicePort(effectivePort, service.Name)
 		}
 	}
 
@@ -3448,11 +3577,26 @@ func validateServices(t *Task) error {
 		}
 	}
 
+	// Iterate over a sorted list of keys to make error listings stable
+	keys := make([]string, 0, len(servicePorts))
+	for p := range servicePorts {
+		keys = append(keys, p)
+	}
+	sort.Strings(keys)
+
 	// Ensure all ports referenced in services exist.
-	for servicePort, services := range servicePorts {
+	for _, servicePort := range keys {
+		services := servicePorts[servicePort]
 		_, ok := portLabels[servicePort]
 		if !ok {
-			joined := strings.Join(services, ", ")
+			names := make([]string, 0, len(services))
+			for name := range services {
+				names = append(names, name)
+			}
+
+			// Keep order deterministic
+			sort.Strings(names)
+			joined := strings.Join(names, ", ")
 			err := fmt.Errorf("port label %q referenced by services %v does not exist", servicePort, joined)
 			mErr.Errors = append(mErr.Errors, err)
 		}
@@ -3750,9 +3894,6 @@ const (
 
 	// TaskLeaderDead indicates that the leader task within the has finished.
 	TaskLeaderDead = "Leader Task Dead"
-
-	// TaskGenericMessage is used by various subsystems to emit a message.
-	TaskGenericMessage = "Generic"
 )
 
 // TaskEvent is an event that effects the state of a task and contains meta-data
@@ -3761,62 +3902,212 @@ type TaskEvent struct {
 	Type string
 	Time int64 // Unix Nanosecond timestamp
 
-	// FailsTask marks whether this event fails the task
+	Message string // A possible message explaining the termination of the task.
+
+	// DisplayMessage is a human friendly message about the event
+	DisplayMessage string
+
+	// Details is a map with annotated info about the event
+	Details map[string]string
+
+	// DEPRECATION NOTICE: The following fields are deprecated and will be removed
+	// in a future release. Field values are available in the Details map.
+
+	// FailsTask marks whether this event fails the task.
+	// Deprecated, use Details["fails_task"] to access this.
 	FailsTask bool
 
 	// Restart fields.
+	// Deprecated, use Details["restart_reason"] to access this.
 	RestartReason string
 
 	// Setup Failure fields.
+	// Deprecated, use Details["setup_error"] to access this.
 	SetupError string
 
 	// Driver Failure fields.
+	// Deprecated, use Details["driver_error"] to access this.
 	DriverError string // A driver error occurred while starting the task.
 
 	// Task Terminated Fields.
-	ExitCode int    // The exit code of the task.
-	Signal   int    // The signal that terminated the task.
-	Message  string // A possible message explaining the termination of the task.
+
+	// Deprecated, use Details["exit_code"] to access this.
+	ExitCode int // The exit code of the task.
+
+	// Deprecated, use Details["signal"] to access this.
+	Signal int // The signal that terminated the task.
 
 	// Killing fields
+	// Deprecated, use Details["kill_timeout"] to access this.
 	KillTimeout time.Duration
 
 	// Task Killed Fields.
+	// Deprecated, use Details["kill_error"] to access this.
 	KillError string // Error killing the task.
 
 	// KillReason is the reason the task was killed
+	// Deprecated, use Details["kill_reason"] to access this.
 	KillReason string
 
 	// TaskRestarting fields.
+	// Deprecated, use Details["start_delay"] to access this.
 	StartDelay int64 // The sleep period before restarting the task in unix nanoseconds.
 
 	// Artifact Download fields
+	// Deprecated, use Details["download_error"] to access this.
 	DownloadError string // Error downloading artifacts
 
 	// Validation fields
+	// Deprecated, use Details["validation_error"] to access this.
 	ValidationError string // Validation error
 
 	// The maximum allowed task disk size.
+	// Deprecated, use Details["disk_limit"] to access this.
 	DiskLimit int64
 
 	// Name of the sibling task that caused termination of the task that
 	// the TaskEvent refers to.
+	// Deprecated, use Details["failed_sibling"] to access this.
 	FailedSibling string
 
 	// VaultError is the error from token renewal
+	// Deprecated, use Details["vault_renewal_error"] to access this.
 	VaultError string
 
 	// TaskSignalReason indicates the reason the task is being signalled.
+	// Deprecated, use Details["task_signal_reason"] to access this.
 	TaskSignalReason string
 
 	// TaskSignal is the signal that was sent to the task
+	// Deprecated, use Details["task_signal"] to access this.
 	TaskSignal string
 
 	// DriverMessage indicates a driver action being taken.
+	// Deprecated, use Details["driver_message"] to access this.
 	DriverMessage string
 
 	// GenericSource is the source of a message.
+	// Deprecated, is redundant with event type.
 	GenericSource string
+}
+
+func (event *TaskEvent) PopulateEventDisplayMessage() {
+	// Build up the description based on the event type.
+	if event == nil { //TODO(preetha) needs investigation alloc_runner's Run method sends a nil event when sigterming nomad. Why?
+		return
+	}
+
+	if event.DisplayMessage != "" {
+		return
+	}
+
+	var desc string
+	switch event.Type {
+	case TaskSetup:
+		desc = event.Message
+	case TaskStarted:
+		desc = "Task started by client"
+	case TaskReceived:
+		desc = "Task received by client"
+	case TaskFailedValidation:
+		if event.ValidationError != "" {
+			desc = event.ValidationError
+		} else {
+			desc = "Validation of task failed"
+		}
+	case TaskSetupFailure:
+		if event.SetupError != "" {
+			desc = event.SetupError
+		} else {
+			desc = "Task setup failed"
+		}
+	case TaskDriverFailure:
+		if event.DriverError != "" {
+			desc = event.DriverError
+		} else {
+			desc = "Failed to start task"
+		}
+	case TaskDownloadingArtifacts:
+		desc = "Client is downloading artifacts"
+	case TaskArtifactDownloadFailed:
+		if event.DownloadError != "" {
+			desc = event.DownloadError
+		} else {
+			desc = "Failed to download artifacts"
+		}
+	case TaskKilling:
+		if event.KillReason != "" {
+			desc = fmt.Sprintf("Killing task: %v", event.KillReason)
+		} else if event.KillTimeout != 0 {
+			desc = fmt.Sprintf("Sent interrupt. Waiting %v before force killing", event.KillTimeout)
+		} else {
+			desc = "Sent interrupt"
+		}
+	case TaskKilled:
+		if event.KillError != "" {
+			desc = event.KillError
+		} else {
+			desc = "Task successfully killed"
+		}
+	case TaskTerminated:
+		var parts []string
+		parts = append(parts, fmt.Sprintf("Exit Code: %d", event.ExitCode))
+
+		if event.Signal != 0 {
+			parts = append(parts, fmt.Sprintf("Signal: %d", event.Signal))
+		}
+
+		if event.Message != "" {
+			parts = append(parts, fmt.Sprintf("Exit Message: %q", event.Message))
+		}
+		desc = strings.Join(parts, ", ")
+	case TaskRestarting:
+		in := fmt.Sprintf("Task restarting in %v", time.Duration(event.StartDelay))
+		if event.RestartReason != "" && event.RestartReason != ReasonWithinPolicy {
+			desc = fmt.Sprintf("%s - %s", event.RestartReason, in)
+		} else {
+			desc = in
+		}
+	case TaskNotRestarting:
+		if event.RestartReason != "" {
+			desc = event.RestartReason
+		} else {
+			desc = "Task exceeded restart policy"
+		}
+	case TaskSiblingFailed:
+		if event.FailedSibling != "" {
+			desc = fmt.Sprintf("Task's sibling %q failed", event.FailedSibling)
+		} else {
+			desc = "Task's sibling failed"
+		}
+	case TaskSignaling:
+		sig := event.TaskSignal
+		reason := event.TaskSignalReason
+
+		if sig == "" && reason == "" {
+			desc = "Task being sent a signal"
+		} else if sig == "" {
+			desc = reason
+		} else if reason == "" {
+			desc = fmt.Sprintf("Task being sent signal %v", sig)
+		} else {
+			desc = fmt.Sprintf("Task being sent signal %v: %v", sig, reason)
+		}
+	case TaskRestartSignal:
+		if event.RestartReason != "" {
+			desc = event.RestartReason
+		} else {
+			desc = "Task signaled to restart"
+		}
+	case TaskDriverMessage:
+		desc = event.DriverMessage
+	case TaskLeaderDead:
+		desc = "Leader Task in Group dead"
+	default:
+		desc = event.Message
+	}
+
+	event.DisplayMessage = desc
 }
 
 func (te *TaskEvent) GoString() string {
@@ -3826,6 +4117,7 @@ func (te *TaskEvent) GoString() string {
 // SetMessage sets the message of TaskEvent
 func (te *TaskEvent) SetMessage(msg string) *TaskEvent {
 	te.Message = msg
+	te.Details["message"] = msg
 	return te
 }
 
@@ -3840,8 +4132,9 @@ func (te *TaskEvent) Copy() *TaskEvent {
 
 func NewTaskEvent(event string) *TaskEvent {
 	return &TaskEvent{
-		Type: event,
-		Time: time.Now().UnixNano(),
+		Type:    event,
+		Time:    time.Now().UnixNano(),
+		Details: make(map[string]string),
 	}
 }
 
@@ -3850,35 +4143,41 @@ func NewTaskEvent(event string) *TaskEvent {
 func (e *TaskEvent) SetSetupError(err error) *TaskEvent {
 	if err != nil {
 		e.SetupError = err.Error()
+		e.Details["setup_error"] = err.Error()
 	}
 	return e
 }
 
 func (e *TaskEvent) SetFailsTask() *TaskEvent {
 	e.FailsTask = true
+	e.Details["fails_task"] = "true"
 	return e
 }
 
 func (e *TaskEvent) SetDriverError(err error) *TaskEvent {
 	if err != nil {
 		e.DriverError = err.Error()
+		e.Details["driver_error"] = err.Error()
 	}
 	return e
 }
 
 func (e *TaskEvent) SetExitCode(c int) *TaskEvent {
 	e.ExitCode = c
+	e.Details["exit_code"] = fmt.Sprintf("%d", c)
 	return e
 }
 
 func (e *TaskEvent) SetSignal(s int) *TaskEvent {
 	e.Signal = s
+	e.Details["signal"] = fmt.Sprintf("%d", s)
 	return e
 }
 
 func (e *TaskEvent) SetExitMessage(err error) *TaskEvent {
 	if err != nil {
 		e.Message = err.Error()
+		e.Details["exit_message"] = err.Error()
 	}
 	return e
 }
@@ -3886,38 +4185,45 @@ func (e *TaskEvent) SetExitMessage(err error) *TaskEvent {
 func (e *TaskEvent) SetKillError(err error) *TaskEvent {
 	if err != nil {
 		e.KillError = err.Error()
+		e.Details["kill_error"] = err.Error()
 	}
 	return e
 }
 
 func (e *TaskEvent) SetKillReason(r string) *TaskEvent {
 	e.KillReason = r
+	e.Details["kill_reason"] = r
 	return e
 }
 
 func (e *TaskEvent) SetRestartDelay(delay time.Duration) *TaskEvent {
 	e.StartDelay = int64(delay)
+	e.Details["start_delay"] = fmt.Sprintf("%d", delay)
 	return e
 }
 
 func (e *TaskEvent) SetRestartReason(reason string) *TaskEvent {
 	e.RestartReason = reason
+	e.Details["restart_reason"] = reason
 	return e
 }
 
 func (e *TaskEvent) SetTaskSignalReason(r string) *TaskEvent {
 	e.TaskSignalReason = r
+	e.Details["task_signal_reason"] = r
 	return e
 }
 
 func (e *TaskEvent) SetTaskSignal(s os.Signal) *TaskEvent {
 	e.TaskSignal = s.String()
+	e.Details["task_signal"] = s.String()
 	return e
 }
 
 func (e *TaskEvent) SetDownloadError(err error) *TaskEvent {
 	if err != nil {
 		e.DownloadError = err.Error()
+		e.Details["download_error"] = err.Error()
 	}
 	return e
 }
@@ -3925,39 +4231,40 @@ func (e *TaskEvent) SetDownloadError(err error) *TaskEvent {
 func (e *TaskEvent) SetValidationError(err error) *TaskEvent {
 	if err != nil {
 		e.ValidationError = err.Error()
+		e.Details["validation_error"] = err.Error()
 	}
 	return e
 }
 
 func (e *TaskEvent) SetKillTimeout(timeout time.Duration) *TaskEvent {
 	e.KillTimeout = timeout
+	e.Details["kill_timeout"] = timeout.String()
 	return e
 }
 
 func (e *TaskEvent) SetDiskLimit(limit int64) *TaskEvent {
 	e.DiskLimit = limit
+	e.Details["disk_limit"] = fmt.Sprintf("%d", limit)
 	return e
 }
 
 func (e *TaskEvent) SetFailedSibling(sibling string) *TaskEvent {
 	e.FailedSibling = sibling
+	e.Details["failed_sibling"] = sibling
 	return e
 }
 
 func (e *TaskEvent) SetVaultRenewalError(err error) *TaskEvent {
 	if err != nil {
 		e.VaultError = err.Error()
+		e.Details["vault_renewal_error"] = err.Error()
 	}
 	return e
 }
 
 func (e *TaskEvent) SetDriverMessage(m string) *TaskEvent {
 	e.DriverMessage = m
-	return e
-}
-
-func (e *TaskEvent) SetGenericSource(s string) *TaskEvent {
-	e.GenericSource = s
+	e.Details["driver_message"] = m
 	return e
 }
 
@@ -4322,6 +4629,12 @@ func DeploymentStatusDescriptionRollback(baseDescription string, jobVersion uint
 	return fmt.Sprintf("%s - rolling back to job version %d", baseDescription, jobVersion)
 }
 
+// DeploymentStatusDescriptionRollbackNoop is used to get the status description of
+// a deployment when rolling back is not possible because it has the same specification
+func DeploymentStatusDescriptionRollbackNoop(baseDescription string, jobVersion uint64) string {
+	return fmt.Sprintf("%s - not rolling back to stable job version %d as current job has same specification", baseDescription, jobVersion)
+}
+
 // DeploymentStatusDescriptionNoRollbackTarget is used to get the status description of
 // a deployment when there is no target to rollback to but autorevet is desired.
 func DeploymentStatusDescriptionNoRollbackTarget(baseDescription string) string {
@@ -4605,6 +4918,9 @@ type Allocation struct {
 	// CreateTime is the time the allocation has finished scheduling and been
 	// verified by the plan applier.
 	CreateTime int64
+
+	// ModifyTime is the time the allocation was last updated.
+	ModifyTime int64
 }
 
 // Index returns the index of the allocation. If the allocation is from a task
@@ -4727,6 +5043,13 @@ func (a *Allocation) ShouldMigrate() bool {
 	return true
 }
 
+// SetEventDisplayMessage populates the display message if its not already set,
+// a temporary fix to handle old allocations that don't have it.
+// This method will be removed in a future release.
+func (a *Allocation) SetEventDisplayMessages() {
+	setDisplayMsg(a.TaskStates)
+}
+
 // Stub returns a list stub for the allocation
 func (a *Allocation) Stub() *AllocListStub {
 	return &AllocListStub{
@@ -4746,6 +5069,7 @@ func (a *Allocation) Stub() *AllocListStub {
 		CreateIndex:        a.CreateIndex,
 		ModifyIndex:        a.ModifyIndex,
 		CreateTime:         a.CreateTime,
+		ModifyTime:         a.ModifyTime,
 	}
 }
 
@@ -4767,6 +5091,24 @@ type AllocListStub struct {
 	CreateIndex        uint64
 	ModifyIndex        uint64
 	CreateTime         int64
+	ModifyTime         int64
+}
+
+// SetEventDisplayMessage populates the display message if its not already set,
+// a temporary fix to handle old allocations that don't have it.
+// This method will be removed in a future release.
+func (a *AllocListStub) SetEventDisplayMessages() {
+	setDisplayMsg(a.TaskStates)
+}
+
+func setDisplayMsg(taskStates map[string]*TaskState) {
+	if taskStates != nil {
+		for _, taskState := range taskStates {
+			for _, event := range taskState.Events {
+				event.PopulateEventDisplayMessage()
+			}
+		}
+	}
 }
 
 // AllocMetric is used to track various metrics while attempting
