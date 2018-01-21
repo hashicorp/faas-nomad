@@ -1,6 +1,8 @@
-[![Build Status](https://travis-ci.org/hashicorp/faas-nomad.svg)](https://travis-ci.org/hashicorp/faas-nomad)  
+[![Build Status](https://travis-ci.org/hashicorp/faas-nomad.svg)](https://travis-ci.org/hashicorp/faas-nomad)
 [![Docker Repository on Quay](https://quay.io/repository/nicholasjackson/faas-nomad/status "Docker Repository on Quay")](https://quay.io/repository/nicholasjackson/faas-nomad)
 [![OpenFaaS](https://img.shields.io/badge/openfaas-serverless-blue.svg)](https://www.openfaas.com)
+[![Maintainability](https://api.codeclimate.com/v1/badges/c0c0865f3f5f1b9ba06c/maintainability)](https://codeclimate.com/github/hashicorp/faas-nomad/maintainability)
+[![Test Coverage](https://api.codeclimate.com/v1/badges/c0c0865f3f5f1b9ba06c/test_coverage)](https://codeclimate.com/github/hashicorp/faas-nomad/test_coverage)
 
 # OpenFaaS - Nomad Provider
 This repository contains the OpenFaaS provider for the Nomad scheduler.  OpenFaaS allows you to run your private functions as a service.  Functions are packaged in Docker Containers which enables you to work in any language and also interact with any software which can also be installed in the container.
