@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/consul/agent/consul/autopilot"
 	"github.com/hashicorp/consul/agent/consul/state"
 	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/api"
@@ -89,7 +88,7 @@ func TestFSM_SnapshotRestore_OSS(t *testing.T) {
 		t.Fatalf("err: %s", err)
 	}
 
-	autopilotConf := &autopilot.Config{
+	autopilotConf := &structs.AutopilotConfig{
 		CleanupDeadServers:   true,
 		LastContactThreshold: 100 * time.Millisecond,
 		MaxTrailingLogs:      222,

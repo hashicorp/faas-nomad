@@ -53,7 +53,10 @@ listener "tcp" {
   combined file.
 
 - `tls_key_file` `(string: <required-if-enabled>, reloads-on-SIGHUP)` –
-  Specifies the path to the private key for the certificate.
+  Specifies the path to the private key for the certificate. If the key file
+  is encrypted, you will be prompted to enter the passphrase on server startup.
+  The passphrase must stay the same between key files when reloading your
+  configuration using SIGHUP.
 
 - `tls_min_version` `(string: "tls12")` – Specifies the minimum supported
   version of TLS. Accepted values are "tls10", "tls11" or "tls12".
@@ -74,6 +77,10 @@ listener "tcp" {
 - `tls_client_ca_file` `(string: "")` – PEM-encoded Certificate Authority file
   used for checking the authenticity of client.
 
+- `tls_disable_client_certs` `(string: "false")` – Turns off client
+  authentication for this listener. The default behavior (when this is false)
+  is for Vault to request client certificates when available.
+
 ## `tcp` Listener Examples
 
 ### Configuring TLS
@@ -82,8 +89,8 @@ This example shows enabling a TLS listener.
 
 ```hcl
 listener "tcp" {
-  tls_cert_file = "/etc/certs/nomad.crt"
-  tls_key_file  = "/etc/certs/nomad.key"
+  tls_cert_file = "/etc/certs/vault.crt"
+  tls_key_file  = "/etc/certs/vault.key"
 }
 ```
 

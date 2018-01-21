@@ -9,7 +9,6 @@ import (
 
 	"github.com/armon/go-metrics"
 	"github.com/hashicorp/consul/acl"
-	"github.com/hashicorp/consul/agent/consul/autopilot"
 	"github.com/hashicorp/consul/agent/metadata"
 	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/api"
@@ -23,8 +22,6 @@ const (
 	newLeaderEvent      = "consul:new-leader"
 	barrierWriteTimeout = 2 * time.Minute
 )
-
-var minAutopilotVersion = version.Must(version.NewVersion("0.8.0"))
 
 // monitorLeadership is used to monitor if we acquire or lose our role
 // as the leader in the Raft cluster. There is some work the leader is
@@ -205,7 +202,7 @@ func (s *Server) establishLeadership() error {
 	}
 
 	s.getOrCreateAutopilotConfig()
-	s.autopilot.Start()
+	s.startAutopilot()
 	s.setConsistentReadReady()
 	return nil
 }
@@ -223,7 +220,7 @@ func (s *Server) revokeLeadership() error {
 	}
 
 	s.resetConsistentReadReady()
-	s.autopilot.Stop()
+	s.stopAutopilot()
 	return nil
 }
 
@@ -329,30 +326,30 @@ func (s *Server) initializeACL() error {
 }
 
 // getOrCreateAutopilotConfig is used to get the autopilot config, initializing it if necessary
-func (s *Server) getOrCreateAutopilotConfig() *autopilot.Config {
+func (s *Server) getOrCreateAutopilotConfig() (*structs.AutopilotConfig, bool) {
 	state := s.fsm.State()
 	_, config, err := state.AutopilotConfig()
 	if err != nil {
 		s.logger.Printf("[ERR] autopilot: failed to get config: %v", err)
-		return nil
+		return nil, false
 	}
 	if config != nil {
-		return config
+		return config, true
 	}
 
 	if !ServersMeetMinimumVersion(s.LANMembers(), minAutopilotVersion) {
 		s.logger.Printf("[WARN] autopilot: can't initialize until all servers are >= %s", minAutopilotVersion.String())
-		return nil
+		return nil, false
 	}
 
 	config = s.config.AutopilotConfig
 	req := structs.AutopilotSetConfigRequest{Config: *config}
 	if _, err = s.raftApply(structs.AutopilotRequestType, req); err != nil {
 		s.logger.Printf("[ERR] autopilot: failed to initialize config: %v", err)
-		return nil
+		return nil, false
 	}
 
-	return config
+	return config, true
 }
 
 // reconcileReaped is used to reconcile nodes that have failed and been reaped
@@ -684,7 +681,7 @@ func (s *Server) joinConsulServer(m serf.Member, parts *metadata.Server) error {
 	// log entries. If the address is the same but the ID changed, remove the
 	// old server before adding the new one.
 	addr := (&net.TCPAddr{IP: m.Addr, Port: parts.Port}).String()
-	minRaftProtocol, err := s.autopilot.MinRaftProtocol()
+	minRaftProtocol, err := ServerMinRaftProtocol(s.serfLAN.Members())
 	if err != nil {
 		return err
 	}
@@ -738,7 +735,10 @@ func (s *Server) joinConsulServer(m serf.Member, parts *metadata.Server) error {
 	}
 
 	// Trigger a check to remove dead servers
-	s.autopilot.RemoveDeadServers()
+	select {
+	case s.autopilotRemoveDeadCh <- struct{}{}:
+	default:
+	}
 
 	return nil
 }
@@ -756,7 +756,7 @@ func (s *Server) removeConsulServer(m serf.Member, port int) error {
 		return err
 	}
 
-	minRaftProtocol, err := s.autopilot.MinRaftProtocol()
+	minRaftProtocol, err := ServerMinRaftProtocol(s.serfLAN.Members())
 	if err != nil {
 		return err
 	}

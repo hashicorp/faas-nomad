@@ -1,4 +1,4 @@
-FROM ubuntu:bionic
+FROM ubuntu:trusty
 
 ENV GOVERSION 1.9.2
 
@@ -10,8 +10,7 @@ RUN apt-get update -y && \
             git \
             ruby \
             ruby-dev \
-            zip \
-            zlib1g-dev && \
+            zip && \
     gem install bundler
 
 RUN mkdir /goroot && \

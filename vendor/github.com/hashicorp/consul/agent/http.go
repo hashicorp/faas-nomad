@@ -15,7 +15,6 @@ import (
 	"github.com/armon/go-metrics"
 	"github.com/hashicorp/consul/acl"
 	"github.com/hashicorp/consul/agent/structs"
-	"github.com/hashicorp/go-cleanhttp"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -61,17 +60,6 @@ func registerEndpoint(pattern string, fn unboundEndpoint) {
 		panic(fmt.Errorf("Pattern %q is already registered", pattern))
 	}
 	endpoints[pattern] = fn
-}
-
-// wrappedMux hangs on to the underlying mux for unit tests.
-type wrappedMux struct {
-	mux     *http.ServeMux
-	handler http.Handler
-}
-
-// ServeHTTP implements the http.Handler interface.
-func (w *wrappedMux) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	w.handler.ServeHTTP(resp, req)
 }
 
 // handler is used to attach our handlers to the mux
@@ -130,18 +118,7 @@ func (s *HTTPServer) handler(enableDebug bool) http.Handler {
 	} else if s.agent.config.EnableUI {
 		mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(assetFS())))
 	}
-
-	// Wrap the whole mux with a handler that bans URLs with non-printable
-	// characters.
-	return &wrappedMux{
-		mux:     mux,
-		handler: cleanhttp.PrintablePathCheckHandler(mux, nil),
-	}
-}
-
-// nodeName returns the node name of the agent
-func (s *HTTPServer) nodeName() string {
-	return s.agent.config.NodeName
+	return mux
 }
 
 // aclEndpointRE is used to find old ACL endpoints that take tokens in the URL

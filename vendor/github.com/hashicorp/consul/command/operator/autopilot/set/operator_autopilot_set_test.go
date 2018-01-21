@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/agent"
-	"github.com/hashicorp/consul/agent/consul/autopilot"
 	"github.com/hashicorp/consul/agent/structs"
 	"github.com/mitchellh/cli"
 )
@@ -18,7 +17,7 @@ func TestOperatorAutopilotSetConfigCommand_noTabs(t *testing.T) {
 	}
 }
 
-func TestOperatorAutopilotSetConfigCommand(t *testing.T) {
+func TestOperatorAutopilotSetConfigCommmand(t *testing.T) {
 	t.Parallel()
 	a := agent.NewTestAgent(t.Name(), ``)
 	defer a.Shutdown()
@@ -45,7 +44,7 @@ func TestOperatorAutopilotSetConfigCommand(t *testing.T) {
 	req := structs.DCSpecificRequest{
 		Datacenter: "dc1",
 	}
-	var reply autopilot.Config
+	var reply structs.AutopilotConfig
 	if err := a.RPC("Operator.AutopilotGetConfiguration", &req, &reply); err != nil {
 		t.Fatalf("err: %v", err)
 	}

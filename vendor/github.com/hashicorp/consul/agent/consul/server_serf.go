@@ -304,7 +304,7 @@ func (s *Server) maybeBootstrap() {
 	// Attempt a live bootstrap!
 	var configuration raft.Configuration
 	var addrs []string
-	minRaftVersion, err := s.autopilot.MinRaftProtocol()
+	minRaftVersion, err := ServerMinRaftProtocol(members)
 	if err != nil {
 		s.logger.Printf("[ERR] consul: Failed to read server raft versions: %v", err)
 	}

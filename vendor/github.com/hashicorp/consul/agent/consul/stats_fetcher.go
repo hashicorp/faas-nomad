@@ -5,10 +5,9 @@ import (
 	"log"
 	"sync"
 
-	"github.com/hashicorp/consul/agent/consul/autopilot"
 	"github.com/hashicorp/consul/agent/metadata"
 	"github.com/hashicorp/consul/agent/pool"
-	"github.com/hashicorp/serf/serf"
+	"github.com/hashicorp/consul/agent/structs"
 )
 
 // StatsFetcher has two functions for autopilot. First, lets us fetch all the
@@ -40,9 +39,9 @@ func NewStatsFetcher(logger *log.Logger, pool *pool.ConnPool, datacenter string)
 // cancel this when the context is canceled because we only want one in-flight
 // RPC to each server, so we let it finish and then clean up the in-flight
 // tracking.
-func (f *StatsFetcher) fetch(server *metadata.Server, replyCh chan *autopilot.ServerStats) {
+func (f *StatsFetcher) fetch(server *metadata.Server, replyCh chan *structs.ServerStats) {
 	var args struct{}
-	var reply autopilot.ServerStats
+	var reply structs.ServerStats
 	err := f.pool.RPC(f.datacenter, server.Addr, server.Version, "Status.RaftStats", server.UseTLS, &args, &reply)
 	if err != nil {
 		f.logger.Printf("[WARN] consul: error getting server health from %q: %v",
@@ -57,20 +56,14 @@ func (f *StatsFetcher) fetch(server *metadata.Server, replyCh chan *autopilot.Se
 }
 
 // Fetch will attempt to query all the servers in parallel.
-func (f *StatsFetcher) Fetch(ctx context.Context, members []serf.Member) map[string]*autopilot.ServerStats {
+func (f *StatsFetcher) Fetch(ctx context.Context, servers []*metadata.Server) map[string]*structs.ServerStats {
 	type workItem struct {
 		server  *metadata.Server
-		replyCh chan *autopilot.ServerStats
+		replyCh chan *structs.ServerStats
 	}
-	var servers []*metadata.Server
-	for _, s := range members {
-		if ok, parts := metadata.IsConsulServer(s); ok {
-			servers = append(servers, parts)
-		}
-	}
+	var work []*workItem
 
 	// Skip any servers that have inflight requests.
-	var work []*workItem
 	f.inflightLock.Lock()
 	for _, server := range servers {
 		if _, ok := f.inflight[server.ID]; ok {
@@ -79,7 +72,7 @@ func (f *StatsFetcher) Fetch(ctx context.Context, members []serf.Member) map[str
 		} else {
 			workItem := &workItem{
 				server:  server,
-				replyCh: make(chan *autopilot.ServerStats, 1),
+				replyCh: make(chan *structs.ServerStats, 1),
 			}
 			work = append(work, workItem)
 			f.inflight[server.ID] = struct{}{}
@@ -90,7 +83,7 @@ func (f *StatsFetcher) Fetch(ctx context.Context, members []serf.Member) map[str
 
 	// Now wait for the results to come in, or for the context to be
 	// canceled.
-	replies := make(map[string]*autopilot.ServerStats)
+	replies := make(map[string]*structs.ServerStats)
 	for _, workItem := range work {
 		select {
 		case reply := <-workItem.replyCh:
