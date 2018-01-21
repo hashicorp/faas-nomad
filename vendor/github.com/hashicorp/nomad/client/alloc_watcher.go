@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hashicorp/consul/lib"
@@ -452,6 +453,9 @@ func (p *remotePrevAlloc) streamAllocDir(ctx context.Context, resp io.ReadCloser
 	tr := tar.NewReader(resp)
 	defer resp.Close()
 
+	// Cache effective uid as we only run Chown if we're root
+	euid := syscall.Geteuid()
+
 	canceled := func() bool {
 		select {
 		case <-ctx.Done():
@@ -462,6 +466,9 @@ func (p *remotePrevAlloc) streamAllocDir(ctx context.Context, resp io.ReadCloser
 			return false
 		}
 	}
+
+	// if we see this file, there was an error on the remote side
+	errorFilename := allocdir.SnapshotErrorFilename(p.prevAllocID)
 
 	buf := make([]byte, 1024)
 	for !canceled() {
@@ -476,6 +483,18 @@ func (p *remotePrevAlloc) streamAllocDir(ctx context.Context, resp io.ReadCloser
 		if err != nil {
 			return fmt.Errorf("error streaming previous alloc %q for new alloc %q: %v",
 				p.prevAllocID, p.allocID, err)
+		}
+
+		if hdr.Name == errorFilename {
+			// Error snapshotting on the remote side, try to read
+			// the message out of the file and return it.
+			errBuf := make([]byte, int(hdr.Size))
+			if _, err := tr.Read(errBuf); err != nil {
+				return fmt.Errorf("error streaming previous alloc %q for new alloc %q; failed reading error message: %v",
+					p.prevAllocID, p.allocID, err)
+			}
+			return fmt.Errorf("error streaming previous alloc %q for new alloc %q: %s",
+				p.prevAllocID, p.allocID, string(errBuf))
 		}
 
 		// If the header is for a directory we create the directory
@@ -502,9 +521,14 @@ func (p *remotePrevAlloc) streamAllocDir(ctx context.Context, resp io.ReadCloser
 				f.Close()
 				return fmt.Errorf("error chmoding file %v", err)
 			}
-			if err := f.Chown(hdr.Uid, hdr.Gid); err != nil {
-				f.Close()
-				return fmt.Errorf("error chowning file %v", err)
+
+			// Can't change owner if not root. Returns false on
+			// Windows as Chown always errors there.
+			if euid == 0 {
+				if err := f.Chown(hdr.Uid, hdr.Gid); err != nil {
+					f.Close()
+					return fmt.Errorf("error chowning file %v", err)
+				}
 			}
 
 			// We write in chunks so that we can test if the client

@@ -2,10 +2,11 @@
 // Copyright (c) Alex Ellis 2017. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-var app = angular.module('faasGateway', ['ngMaterial']);
+var app = angular.module('faasGateway', ['ngMaterial', 'faasGateway.funcStore']);
 
 app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$mdDialog', '$mdToast', '$mdSidenav',
     function($scope, $log, $http, $location, $timeout, $mdDialog, $mdToast, $mdSidenav) {
+        var newFuncTabIdx = 0;
         $scope.functions = [];
         $scope.invocationInProgress = false;
         $scope.invocationRequest = "";
@@ -25,7 +26,9 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
             image: "",
             envProcess: "",
             network: "",
-            service: ""
+            service: "",
+            envVars: {},
+            labels: {}
         };
 
         $scope.invocation.request = "";
@@ -44,28 +47,83 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
         };
 
         $scope.fireRequest = function() {
+            var requestContentType = $scope.invocation.contentType == "json" ? "application/json" : "text/plain";
+            if ($scope.invocation.contentType == "binary") {
+                requestContentType = "binary/octet-stream";
+            }
+
             var options = {
                 url: "/function/" + $scope.selectedFunction.name,
                 data: $scope.invocation.request,
                 method: "POST",
-                headers: { "Content-Type": $scope.invocation.contentType == "json" ? "application/json" : "text/plain" },
-                responseType: $scope.invocation.contentType
+                headers: { "Content-Type": requestContentType },
+                responseType: $scope.invocation.contentType == "binary" ? "arraybuffer" : $scope.invocation.contentType
             };
+            
             $scope.invocationInProgress = true;
             $scope.invocationResponse = "";
             $scope.invocationStatus = null;
             $scope.roundTripDuration = "";
             $scope.invocationStart = new Date().getTime()
 
+
+            var tryDownload = function(data, filename) {
+                var caught;
+
+                var linkElement = document.createElement('a');
+                try {
+                    var blob = new Blob([data], { type: "binary/octet-stream" });
+                    var url = window.URL.createObjectURL(blob);
+
+                    linkElement.setAttribute('href', url);
+                    linkElement.setAttribute("download", filename);
+         
+                    var clickEvent = new MouseEvent("click", {
+                        "view": window,
+                        "bubbles": true,
+                        "cancelable": false
+                    });
+                    linkElement.dispatchEvent(clickEvent);
+                } catch (ex) {
+                    caught = ex;
+                }
+                return caught;
+            }
+
             $http(options)
-                .then(function(response) {
-                    if (typeof response.data == 'object') {
-                        $scope.invocationResponse = JSON.stringify(response.data, null, 2);
+                .success(function (data, status, headers) {
+
+                    var headerMap = headers();
+
+                    if($scope.invocation.contentType == "binary") {
+                        var filename = uuidv4();
+
+                        if($scope.selectedFunction.labels) {
+                            var ext = $scope.selectedFunction.labels["com.openfaas.ui.ext"];
+                            if(ext && ext.length > 0 ) {
+                                filename = filename + "." + ext;
+                            }
+                        }
+
+                        var caught = tryDownload(data, filename);
+                        if(caught) {
+                            console.log(caught);                         
+                            $scope.invocationResponse = caught
+                        } else {
+                            $scope.invocationResponse = data.byteLength + " byte(s) received";
+                        }
+
                     } else {
-                        $scope.invocationResponse = response.data;
+
+                        if (typeof data == 'object') {
+                            $scope.invocationResponse = JSON.stringify(data, null, 2);
+                        } else {
+                            $scope.invocationResponse = data;
+                        }
                     }
+
                     $scope.invocationInProgress = false;
-                    $scope.invocationStatus = response.status;
+                    $scope.invocationStatus = status;
                     var now = new Date().getTime();
                     $scope.roundTripDuration = (now - $scope.invocationStart) / 1000;
                     showPostInvokedToast("Success");
@@ -128,7 +186,7 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
             $mdDialog.show({
                 parent: parentEl,
                 targetEvent: $event,
-                templateUrl: "newfunction.html",
+                templateUrl: "templates/newfunction.html",
                 locals: {
                     item: $scope.functionTemplate
                 },
@@ -137,10 +195,35 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
         };
 
         var DialogController = function($scope, $mdDialog, item) {
+            $scope.selectedTabIdx = newFuncTabIdx;
             $scope.item = item;
+            $scope.selectedFunc = null;
             $scope.closeDialog = function() {
                 $mdDialog.hide();
             };
+
+            $scope.onFuncSelected = function(func) {
+                $scope.item.image = func.image;
+                $scope.item.service = func.name;
+                $scope.item.envProcess = func.fprocess;
+                $scope.item.network = func.network;
+                $scope.item.envVars = func.environment;
+                $scope.item.labels = func.labels;
+
+                $scope.selectedFunc = func;
+            }
+            
+            $scope.onTabSelect = function(idx) {
+                newFuncTabIdx = idx;
+            }
+
+            $scope.onStoreTabDeselect = function() {
+                $scope.selectedFunc = null;
+            }
+
+            $scope.onManualTabDeselect = function() {
+                $scope.item = {};
+            }
 
             $scope.createFunc = function() {
                 var options = {
@@ -157,6 +240,9 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
                         item.service = "";
                         item.envProcess = "";
                         item.network = "";
+                        item.envVars = {};
+                        item.labels = {};
+
                         $scope.validationError = "";
                         $scope.closeDialog();
                         showPostInvokedToast("Function created");
@@ -206,3 +292,10 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
         fetch();
     }
 ]);
+
+function uuidv4() {
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    )
+  }
+  

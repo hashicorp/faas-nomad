@@ -27,6 +27,7 @@ export default Model.extend({
   taskGroupName: attr('string'),
   resources: fragment('resources'),
   modifyIndex: attr('number'),
+  modifyTime: attr('date'),
   jobVersion: attr('number'),
 
   // TEMPORARY: https://github.com/emberjs/data/issues/5209
@@ -36,6 +37,18 @@ export default Model.extend({
   desiredStatus: attr('string'),
   statusIndex: computed('clientStatus', function() {
     return STATUS_ORDER[this.get('clientStatus')] || 100;
+  }),
+
+  statusClass: computed('clientStatus', function() {
+    const classMap = {
+      pending: 'is-pending',
+      running: 'is-primary',
+      complete: 'is-complete',
+      failed: 'is-error',
+      lost: 'is-light',
+    };
+
+    return classMap[this.get('clientStatus')] || 'is-dark';
   }),
 
   taskGroup: computed('taskGroupName', 'job.taskGroups.[]', function() {

@@ -1,7 +1,7 @@
 Watchdog
 ==========
 
-The watchdog provides an unmanaged and generic interface between the outside world and your function. Its job is to marshal a HTTP request accepted on the API Gateway and to invoke your chosen appliaction. The watchdog is a tiny Golang webserver - see the diagram below for how this process works.
+The watchdog provides an unmanaged and generic interface between the outside world and your function. Its job is to marshal a HTTP request accepted on the API Gateway and to invoke your chosen application. The watchdog is a tiny Golang webserver - see the diagram below for how this process works.
 
 ![](https://pbs.twimg.com/media/DGScDblUIAAo4H-.jpg:large)
 
@@ -36,10 +36,10 @@ Example Dockerfile for an `echo` function:
 ```
 FROM alpine:3.5
 
-ADD https://github.com/openfaas/faas/releases/download/v0.5-alpha/fwatchdog /usr/bin
+ADD https://github.com/openfaas/faas/releases/download/0.6.15/fwatchdog /usr/bin
 RUN chmod +x /usr/bin/fwatchdog
 
-# Define your UNIX binary here
+# Define your binary here
 ENV fprocess="/bin/cat"
 
 CMD ["fwatchdog"]
@@ -73,7 +73,7 @@ The watchdog can be configured through environmental variables. You must always 
 |------------------------|--------------|
 | `fprocess`             | The process to invoke for each function call (function process). This must be a UNIX binary and accept input via STDIN and output via STDOUT.  |
 | `cgi_headers`          | HTTP headers from request are made available through environmental variables - `Http_X_Served_By` etc. See section: *Handling headers* for more detail. Enabled by default. |
-| `marshal_requests`     | Instead of re-directing the raw HTTP body into your fprocess, it will first be marshalled into JSON. Use this if you need to work with HTTP headers and do not want to use environmental variables via the `cgi_headers` flag. |
+| `marshal_request`     | Instead of re-directing the raw HTTP body into your fprocess, it will first be marshalled into JSON. Use this if you need to work with HTTP headers and do not want to use environmental variables via the `cgi_headers` flag. |
 | `content_type`         | Force a specific Content-Type response for all responses. |
 | `write_timeout`        | HTTP timeout for writing a response body from your function (in seconds)  |
 | `read_timeout`         | HTTP timeout for reading the payload from the client caller (in seconds) |
@@ -180,12 +180,19 @@ Auto-scaling starts at 1 replica and steps up in blocks of 5:
 * 10->15
 * 15->20
 
-You can override the upper limit of auto-scaling by setting the following label on your container:
+You can override the minimum and maximum scale of a function through labels.
+
+Add these labels to the deployment if you want to sacle between 2 and 15 replicas.
 
 ```
-com.faas.max_replicas: "10"
+com.openfaas.scale.min: "2"
+com.openfaas.scale.max: "15"
 ```
 
-In Docker Swarm you can disable scaling, set the `com.faas.max_replicas` value to `"1"`.
+The labels are optional.
 
-As an alternative you can also remove or scale AlertManager to zero replicas.
+**Disabling auto-scaling**
+
+If you want to disable auto-scaling for a function then set the minimum and maximum scale to the same value i.e. "1".
+
+As an alternative you can also remove AlertManager or scale it to 0 replicas.

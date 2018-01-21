@@ -55,46 +55,25 @@ func createLogFile() *os.File {
 }
 
 func main() {
-	region := os.Getenv("NOMAD_REGION")
-	nomadAddr := os.Getenv("NOMAD_ADDR")
-	consulAddr := os.Getenv("CONSUL_ADDR")
-	statsDAddr := os.Getenv("STATSD_ADDR")
-	thisAddr := os.Getenv("NOMAD_ADDR_http")
 
-	logger := setupLogging()
+	logger, stats, nomadClient, consulResolver := makeDependencies(
+		os.Getenv("STATSD_ADDR"),
+		os.Getenv("NOMAD_ADDR_http"),
+		os.Getenv("NOMAD_ADDR"),
+		os.Getenv("CONSUL_ADDR"),
+		os.Getenv("NOMAD_REGION"),
+	)
 
 	logger.Info("Started version: " + version)
-	logger.Info("Using StatsD server:" + statsDAddr)
-
-	stats, err := statsd.New(statsDAddr)
-	if err != nil {
-		log.Println(err)
-	}
-	// prefix every metric with the app name
-	stats.Namespace = "faas.nomadd."
-	stats.Tags = append(stats.Tags, "instance:"+strings.Replace(thisAddr, ":", "_", -1))
-
-	err = stats.Incr("started", nil, 1)
-	if err != nil {
-		log.Println(err)
-	}
-
-	c := api.DefaultConfig()
-
-	nomadClient, err := api.NewClient(c.ClientConfig(region, nomadAddr, false))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	cr := consul.NewResolver(consulAddr)
+	stats.Incr("started", nil, 1)
 
 	handlers := &types.FaaSHandlers{
 		FunctionReader: handlers.MakeReader(nomadClient.Jobs(), logger, stats),
 		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
-		DeleteHandler:  handlers.MakeDelete(cr, nomadClient.Jobs(), logger, stats),
+		DeleteHandler:  handlers.MakeDelete(consulResolver, nomadClient.Jobs(), logger, stats),
 		ReplicaReader:  makeReplicationReader(nomadClient.Jobs(), logger, stats),
 		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), logger, stats),
-		FunctionProxy:  makeFunctionProxyHandler(cr, statsDAddr, logger, stats),
+		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats),
 	}
 
 	config := &types.FaaSConfig{}
@@ -102,12 +81,36 @@ func main() {
 	bootstrap.Serve(handlers, config)
 }
 
-func makeFunctionProxyHandler(r consul.ServiceResolver, statsDAddr string, logger hclog.Logger, s *statsd.Client) http.HandlerFunc {
+func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
+	logger := setupLogging()
+
+	logger.Info("Using StatsD server:" + statsDAddr)
+	stats, err := statsd.New(statsDAddr)
+	if err != nil {
+		logger.Error("Error creating statsd client", err)
+	}
+
+	// prefix every metric with the app name
+	stats.Namespace = "faas.nomadd."
+	stats.Tags = append(stats.Tags, "instance:"+strings.Replace(thisAddr, ":", "_", -1))
+
+	c := api.DefaultConfig()
+	nomadClient, err := api.NewClient(c.ClientConfig(region, nomadAddr, false))
+	if err != nil {
+		logger.Error("Unable to create nomad client", err)
+	}
+
+	cr := consul.NewResolver(consulAddr)
+
+	return logger, stats, nomadClient, cr
+}
+
+func makeFunctionProxyHandler(r consul.ServiceResolver, logger hclog.Logger, s *statsd.Client) http.HandlerFunc {
 	return handlers.MakeExtractFunctionMiddleWare(
 		func(r *http.Request) map[string]string {
 			return mux.Vars(r)
 		},
-		handlers.MakeProxy(handlers.MakeProxyClient(), r, statsDAddr, logger, s),
+		handlers.MakeProxy(handlers.MakeProxyClient(), r, logger, s),
 	)
 }
 

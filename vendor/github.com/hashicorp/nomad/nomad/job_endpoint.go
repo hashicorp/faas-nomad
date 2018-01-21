@@ -77,12 +77,12 @@ func (j *Job) Register(args *structs.JobRegisterRequest, reply *structs.JobRegis
 	if aclObj, err := j.srv.ResolveToken(args.AuthToken); err != nil {
 		return err
 	} else if aclObj != nil {
-		if !aclObj.AllowNsOp(structs.DefaultNamespace, acl.NamespaceCapabilitySubmitJob) {
+		if !aclObj.AllowNsOp(args.RequestNamespace(), acl.NamespaceCapabilitySubmitJob) {
 			return structs.ErrPermissionDenied
 		}
 		// Check if override is set and we do not have permissions
 		if args.PolicyOverride {
-			if !aclObj.AllowNsOp(structs.DefaultNamespace, acl.NamespaceCapabilitySentinelOverride) {
+			if !aclObj.AllowNsOp(args.RequestNamespace(), acl.NamespaceCapabilitySentinelOverride) {
 				j.srv.logger.Printf("[WARN] nomad.job: policy override attempted without permissions for Job %q", args.Job.ID)
 				return structs.ErrPermissionDenied
 			}
@@ -1023,12 +1023,12 @@ func (j *Job) Plan(args *structs.JobPlanRequest, reply *structs.JobPlanResponse)
 	if aclObj, err := j.srv.ResolveToken(args.AuthToken); err != nil {
 		return err
 	} else if aclObj != nil {
-		if !aclObj.AllowNsOp(structs.DefaultNamespace, acl.NamespaceCapabilitySubmitJob) {
+		if !aclObj.AllowNsOp(args.RequestNamespace(), acl.NamespaceCapabilitySubmitJob) {
 			return structs.ErrPermissionDenied
 		}
 		// Check if override is set and we do not have permissions
 		if args.PolicyOverride {
-			if !aclObj.AllowNsOp(structs.DefaultNamespace, acl.NamespaceCapabilitySentinelOverride) {
+			if !aclObj.AllowNsOp(args.RequestNamespace(), acl.NamespaceCapabilitySentinelOverride) {
 				return structs.ErrPermissionDenied
 			}
 		}
@@ -1087,6 +1087,8 @@ func (j *Job) Plan(args *structs.JobPlanRequest, reply *structs.JobPlanResponse)
 		Status:         structs.EvalStatusPending,
 		AnnotatePlan:   true,
 	}
+
+	snap.UpsertEvals(100, []*structs.Evaluation{eval})
 
 	// Create an in-memory Planner that returns no errors and stores the
 	// submitted plan and created evals.
@@ -1213,10 +1215,10 @@ func validateJobUpdate(old, new *structs.Job) error {
 
 	// Transitioning to/from periodic is disallowed
 	if old.IsPeriodic() && !new.IsPeriodic() {
-		return fmt.Errorf("cannot update non-periodic job to being periodic")
+		return fmt.Errorf("cannot update periodic job to being non-periodic")
 	}
 	if new.IsPeriodic() && !old.IsPeriodic() {
-		return fmt.Errorf("cannot update periodic job to being non-periodic")
+		return fmt.Errorf("cannot update non-periodic job to being periodic")
 	}
 
 	// Transitioning to/from parameterized is disallowed

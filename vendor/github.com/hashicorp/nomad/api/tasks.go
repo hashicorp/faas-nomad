@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	"path"
-
 	"path/filepath"
 	"strings"
 	"time"
@@ -155,6 +154,7 @@ type ServiceCheck struct {
 	Path          string
 	Protocol      string
 	PortLabel     string `mapstructure:"port"`
+	AddressMode   string `mapstructure:"address_mode"`
 	Interval      time.Duration
 	Timeout       time.Duration
 	InitialStatus string `mapstructure:"initial_status"`
@@ -371,14 +371,14 @@ type Task struct {
 	DispatchPayload *DispatchPayloadConfig
 	Leader          bool
 	ShutdownDelay   time.Duration `mapstructure:"shutdown_delay"`
+	KillSignal      string        `mapstructure:"kill_signal"`
 }
 
 func (t *Task) Canonicalize(tg *TaskGroup, job *Job) {
-	min := MinResources()
-	min.Merge(t.Resources)
-	min.Canonicalize()
-	t.Resources = min
-
+	if t.Resources == nil {
+		t.Resources = &Resources{}
+	}
+	t.Resources.Canonicalize()
 	if t.KillTimeout == nil {
 		t.KillTimeout = helper.TimeToPtr(5 * time.Second)
 	}
@@ -585,14 +585,16 @@ const (
 	TaskRestartSignal          = "Restart Signaled"
 	TaskLeaderDead             = "Leader Task Dead"
 	TaskBuildingTaskDir        = "Building Task Directory"
-	TaskGenericMessage         = "Generic"
 )
 
 // TaskEvent is an event that effects the state of a task and contains meta-data
 // appropriate to the events type.
 type TaskEvent struct {
-	Type             string
-	Time             int64
+	Type           string
+	Time           int64
+	DisplayMessage string
+	Details        map[string]string
+	// DEPRECATION NOTICE: The following fields are all deprecated. see TaskEvent struct in structs.go for details.
 	FailsTask        bool
 	RestartReason    string
 	SetupError       string

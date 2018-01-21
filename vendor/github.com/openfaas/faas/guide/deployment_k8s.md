@@ -22,6 +22,10 @@ You can start evaluating FaaS and building functions on your laptop or on a VM (
 
 Additional information on [setting up Kubernetes](https://kubernetes.io/docs/setup/pick-right-solution/).
 
+We have a special guide for minikube here:
+
+* [Getting started with OpenFaaS on minikube](https://medium.com/devopslinks/getting-started-with-openfaas-on-minikube-634502c7acdf)
+
 ### 1.1 Pick helm or YAML files for deployment
 
 If you'd like to use helm follow the instructions in 2.0a and then come back here, otherwise follow 2.0b to use plain `kubectl`.
@@ -42,23 +46,22 @@ This step assumes you are running `kubectl` on a master host.
 $ git clone https://github.com/openfaas/faas-netes
 ```
 
-Deploy a synchronous or asynchronous stack. If you're using OpenFaaS for the first time we recommend the synchronous stack. The asynchronous stack also includes NATS Streaming for queuing.
+Deploy a stack with asynchronous functionality provided by NATS Streaming.
 
-* Deploy the synchronous stack
+* Deploy the whole stack
 
-```
-$ cd faas-netes
-$ kubectl apply -f ./faas.yml,monitoring.yml,rbac.yml
-```
+This command is split into two parts so that the OpenFaaS namespaces are always created first:
 
-Or
-
-* Deploy the asynchronous stack
+* openfaas - for OpenFaaS services
+* openfaas-fn - for functions
 
 ```
-$ cd faas-netes
-$ kubectl apply -f ./faas.async.yml,nats.yml,monitoring.yml,rbac.yml
+$ cd faas-netes && \
+ kubectl apply -f ./namespaces.yml && \
+ kubectl apply -f ./yaml
 ```
+
+Note: RBAC is optional but encouraged and enabled by default.
 
 Asynchronous invocation works by queuing requests with NATS Streaming. An alternative implementation is available with Kafka in an [open PR](https://github.com/openfaas/faas/pull/311).
 
@@ -92,10 +95,12 @@ There are currently no sample functions built into this stack, but we can deploy
 * Install the CLI 
 
 ```
-$ curl -sL cli.openfaas.com | sudo sh
+$ curl -sL https://cli.openfaas.com | sudo sh
 ```
 
-Then clone some samples to deploy on your cluster.
+If you like you can also run the script via a non-root user. Then the faas-cli binary is downloaded to the current working directory instead.
+
+* Then clone some samples to deploy on your cluster.
 
 ```
 $ git clone https://github.com/openfaas/faas-cli

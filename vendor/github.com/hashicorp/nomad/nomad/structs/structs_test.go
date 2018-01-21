@@ -2,6 +2,7 @@ package structs
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -636,6 +637,58 @@ func TestJob_IsPeriodic(t *testing.T) {
 	}
 }
 
+func TestJob_IsPeriodicActive(t *testing.T) {
+	cases := []struct {
+		job    *Job
+		active bool
+	}{
+		{
+			job: &Job{
+				Type: JobTypeService,
+				Periodic: &PeriodicConfig{
+					Enabled: true,
+				},
+			},
+			active: true,
+		},
+		{
+			job: &Job{
+				Type: JobTypeService,
+				Periodic: &PeriodicConfig{
+					Enabled: false,
+				},
+			},
+			active: false,
+		},
+		{
+			job: &Job{
+				Type: JobTypeService,
+				Periodic: &PeriodicConfig{
+					Enabled: true,
+				},
+				Stop: true,
+			},
+			active: false,
+		},
+		{
+			job: &Job{
+				Type: JobTypeService,
+				Periodic: &PeriodicConfig{
+					Enabled: false,
+				},
+				ParameterizedJob: &ParameterizedJobConfig{},
+			},
+			active: false,
+		},
+	}
+
+	for i, c := range cases {
+		if act := c.job.IsPeriodicActive(); act != c.active {
+			t.Fatalf("case %d failed: got %v; want %v", i, act, c.active)
+		}
+	}
+}
+
 func TestJob_SystemJob_Validate(t *testing.T) {
 	j := testJob()
 	j.Type = JobTypeSystem
@@ -805,6 +858,26 @@ func TestJob_RequiredSignals(t *testing.T) {
 		},
 	}
 
+	j2 := &Job{
+		TaskGroups: []*TaskGroup{
+			{
+				Name: "foo",
+				Tasks: []*Task{
+					{
+						Name:       "t1",
+						KillSignal: "SIGQUIT",
+					},
+				},
+			},
+		},
+	}
+
+	e2 := map[string]map[string][]string{
+		"foo": {
+			"t1": {"SIGQUIT"},
+		},
+	}
+
 	cases := []struct {
 		Job      *Job
 		Expected map[string]map[string][]string
@@ -816,6 +889,10 @@ func TestJob_RequiredSignals(t *testing.T) {
 		{
 			Job:      j1,
 			Expected: e1,
+		},
+		{
+			Job:      j2,
+			Expected: e2,
 		},
 	}
 
@@ -1152,6 +1229,180 @@ func TestTask_Validate_Service_Check(t *testing.T) {
 	err = check1.validate()
 	if err != nil {
 		t.Fatalf("err: %v", err)
+	}
+}
+
+// TestTask_Validate_Service_Check_AddressMode asserts that checks do not
+// inherit address mode but do inherit ports.
+func TestTask_Validate_Service_Check_AddressMode(t *testing.T) {
+	getTask := func(s *Service) *Task {
+		return &Task{
+			Resources: &Resources{
+				Networks: []*NetworkResource{
+					{
+						DynamicPorts: []Port{
+							{
+								Label: "http",
+								Value: 9999,
+							},
+						},
+					},
+				},
+			},
+			Services: []*Service{s},
+		}
+	}
+
+	cases := []struct {
+		Service     *Service
+		ErrContains string
+	}{
+		{
+			Service: &Service{
+				Name:        "invalid-driver",
+				PortLabel:   "80",
+				AddressMode: "host",
+			},
+			ErrContains: `port label "80" referenced`,
+		},
+		{
+			Service: &Service{
+				Name:        "http-driver-fail-1",
+				PortLabel:   "80",
+				AddressMode: "driver",
+				Checks: []*ServiceCheck{
+					{
+						Name:     "invalid-check-1",
+						Type:     "tcp",
+						Interval: time.Second,
+						Timeout:  time.Second,
+					},
+				},
+			},
+			ErrContains: `check "invalid-check-1" cannot use a numeric port`,
+		},
+		{
+			Service: &Service{
+				Name:        "http-driver-fail-2",
+				PortLabel:   "80",
+				AddressMode: "driver",
+				Checks: []*ServiceCheck{
+					{
+						Name:      "invalid-check-2",
+						Type:      "tcp",
+						PortLabel: "80",
+						Interval:  time.Second,
+						Timeout:   time.Second,
+					},
+				},
+			},
+			ErrContains: `check "invalid-check-2" cannot use a numeric port`,
+		},
+		{
+			Service: &Service{
+				Name:        "http-driver-fail-3",
+				PortLabel:   "80",
+				AddressMode: "driver",
+				Checks: []*ServiceCheck{
+					{
+						Name:      "invalid-check-3",
+						Type:      "tcp",
+						PortLabel: "missing-port-label",
+						Interval:  time.Second,
+						Timeout:   time.Second,
+					},
+				},
+			},
+			ErrContains: `port label "missing-port-label" referenced`,
+		},
+		{
+			Service: &Service{
+				Name:        "http-driver-passes",
+				PortLabel:   "80",
+				AddressMode: "driver",
+				Checks: []*ServiceCheck{
+					{
+						Name:     "valid-script-check",
+						Type:     "script",
+						Command:  "ok",
+						Interval: time.Second,
+						Timeout:  time.Second,
+					},
+					{
+						Name:      "valid-host-check",
+						Type:      "tcp",
+						PortLabel: "http",
+						Interval:  time.Second,
+						Timeout:   time.Second,
+					},
+					{
+						Name:        "valid-driver-check",
+						Type:        "tcp",
+						AddressMode: "driver",
+						Interval:    time.Second,
+						Timeout:     time.Second,
+					},
+				},
+			},
+		},
+		{
+			Service: &Service{
+				Name: "empty-address-3673-passes-1",
+				Checks: []*ServiceCheck{
+					{
+						Name:      "valid-port-label",
+						Type:      "tcp",
+						PortLabel: "http",
+						Interval:  time.Second,
+						Timeout:   time.Second,
+					},
+					{
+						Name:     "empty-is-ok",
+						Type:     "script",
+						Command:  "ok",
+						Interval: time.Second,
+						Timeout:  time.Second,
+					},
+				},
+			},
+		},
+		{
+			Service: &Service{
+				Name: "empty-address-3673-passes-2",
+			},
+		},
+		{
+			Service: &Service{
+				Name: "empty-address-3673-fails",
+				Checks: []*ServiceCheck{
+					{
+						Name:     "empty-is-not-ok",
+						Type:     "tcp",
+						Interval: time.Second,
+						Timeout:  time.Second,
+					},
+				},
+			},
+			ErrContains: `invalid: check requires a port but neither check nor service`,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		task := getTask(tc.Service)
+		t.Run(tc.Service.Name, func(t *testing.T) {
+			err := validateServices(task)
+			if err == nil && tc.ErrContains == "" {
+				// Ok!
+				return
+			}
+			if err == nil {
+				t.Fatalf("no error returned. expected: %s", tc.ErrContains)
+			}
+			if !strings.Contains(err.Error(), tc.ErrContains) {
+				t.Fatalf("expected %q but found: %v", tc.ErrContains, err)
+			}
+		})
 	}
 }
 
@@ -1678,6 +1929,14 @@ func TestInvalidServiceCheck(t *testing.T) {
 	}
 	if err := s.Validate(); err != nil {
 		t.Fatalf("Service should be valid: %v", err)
+	}
+
+	s = Service{
+		Name:      "my_service-${NOMAD_META_FOO}",
+		PortLabel: "bar",
+	}
+	if err := s.Validate(); err == nil {
+		t.Fatalf("Service should be invalid (contains underscore but not in a variable name): %v", err)
 	}
 
 	s = Service{
@@ -2430,4 +2689,56 @@ func TestACLPolicySetHash(t *testing.T) {
 	assert.NotNil(t, ap.Hash)
 	assert.Equal(t, out2, ap.Hash)
 	assert.NotEqual(t, out1, out2)
+}
+
+func TestTaskEventPopulate(t *testing.T) {
+	prepopulatedEvent := NewTaskEvent(TaskSetup)
+	prepopulatedEvent.DisplayMessage = "Hola"
+	testcases := []struct {
+		event       *TaskEvent
+		expectedMsg string
+	}{
+		{nil, ""},
+		{prepopulatedEvent, "Hola"},
+		{NewTaskEvent(TaskSetup).SetMessage("Setup"), "Setup"},
+		{NewTaskEvent(TaskStarted), "Task started by client"},
+		{NewTaskEvent(TaskReceived), "Task received by client"},
+		{NewTaskEvent(TaskFailedValidation), "Validation of task failed"},
+		{NewTaskEvent(TaskFailedValidation).SetValidationError(fmt.Errorf("task failed validation")), "task failed validation"},
+		{NewTaskEvent(TaskSetupFailure), "Task setup failed"},
+		{NewTaskEvent(TaskSetupFailure).SetSetupError(fmt.Errorf("task failed setup")), "task failed setup"},
+		{NewTaskEvent(TaskDriverFailure), "Failed to start task"},
+		{NewTaskEvent(TaskDownloadingArtifacts), "Client is downloading artifacts"},
+		{NewTaskEvent(TaskArtifactDownloadFailed), "Failed to download artifacts"},
+		{NewTaskEvent(TaskArtifactDownloadFailed).SetDownloadError(fmt.Errorf("connection reset by peer")), "connection reset by peer"},
+		{NewTaskEvent(TaskRestarting).SetRestartDelay(2 * time.Second).SetRestartReason(ReasonWithinPolicy), "Task restarting in 2s"},
+		{NewTaskEvent(TaskRestarting).SetRestartReason("Chaos Monkey did it"), "Chaos Monkey did it - Task restarting in 0s"},
+		{NewTaskEvent(TaskKilling), "Sent interrupt"},
+		{NewTaskEvent(TaskKilling).SetKillReason("Its time for you to die"), "Killing task: Its time for you to die"},
+		{NewTaskEvent(TaskKilling).SetKillTimeout(1 * time.Second), "Sent interrupt. Waiting 1s before force killing"},
+		{NewTaskEvent(TaskTerminated).SetExitCode(-1).SetSignal(3), "Exit Code: -1, Signal: 3"},
+		{NewTaskEvent(TaskTerminated).SetMessage("Goodbye"), "Exit Code: 0, Exit Message: \"Goodbye\""},
+		{NewTaskEvent(TaskKilled), "Task successfully killed"},
+		{NewTaskEvent(TaskKilled).SetKillError(fmt.Errorf("undead creatures can't be killed")), "undead creatures can't be killed"},
+		{NewTaskEvent(TaskNotRestarting).SetRestartReason("Chaos Monkey did it"), "Chaos Monkey did it"},
+		{NewTaskEvent(TaskNotRestarting), "Task exceeded restart policy"},
+		{NewTaskEvent(TaskLeaderDead), "Leader Task in Group dead"},
+		{NewTaskEvent(TaskSiblingFailed), "Task's sibling failed"},
+		{NewTaskEvent(TaskSiblingFailed).SetFailedSibling("patient zero"), "Task's sibling \"patient zero\" failed"},
+		{NewTaskEvent(TaskSignaling), "Task being sent a signal"},
+		{NewTaskEvent(TaskSignaling).SetTaskSignal(os.Interrupt), "Task being sent signal interrupt"},
+		{NewTaskEvent(TaskSignaling).SetTaskSignal(os.Interrupt).SetTaskSignalReason("process interrupted"), "Task being sent signal interrupt: process interrupted"},
+		{NewTaskEvent(TaskRestartSignal), "Task signaled to restart"},
+		{NewTaskEvent(TaskRestartSignal).SetRestartReason("Chaos Monkey restarted it"), "Chaos Monkey restarted it"},
+		{NewTaskEvent(TaskDriverMessage).SetDriverMessage("YOLO"), "YOLO"},
+		{NewTaskEvent("Unknown Type, No message"), ""},
+		{NewTaskEvent("Unknown Type").SetMessage("Hello world"), "Hello world"},
+	}
+
+	for _, tc := range testcases {
+		tc.event.PopulateEventDisplayMessage()
+		if tc.event != nil && tc.event.DisplayMessage != tc.expectedMsg {
+			t.Fatalf("Expected %v but got %v", tc.expectedMsg, tc.event.DisplayMessage)
+		}
+	}
 }
