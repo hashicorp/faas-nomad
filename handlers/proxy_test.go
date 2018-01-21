@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/faas-nomad/consul"
 	hclog "github.com/hashicorp/go-hclog"
@@ -21,6 +22,9 @@ var mockProxyClient *MockProxyClient
 func setupProxy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request) {
 	mockProxyClient = &MockProxyClient{}
 	mockServiceResolver = &consul.MockResolver{}
+
+	// override the retryDelay to improve test speed
+	retryDelay = 2 * time.Millisecond
 
 	r := httptest.NewRequest("POST", "/", bytes.NewReader([]byte(body)))
 	r = r.WithContext(context.WithValue(r.Context(), FunctionNameCTXKey, "function"))

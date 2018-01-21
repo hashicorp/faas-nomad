@@ -14,6 +14,8 @@ import (
 	cache "github.com/patrickmn/go-cache"
 )
 
+var retryDelay = 2 * time.Second
+
 // MakeProxy creates a proxy for HTTP web requests which can be routed to a function.
 func MakeProxy(client ProxyClient, resolver consul.ServiceResolver, statsDAddress string, logger hclog.Logger, stats *statsd.Client) http.HandlerFunc {
 	c := cache.New(5*time.Minute, 10*time.Minute)
@@ -86,7 +88,6 @@ func (p *Proxy) callDownstreamFunction(service string, urls []string, r *http.Re
 
 	lb := p.getLoadbalancer(service, urls, p.statsDAddress)
 	lb.Do(func(endpoint url.URL) error {
-
 		// add the querystring from the request
 		endpoint.RawQuery = r.URL.RawQuery
 		respBody, respHeaders, err = p.client.CallAndReturnResponse(endpoint.String(), reqBody, reqHeaders)
@@ -146,7 +147,7 @@ func createLoadbalancer(endpoints []url.URL, statsDAddr string, logger hclog.Log
 		ErrorPercentThreshold:  25,
 		DefaultVolumeThreshold: 10,
 		Retries:                5,
-		RetryDelay:             2 * time.Second,
+		RetryDelay:             retryDelay,
 		Endpoints:              endpoints,
 		StatsD: ultraclient.StatsD{
 			Prefix: "faas.nomadd.function",
