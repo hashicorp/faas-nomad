@@ -50,10 +50,7 @@ func MakeReader(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) htt
 	}
 }
 
-func getFunctions(
-	client nomad.Job,
-	jobs []*api.JobListStub) ([]requests.Function, error) {
-
+func getFunctions(client nomad.Job, jobs []*api.JobListStub) ([]requests.Function, error) {
 	functions := make([]requests.Function, 0)
 	for _, j := range jobs {
 
@@ -63,23 +60,20 @@ func getFunctions(
 				return functions, err
 			}
 
-			jobName := strings.Replace(
-				job.TaskGroups[0].Tasks[0].Name,
-				nomad.JobPrefix,
-				"",
-				-1)
-
 			functions = append(functions, requests.Function{
-				Name:            jobName,
+				Name:            sanitiseJobName(job),
 				Image:           job.TaskGroups[0].Tasks[0].Config["image"].(string),
 				Replicas:        uint64(*job.TaskGroups[0].Count),
 				InvocationCount: 0,
 			})
 		}
-
 	}
 
 	return functions, nil
+}
+
+func sanitiseJobName(job *api.Job) string {
+	return strings.Replace(job.TaskGroups[0].Tasks[0].Name, nomad.JobPrefix, "", -1)
 }
 
 func writeError(w http.ResponseWriter, err error) {
