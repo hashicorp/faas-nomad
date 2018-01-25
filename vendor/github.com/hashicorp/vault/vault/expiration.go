@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,20 +68,21 @@ type ExpirationManager struct {
 	restoreLocks       []*locksutil.LockEntry
 	restoreLoaded      sync.Map
 	quitCh             chan struct{}
-
-	coreStateLock *sync.RWMutex
-	quitContext   context.Context
 }
 
 // NewExpirationManager creates a new ExpirationManager that is backed
 // using a given view, and uses the provided router for revocation.
-func NewExpirationManager(c *Core, view *BarrierView) *ExpirationManager {
+func NewExpirationManager(router *Router, view *BarrierView, ts *TokenStore, logger log.Logger) *ExpirationManager {
+	if logger == nil {
+		logger = log.New("expiration_manager")
+	}
+
 	exp := &ExpirationManager{
-		router:     c.router,
+		router:     router,
 		idView:     view.SubView(leaseViewPrefix),
 		tokenView:  view.SubView(tokenViewPrefix),
-		tokenStore: c.tokenStore,
-		logger:     c.logger,
+		tokenStore: ts,
+		logger:     logger,
 		pending:    make(map[string]*time.Timer),
 
 		// new instances of the expiration manager will go immediately into
@@ -90,15 +90,7 @@ func NewExpirationManager(c *Core, view *BarrierView) *ExpirationManager {
 		restoreMode:  1,
 		restoreLocks: locksutil.CreateLocks(),
 		quitCh:       make(chan struct{}),
-
-		coreStateLock: &c.stateLock,
-		quitContext:   c.requestContext,
 	}
-
-	if exp.logger == nil {
-		exp.logger = log.New("expiration_manager")
-	}
-
 	return exp
 }
 
@@ -111,7 +103,7 @@ func (c *Core) setupExpiration() error {
 	view := c.systemBarrierView.SubView(expirationSubPath)
 
 	// Create the manager
-	mgr := NewExpirationManager(c, view)
+	mgr := NewExpirationManager(c.router, view, c.tokenStore, c.logger)
 	c.expiration = mgr
 
 	// Link the token store to this
@@ -438,10 +430,6 @@ func (m *ExpirationManager) Stop() error {
 	m.logger.Debug("expiration: stop triggered")
 	defer m.logger.Debug("expiration: finished stopping")
 
-	// Do this before stopping pending timers to avoid potential races with
-	// expiring timers
-	close(m.quitCh)
-
 	m.pendingLock.Lock()
 	for _, timer := range m.pending {
 		timer.Stop()
@@ -449,6 +437,7 @@ func (m *ExpirationManager) Stop() error {
 	m.pending = make(map[string]*time.Timer)
 	m.pendingLock.Unlock()
 
+	close(m.quitCh)
 	if m.inRestoreMode() {
 		for {
 			if !m.inRestoreMode() {
@@ -750,31 +739,6 @@ func (m *ExpirationManager) RenewToken(req *logical.Request, source string, toke
 		}, nil
 	}
 
-	sysView := m.router.MatchingSystemView(le.Path)
-	if sysView == nil {
-		return nil, fmt.Errorf("expiration: unable to retrieve system view from router")
-	}
-
-	retResp := &logical.Response{}
-	switch {
-	case resp.Auth.Period > time.Duration(0):
-		// If it resp.Period is non-zero, use that as the TTL and override backend's
-		// call on TTL modification, such as a TTL value determined by
-		// framework.LeaseExtend call against the request. Also, cap period value to
-		// the sys/mount max value.
-		if resp.Auth.Period > sysView.MaxLeaseTTL() {
-			retResp.AddWarning(fmt.Sprintf("Period of %d seconds is greater than current mount/system default of %d seconds, value will be truncated.", resp.Auth.TTL, sysView.MaxLeaseTTL()))
-			resp.Auth.Period = sysView.MaxLeaseTTL()
-		}
-		resp.Auth.TTL = resp.Auth.Period
-	case resp.Auth.TTL > time.Duration(0):
-		// Cap TTL value to the sys/mount max value
-		if resp.Auth.TTL > sysView.MaxLeaseTTL() {
-			retResp.AddWarning(fmt.Sprintf("TTL of %d seconds is greater than current mount/system default of %d seconds, value will be truncated.", resp.Auth.TTL, sysView.MaxLeaseTTL()))
-			resp.Auth.TTL = sysView.MaxLeaseTTL()
-		}
-	}
-
 	// Attach the ClientToken
 	resp.Auth.ClientToken = token
 	resp.Auth.Increment = 0
@@ -789,9 +753,9 @@ func (m *ExpirationManager) RenewToken(req *logical.Request, source string, toke
 
 	// Update the expiration time
 	m.updatePending(le, resp.Auth.LeaseTotal())
-
-	retResp.Auth = resp.Auth
-	return retResp, nil
+	return &logical.Response{
+		Auth: resp.Auth,
+	}, nil
 }
 
 // Register is used to take a request and response with an associated
@@ -889,12 +853,6 @@ func (m *ExpirationManager) RegisterAuth(source string, auth *logical.Auth) erro
 	saltedID, err := m.tokenStore.SaltID(auth.ClientToken)
 	if err != nil {
 		return err
-	}
-
-	// If it resp.Period is non-zero, override the TTL value determined
-	// by the backend.
-	if auth.Period > time.Duration(0) {
-		auth.TTL = auth.Period
 	}
 
 	// Create a lease entry
@@ -1011,24 +969,13 @@ func (m *ExpirationManager) expireID(leaseID string) {
 			return
 		default:
 		}
-
-		m.coreStateLock.RLock()
-		if m.quitContext.Err() == context.Canceled {
-			m.logger.Error("expiration: core context canceled, not attempting further revocation of lease", "lease_id", leaseID)
-			m.coreStateLock.RUnlock()
-			return
-		}
-
 		err := m.Revoke(leaseID)
 		if err == nil {
 			if m.logger.IsInfo() {
 				m.logger.Info("expiration: revoked lease", "lease_id", leaseID)
 			}
-			m.coreStateLock.RUnlock()
 			return
 		}
-
-		m.coreStateLock.RUnlock()
 		m.logger.Error("expiration: failed to revoke lease", "lease_id", leaseID, "error", err)
 		time.Sleep((1 << attempt) * revokeRetryBase)
 	}
@@ -1048,7 +995,8 @@ func (m *ExpirationManager) revokeEntry(le *leaseEntry) error {
 	}
 
 	// Handle standard revocation via backends
-	resp, err := m.router.Route(logical.RevokeRequest(le.Path, le.Secret, le.Data))
+	resp, err := m.router.Route(logical.RevokeRequest(
+		le.Path, le.Secret, le.Data))
 	if err != nil || (resp != nil && resp.IsError()) {
 		return fmt.Errorf("failed to revoke entry: resp:%#v err:%s", resp, err)
 	}
@@ -1155,9 +1103,6 @@ func (m *ExpirationManager) persistEntry(le *leaseEntry) error {
 	ent := logical.StorageEntry{
 		Key:   le.LeaseID,
 		Value: buf,
-	}
-	if le.Auth != nil && len(le.Auth.Policies) == 1 && le.Auth.Policies[0] == "root" {
-		ent.SealWrap = true
 	}
 	if err := m.idView.Put(&ent); err != nil {
 		return fmt.Errorf("failed to persist lease entry: %v", err)

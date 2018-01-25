@@ -157,7 +157,6 @@ func TestLogical_StandbyRedirect(t *testing.T) {
 			"creation_ttl":     json.Number("0"),
 			"explicit_max_ttl": json.Number("0"),
 			"expire_time":      nil,
-			"entity_id":        "",
 		},
 		"warnings":  nilWarnings,
 		"wrap_info": nil,
@@ -207,7 +206,6 @@ func TestLogical_CreateToken(t *testing.T) {
 			"metadata":       nil,
 			"lease_duration": json.Number("0"),
 			"renewable":      false,
-			"entity_id":      "",
 		},
 		"warnings": nilWarnings,
 	}

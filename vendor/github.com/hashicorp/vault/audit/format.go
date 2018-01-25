@@ -123,7 +123,6 @@ func (f *AuditFormatter) FormatRequest(
 			DisplayName:   auth.DisplayName,
 			Policies:      auth.Policies,
 			Metadata:      auth.Metadata,
-			EntityID:      auth.EntityID,
 			RemainingUses: req.ClientTokenRemainingUses,
 		},
 
@@ -134,7 +133,6 @@ func (f *AuditFormatter) FormatRequest(
 			Operation:           req.Operation,
 			Path:                req.Path,
 			Data:                req.Data,
-			PolicyOverride:      req.PolicyOverride,
 			RemoteAddr:          getRemoteAddr(req),
 			ReplicationCluster:  req.ReplicationCluster,
 			Headers:             req.Headers,
@@ -146,7 +144,7 @@ func (f *AuditFormatter) FormatRequest(
 	}
 
 	if !config.OmitTime {
-		reqEntry.Time = time.Now().UTC().Format(time.RFC3339Nano)
+		reqEntry.Time = time.Now().UTC().Format(time.RFC3339)
 	}
 
 	return f.AuditFormatWriter.WriteRequest(w, reqEntry)
@@ -242,13 +240,12 @@ func (f *AuditFormatter) FormatResponse(
 
 		// Cache and restore accessor in the response
 		if resp != nil {
-			var accessor, wrappedAccessor, wrappingAccessor string
+			var accessor, wrappedAccessor string
 			if !config.HMACAccessor && resp != nil && resp.Auth != nil && resp.Auth.Accessor != "" {
 				accessor = resp.Auth.Accessor
 			}
 			if !config.HMACAccessor && resp != nil && resp.WrapInfo != nil && resp.WrapInfo.WrappedAccessor != "" {
 				wrappedAccessor = resp.WrapInfo.WrappedAccessor
-				wrappingAccessor = resp.WrapInfo.Accessor
 			}
 			if err := Hash(salt, resp); err != nil {
 				return err
@@ -258,9 +255,6 @@ func (f *AuditFormatter) FormatResponse(
 			}
 			if wrappedAccessor != "" {
 				resp.WrapInfo.WrappedAccessor = wrappedAccessor
-			}
-			if wrappingAccessor != "" {
-				resp.WrapInfo.Accessor = wrappingAccessor
 			}
 		}
 	}
@@ -305,7 +299,6 @@ func (f *AuditFormatter) FormatResponse(
 		respWrapInfo = &AuditResponseWrapInfo{
 			TTL:             int(resp.WrapInfo.TTL / time.Second),
 			Token:           token,
-			Accessor:        resp.WrapInfo.Accessor,
 			CreationTime:    resp.WrapInfo.CreationTime.Format(time.RFC3339Nano),
 			CreationPath:    resp.WrapInfo.CreationPath,
 			WrappedAccessor: resp.WrapInfo.WrappedAccessor,
@@ -316,13 +309,12 @@ func (f *AuditFormatter) FormatResponse(
 		Type:  "response",
 		Error: errString,
 		Auth: AuditAuth{
+			ClientToken:   auth.ClientToken,
+			Accessor:      auth.Accessor,
 			DisplayName:   auth.DisplayName,
 			Policies:      auth.Policies,
 			Metadata:      auth.Metadata,
-			ClientToken:   auth.ClientToken,
-			Accessor:      auth.Accessor,
 			RemainingUses: req.ClientTokenRemainingUses,
-			EntityID:      auth.EntityID,
 		},
 
 		Request: AuditRequest{
@@ -332,7 +324,6 @@ func (f *AuditFormatter) FormatResponse(
 			Operation:           req.Operation,
 			Path:                req.Path,
 			Data:                req.Data,
-			PolicyOverride:      req.PolicyOverride,
 			RemoteAddr:          getRemoteAddr(req),
 			ReplicationCluster:  req.ReplicationCluster,
 			Headers:             req.Headers,
@@ -352,7 +343,7 @@ func (f *AuditFormatter) FormatResponse(
 	}
 
 	if !config.OmitTime {
-		respEntry.Time = time.Now().UTC().Format(time.RFC3339Nano)
+		respEntry.Time = time.Now().UTC().Format(time.RFC3339)
 	}
 
 	return f.AuditFormatWriter.WriteResponse(w, respEntry)
@@ -385,7 +376,6 @@ type AuditRequest struct {
 	ClientTokenAccessor string                 `json:"client_token_accessor"`
 	Path                string                 `json:"path"`
 	Data                map[string]interface{} `json:"data"`
-	PolicyOverride      bool                   `json:"policy_override"`
 	RemoteAddr          string                 `json:"remote_address"`
 	WrapTTL             int                    `json:"wrap_ttl"`
 	Headers             map[string][]string    `json:"headers"`
@@ -407,7 +397,6 @@ type AuditAuth struct {
 	Metadata      map[string]string `json:"metadata"`
 	NumUses       int               `json:"num_uses,omitempty"`
 	RemainingUses int               `json:"remaining_uses,omitempty"`
-	EntityID      string            `json:"entity_id"`
 }
 
 type AuditSecret struct {
@@ -417,7 +406,6 @@ type AuditSecret struct {
 type AuditResponseWrapInfo struct {
 	TTL             int    `json:"ttl"`
 	Token           string `json:"token"`
-	Accessor        string `json:"accessor"`
 	CreationTime    string `json:"creation_time"`
 	CreationPath    string `json:"creation_path"`
 	WrappedAccessor string `json:"wrapped_accessor,omitempty"`

@@ -433,8 +433,12 @@ func testAccStepReadPolicy(t *testing.T, name string, policy string, lease time.
 				return fmt.Errorf("mismatch: %s %s", out, policy)
 			}
 
-			l := resp.Data["lease"].(int64)
-			if lease != time.Second*time.Duration(l) {
+			leaseRaw := resp.Data["lease"].(string)
+			l, err := time.ParseDuration(leaseRaw)
+			if err != nil {
+				return err
+			}
+			if l != lease {
 				return fmt.Errorf("mismatch: %v %v", l, lease)
 			}
 			return nil

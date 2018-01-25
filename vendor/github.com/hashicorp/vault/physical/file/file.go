@@ -34,10 +34,6 @@ type TransactionalFileBackend struct {
 	FileBackend
 }
 
-type fileEntry struct {
-	Value []byte
-}
-
 // NewFileBackend constructs a FileBackend using the given directory
 func NewFileBackend(conf map[string]string, logger log.Logger) (physical.Backend, error) {
 	path, ok := conf["path"]
@@ -167,15 +163,12 @@ func (b *FileBackend) GetInternal(k string) (*physical.Entry, error) {
 		return nil, err
 	}
 
-	var entry fileEntry
+	var entry physical.Entry
 	if err := jsonutil.DecodeJSONFromReader(f, &entry); err != nil {
 		return nil, err
 	}
 
-	return &physical.Entry{
-		Key:   k,
-		Value: entry.Value,
-	}, nil
+	return &entry, nil
 }
 
 func (b *FileBackend) Put(entry *physical.Entry) error {
@@ -196,7 +189,7 @@ func (b *FileBackend) PutInternal(entry *physical.Entry) error {
 	path, key := b.expandPath(entry.Key)
 
 	// Make the parent tree
-	if err := os.MkdirAll(path, 0700); err != nil {
+	if err := os.MkdirAll(path, 0755); err != nil {
 		return err
 	}
 
@@ -212,9 +205,7 @@ func (b *FileBackend) PutInternal(entry *physical.Entry) error {
 		return err
 	}
 	enc := json.NewEncoder(f)
-	return enc.Encode(&fileEntry{
-		Value: entry.Value,
-	})
+	return enc.Encode(entry)
 }
 
 func (b *FileBackend) List(prefix string) ([]string, error) {
@@ -256,16 +247,10 @@ func (b *FileBackend) ListInternal(prefix string) ([]string, error) {
 	}
 
 	for i, name := range names {
-		fi, err := os.Stat(filepath.Join(path, name))
-		if err != nil {
-			return nil, err
-		}
-		if fi.IsDir() {
-			names[i] = name + "/"
+		if name[0] == '_' {
+			names[i] = name[1:]
 		} else {
-			if name[0] == '_' {
-				names[i] = name[1:]
-			}
+			names[i] = name + "/"
 		}
 	}
 
@@ -288,7 +273,7 @@ func (b *FileBackend) validatePath(path string) error {
 	return nil
 }
 
-func (b *TransactionalFileBackend) Transaction(txns []*physical.TxnEntry) error {
+func (b *TransactionalFileBackend) Transaction(txns []physical.TxnEntry) error {
 	b.permitPool.Acquire()
 	defer b.permitPool.Release()
 

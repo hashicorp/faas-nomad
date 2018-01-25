@@ -35,24 +35,15 @@ func (c *StatusCommand) Run(args []string) int {
 		return 1
 	}
 
-	var sealPrefix string
-	if sealStatus.RecoverySeal {
-		sealPrefix = "Recovery "
-	}
 	outStr := fmt.Sprintf(
-		"%sSeal Type: %s\n"+
-			"Sealed: %v\n"+
-			"%sKey Shares: %d\n"+
-			"%sKey Threshold: %d\n"+
+		"Sealed: %v\n"+
+			"Key Shares: %d\n"+
+			"Key Threshold: %d\n"+
 			"Unseal Progress: %d\n"+
 			"Unseal Nonce: %v\n"+
 			"Version: %s",
-		sealPrefix,
-		sealStatus.Type,
 		sealStatus.Sealed,
-		sealPrefix,
 		sealStatus.N,
-		sealPrefix,
 		sealStatus.T,
 		sealStatus.Progress,
 		sealStatus.Nonce,

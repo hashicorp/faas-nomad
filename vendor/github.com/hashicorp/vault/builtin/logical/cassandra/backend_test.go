@@ -4,76 +4,73 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/hashicorp/vault/logical"
 	logicaltest "github.com/hashicorp/vault/logical/testing"
 	"github.com/mitchellh/mapstructure"
-	dockertest "gopkg.in/ory-am/dockertest.v3"
+	dockertest "gopkg.in/ory-am/dockertest.v2"
 )
 
 var (
 	testImagePull sync.Once
 )
 
-func prepareCassandraTestContainer(t *testing.T) (func(), string, int) {
+func prepareTestContainer(t *testing.T, s logical.Storage, b logical.Backend) (cid dockertest.ContainerID, retURL string) {
 	if os.Getenv("CASSANDRA_HOST") != "" {
-		return func() {}, os.Getenv("CASSANDRA_HOST"), 0
+		return "", os.Getenv("CASSANDRA_HOST")
 	}
 
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		t.Fatalf("Failed to connect to docker: %s", err)
-	}
+	// Without this the checks for whether the container has started seem to
+	// never actually pass. There's really no reason to expose the test
+	// containers, so don't.
+	dockertest.BindDockerToLocalhost = "yep"
+
+	testImagePull.Do(func() {
+		dockertest.Pull("cassandra")
+	})
 
 	cwd, _ := os.Getwd()
-	cassandraMountPath := fmt.Sprintf("%s/test-fixtures/:/etc/cassandra/", cwd)
 
-	ro := &dockertest.RunOptions{
-		Repository: "cassandra",
-		Tag:        "latest",
-		Env:        []string{"CASSANDRA_BROADCAST_ADDRESS=127.0.0.1"},
-		Mounts:     []string{cassandraMountPath},
+	cid, connErr := dockertest.ConnectToCassandra("latest", 60, 1000*time.Millisecond, func(connURL string) bool {
+		// This will cause a validation to run
+		resp, err := b.HandleRequest(&logical.Request{
+			Storage:   s,
+			Operation: logical.UpdateOperation,
+			Path:      "config/connection",
+			Data: map[string]interface{}{
+				"hosts":            connURL,
+				"username":         "cassandra",
+				"password":         "cassandra",
+				"protocol_version": 3,
+			},
+		})
+		if err != nil || (resp != nil && resp.IsError()) {
+			// It's likely not up and running yet, so return false and try again
+			return false
+		}
+
+		retURL = connURL
+		return true
+	}, []string{"-v", cwd + "/test-fixtures/:/etc/cassandra/"}...)
+
+	if connErr != nil {
+		if cid != "" {
+			cid.KillRemove()
+		}
+		t.Fatalf("could not connect to database: %v", connErr)
 	}
-	resource, err := pool.RunWithOptions(ro)
+
+	return
+}
+
+func cleanupTestContainer(t *testing.T, cid dockertest.ContainerID) {
+	err := cid.KillRemove()
 	if err != nil {
-		t.Fatalf("Could not start local cassandra docker container: %s", err)
+		t.Fatal(err)
 	}
-
-	cleanup := func() {
-		err := pool.Purge(resource)
-		if err != nil {
-			t.Fatalf("Failed to cleanup local container: %s", err)
-		}
-	}
-
-	port, _ := strconv.Atoi(resource.GetPort("9042/tcp"))
-	address := fmt.Sprintf("127.0.0.1:%d", port)
-
-	// exponential backoff-retry
-	if err = pool.Retry(func() error {
-		clusterConfig := gocql.NewCluster(address)
-		clusterConfig.Authenticator = gocql.PasswordAuthenticator{
-			Username: "cassandra",
-			Password: "cassandra",
-		}
-		clusterConfig.ProtoVersion = 4
-		clusterConfig.Port = port
-
-		session, err := clusterConfig.CreateSession()
-		if err != nil {
-			return fmt.Errorf("error creating session: %s", err)
-		}
-		defer session.Close()
-		return nil
-	}); err != nil {
-		cleanup()
-		t.Fatalf("Could not connect to cassandra docker container: %s", err)
-	}
-	return cleanup, address, port
 }
 
 func TestBackend_basic(t *testing.T) {
@@ -87,8 +84,10 @@ func TestBackend_basic(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cleanup, hostname, _ := prepareCassandraTestContainer(t)
-	defer cleanup()
+	cid, hostname := prepareTestContainer(t, config.StorageView, b)
+	if cid != "" {
+		defer cleanupTestContainer(t, cid)
+	}
 
 	logicaltest.Test(t, logicaltest.TestCase{
 		Backend: b,
@@ -111,8 +110,10 @@ func TestBackend_roleCrud(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cleanup, hostname, _ := prepareCassandraTestContainer(t)
-	defer cleanup()
+	cid, hostname := prepareTestContainer(t, config.StorageView, b)
+	if cid != "" {
+		defer cleanupTestContainer(t, cid)
+	}
 
 	logicaltest.Test(t, logicaltest.TestCase{
 		Backend: b,

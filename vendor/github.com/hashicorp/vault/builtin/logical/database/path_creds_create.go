@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -50,7 +49,7 @@ func (b *databaseBackend) pathCredsCreateRead() framework.OperationFunc {
 
 		// If role name isn't in the database's allowed roles, send back a
 		// permission denied.
-		if !strutil.StrListContains(dbConfig.AllowedRoles, "*") && !strutil.StrListContainsGlob(dbConfig.AllowedRoles, name) {
+		if !strutil.StrListContains(dbConfig.AllowedRoles, "*") && !strutil.StrListContains(dbConfig.AllowedRoles, name) {
 			return nil, logical.ErrPermissionDenied
 		}
 
@@ -67,7 +66,7 @@ func (b *databaseBackend) pathCredsCreateRead() framework.OperationFunc {
 			unlockFunc = b.Unlock
 
 			// Create a new DB object
-			db, err = b.createDBObj(context.TODO(), req.Storage, role.DBName)
+			db, err = b.createDBObj(req.Storage, role.DBName)
 			if err != nil {
 				unlockFunc()
 				return nil, fmt.Errorf("cound not retrieve db with name: %s, got error: %s", role.DBName, err)
@@ -82,7 +81,7 @@ func (b *databaseBackend) pathCredsCreateRead() framework.OperationFunc {
 		}
 
 		// Create the user
-		username, password, err := db.CreateUser(context.TODO(), role.Statements, usernameConfig, expiration)
+		username, password, err := db.CreateUser(role.Statements, usernameConfig, expiration)
 		// Unlock
 		unlockFunc()
 		if err != nil {

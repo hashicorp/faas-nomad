@@ -27,29 +27,12 @@ func pathLogin(b *backend) *framework.Path {
 		},
 
 		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.UpdateOperation:         b.pathLogin,
-			logical.AliasLookaheadOperation: b.pathLoginAliasLookahead,
+			logical.UpdateOperation: b.pathLogin,
 		},
 
 		HelpSynopsis:    pathLoginSyn,
 		HelpDescription: pathLoginDesc,
 	}
-}
-
-func (b *backend) pathLoginAliasLookahead(
-	req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
-	username := strings.ToLower(d.Get("username").(string))
-	if username == "" {
-		return nil, fmt.Errorf("missing username")
-	}
-
-	return &logical.Response{
-		Auth: &logical.Auth{
-			Alias: &logical.Alias{
-				Name: username,
-			},
-		},
-	}, nil
 }
 
 func (b *backend) pathLogin(
@@ -93,9 +76,6 @@ func (b *backend) pathLogin(
 			LeaseOptions: logical.LeaseOptions{
 				TTL:       user.TTL,
 				Renewable: true,
-			},
-			Alias: &logical.Alias{
-				Name: username,
 			},
 		},
 	}, nil

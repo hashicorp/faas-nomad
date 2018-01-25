@@ -78,6 +78,23 @@ func TestRunner_Run(t *testing.T) {
 				},
 			},
 			func(t *testing.T, r *Runner, out string) {
+				select {
+				case <-r.RenderEventCh():
+				case <-time.After(time.Second):
+					t.Errorf("timeout")
+				}
+
+				events := r.RenderEvents()
+				if l := len(events); l != 1 {
+					t.Errorf("\nexp: %#v\nact: %#v", 1, l)
+				}
+
+				for _, e := range events {
+					if l := e.MissingDeps.Len(); l != 1 {
+						t.Errorf("\nexp: %#v\nact: %#v", 1, l)
+					}
+				}
+
 				exp := ""
 				if out != exp {
 					t.Errorf("\nexp: %#v\nact: %#v", exp, out)
@@ -118,6 +135,23 @@ func TestRunner_Run(t *testing.T) {
 				},
 			},
 			func(t *testing.T, r *Runner, out string) {
+				select {
+				case <-r.RenderEventCh():
+				case <-time.After(time.Second):
+					t.Errorf("timeout")
+				}
+
+				events := r.RenderEvents()
+				if l := len(events); l != 1 {
+					t.Errorf("\nexp: %#v\nact: %#v", 1, l)
+				}
+
+				for _, e := range events {
+					if l := e.MissingDeps.Len(); l != 2 {
+						t.Errorf("\nexp: %#v\nact: %#v", 2, l)
+					}
+				}
+
 				exp := 2
 				if len(r.dependencies) != exp {
 					t.Errorf("\nexp: %#v\nact: %#v\ndeps: %#v", exp, len(r.dependencies), r.dependencies)
@@ -136,6 +170,23 @@ func TestRunner_Run(t *testing.T) {
 				},
 			},
 			func(t *testing.T, r *Runner, out string) {
+				select {
+				case <-r.RenderEventCh():
+				case <-time.After(time.Second):
+					t.Errorf("timeout")
+				}
+
+				events := r.RenderEvents()
+				if l := len(events); l != 1 {
+					t.Errorf("\nexp: %#v\nact: %#v", 1, l)
+				}
+
+				for _, e := range events {
+					if l := e.MissingDeps.Len(); l != 1 {
+						t.Errorf("\nexp: %#v\nact: %#v", 1, l)
+					}
+				}
+
 				exp := 1
 				if len(r.dependencies) != exp {
 					t.Errorf("\nexp: %#v\nact: %#v\ndeps: %#v", exp, len(r.dependencies), r.dependencies)
@@ -154,20 +205,66 @@ func TestRunner_Run(t *testing.T) {
 				},
 			},
 			func(t *testing.T, r *Runner, out string) {
+				select {
+				case <-r.RenderEventCh():
+				case <-time.After(time.Second):
+					t.Errorf("timeout")
+				}
+
 				exp := 1
 				if len(r.dependencies) != exp {
 					t.Errorf("\nexp: %#v\nact: %#v\ndeps: %#v", exp, len(r.dependencies), r.dependencies)
 				}
 
-				d, err := dep.NewKVGetQuery("foo")
-				if err != nil {
-					t.Fatal(err)
+				events := r.RenderEvents()
+				if l := len(events); l != 1 {
+					t.Errorf("\nexp: %#v\nact: %#v", 1, l)
 				}
-				d.EnableBlocking()
-				r.Receive(d, "bar")
 
-				if err := r.Run(); err != nil {
-					t.Fatal(err)
+				for _, e := range events {
+					if l := e.MissingDeps.Len(); l != 1 {
+						t.Errorf("\nexp: %#v\nact: %#v", 1, l)
+					}
+				}
+
+				// Drain the channel
+			OUTER:
+				for {
+					select {
+					case <-r.RenderEventCh():
+					default:
+						break OUTER
+					}
+				}
+
+				go func() {
+					d, err := dep.NewKVGetQuery("foo")
+					if err != nil {
+						t.Fatal(err)
+					}
+					d.EnableBlocking()
+					r.Receive(d, "bar")
+
+					if err := r.Run(); err != nil {
+						t.Fatal(err)
+					}
+				}()
+
+				select {
+				case <-r.RenderEventCh():
+				case <-time.After(time.Second):
+					t.Errorf("timeout")
+				}
+
+				events = r.RenderEvents()
+				if l := len(events); l != 1 {
+					t.Errorf("\nexp: %#v\nact: %#v", 1, l)
+				}
+
+				for _, e := range events {
+					if l := e.MissingDeps.Len(); l != 1 {
+						t.Errorf("\nexp: %#v\nact: %#v", 1, l)
+					}
 				}
 
 				exp = 2
@@ -194,6 +291,23 @@ func TestRunner_Run(t *testing.T) {
 				},
 			},
 			func(t *testing.T, r *Runner, out string) {
+				select {
+				case <-r.RenderEventCh():
+				case <-time.After(time.Second):
+					t.Errorf("timeout")
+				}
+
+				events := r.RenderEvents()
+				if l := len(events); l != 1 {
+					t.Errorf("\nexp: %#v\nact: %#v", 1, l)
+				}
+
+				for _, e := range events {
+					if l := e.MissingDeps.Len(); l != 0 {
+						t.Errorf("\nexp: %#v\nact: %#v", 0, l)
+					}
+				}
+
 				exp := 0
 				if len(r.dependencies) != exp {
 					t.Errorf("\nexp: %#v\nact: %#v\ndeps: %#v", exp, len(r.dependencies), r.dependencies)
@@ -644,6 +758,63 @@ func TestRunner_Start(t *testing.T) {
 			t.Fatal(err)
 		case <-r.renderedCh:
 			// Just assert there is no panic
+		case <-time.After(2 * time.Second):
+			t.Fatal("timeout")
+		}
+	})
+
+	t.Run("render_in_memory", func(t *testing.T) {
+		t.Parallel()
+
+		testConsul.SetKVString(t, "render-in-memory", "foo")
+
+		c := config.DefaultConfig().Merge(&config.Config{
+			Consul: &config.ConsulConfig{
+				Address: config.String(testConsul.HTTPAddr),
+			},
+			Templates: &config.TemplateConfigs{
+				&config.TemplateConfig{
+					Contents: config.String(`{{ key "render-in-memory" }}`),
+				},
+			},
+		})
+		c.Finalize()
+
+		r, err := NewRunner(c, true, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var o, e bytes.Buffer
+		r.SetOutStream(&o)
+		r.SetErrStream(&e)
+		go r.Start()
+		defer r.Stop()
+
+		select {
+		case err := <-r.ErrCh:
+			t.Fatal(err)
+		case <-r.TemplateRenderedCh():
+			act := ""
+			for _, k := range r.RenderEvents() {
+				if k.DidRender == true {
+					act = string(k.Contents)
+					break
+				}
+			}
+			exp := "foo"
+			if exp != string(act) {
+				t.Errorf("\nexp: %#v\nact: %#v", exp, string(act))
+			}
+			expOut := "> \nfoo"
+			if expOut != o.String() {
+				t.Errorf("\nexp: %#v\nact: %#v", expOut, o.String())
+			}
+			expErr := ""
+			if expErr != e.String() {
+				t.Errorf("\nexp: %#v\nact: %#v", expErr, e.String())
+			}
+
 		case <-time.After(2 * time.Second):
 			t.Fatal("timeout")
 		}

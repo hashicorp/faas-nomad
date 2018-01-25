@@ -13,9 +13,8 @@ import (
 	"github.com/hashicorp/vault/logical"
 )
 
-func getRootConfig(s logical.Storage, clientType string) (*aws.Config, error) {
+func getRootConfig(s logical.Storage) (*aws.Config, error) {
 	credsConfig := &awsutil.CredentialsConfig{}
-	var endpoint string
 
 	entry, err := s.Get("config/root")
 	if err != nil {
@@ -30,12 +29,6 @@ func getRootConfig(s logical.Storage, clientType string) (*aws.Config, error) {
 		credsConfig.AccessKey = config.AccessKey
 		credsConfig.SecretKey = config.SecretKey
 		credsConfig.Region = config.Region
-		switch {
-		case clientType == "iam" && config.IAMEndpoint != "":
-			endpoint = *aws.String(config.IAMEndpoint)
-		case clientType == "sts" && config.STSEndpoint != "":
-			endpoint = *aws.String(config.STSEndpoint)
-		}
 	}
 
 	if credsConfig.Region == "" {
@@ -58,19 +51,16 @@ func getRootConfig(s logical.Storage, clientType string) (*aws.Config, error) {
 	return &aws.Config{
 		Credentials: creds,
 		Region:      aws.String(credsConfig.Region),
-		Endpoint:    &endpoint,
 		HTTPClient:  cleanhttp.DefaultClient(),
 	}, nil
 }
 
 func clientIAM(s logical.Storage) (*iam.IAM, error) {
-	awsConfig, err := getRootConfig(s, "iam")
+	awsConfig, err := getRootConfig(s)
 	if err != nil {
 		return nil, err
 	}
-
 	client := iam.New(session.New(awsConfig))
-
 	if client == nil {
 		return nil, fmt.Errorf("could not obtain iam client")
 	}
@@ -78,12 +68,11 @@ func clientIAM(s logical.Storage) (*iam.IAM, error) {
 }
 
 func clientSTS(s logical.Storage) (*sts.STS, error) {
-	awsConfig, err := getRootConfig(s, "sts")
+	awsConfig, err := getRootConfig(s)
 	if err != nil {
 		return nil, err
 	}
 	client := sts.New(session.New(awsConfig))
-
 	if client == nil {
 		return nil, fmt.Errorf("could not obtain sts client")
 	}

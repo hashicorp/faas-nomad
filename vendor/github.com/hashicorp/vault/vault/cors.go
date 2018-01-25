@@ -24,7 +24,6 @@ var StdAllowedHeaders = []string{
 	"X-Vault-Token",
 	"X-Vault-Wrap-Format",
 	"X-Vault-Wrap-TTL",
-	"X-Vault-Policy-Override",
 }
 
 // CORSConfig stores the state of the CORS configuration.

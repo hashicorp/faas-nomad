@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/acl"
+	"github.com/hashicorp/consul/agent/consul/autopilot"
 	"github.com/hashicorp/consul/agent/consul/fsm"
 	"github.com/hashicorp/consul/agent/consul/state"
 	"github.com/hashicorp/consul/agent/metadata"
@@ -86,21 +87,11 @@ type Server struct {
 	// aclCache is the non-authoritative ACL cache.
 	aclCache *aclCache
 
-	// autopilotPolicy controls the behavior of Autopilot for certain tasks.
-	autopilotPolicy AutopilotPolicy
-
-	// autopilotRemoveDeadCh is used to trigger a check for dead server removals.
-	autopilotRemoveDeadCh chan struct{}
-
-	// autopilotShutdownCh is used to stop the Autopilot loop.
-	autopilotShutdownCh chan struct{}
+	// autopilot is the Autopilot instance for this server.
+	autopilot *autopilot.Autopilot
 
 	// autopilotWaitGroup is used to block until Autopilot shuts down.
 	autopilotWaitGroup sync.WaitGroup
-
-	// clusterHealth stores the current view of the cluster's health.
-	clusterHealth     structs.OperatorHealthReply
-	clusterHealthLock sync.RWMutex
 
 	// Consul configuration
 	config *Config
@@ -284,29 +275,24 @@ func NewServerLogger(config *Config, logger *log.Logger, tokens *token.Store) (*
 
 	// Create server.
 	s := &Server{
-		autopilotRemoveDeadCh: make(chan struct{}),
-		autopilotShutdownCh:   make(chan struct{}),
-		config:                config,
-		tokens:                tokens,
-		connPool:              connPool,
-		eventChLAN:            make(chan serf.Event, 256),
-		eventChWAN:            make(chan serf.Event, 256),
-		logger:                logger,
-		leaveCh:               make(chan struct{}),
-		reconcileCh:           make(chan serf.Member, 32),
-		router:                router.NewRouter(logger, config.Datacenter),
-		rpcServer:             rpc.NewServer(),
-		rpcTLS:                incomingTLS,
-		reassertLeaderCh:      make(chan chan error),
-		segmentLAN:            make(map[string]*serf.Serf, len(config.Segments)),
-		sessionTimers:         NewSessionTimers(),
-		tombstoneGC:           gc,
-		serverLookup:          NewServerLookup(),
-		shutdownCh:            shutdownCh,
+		config:           config,
+		tokens:           tokens,
+		connPool:         connPool,
+		eventChLAN:       make(chan serf.Event, 256),
+		eventChWAN:       make(chan serf.Event, 256),
+		logger:           logger,
+		leaveCh:          make(chan struct{}),
+		reconcileCh:      make(chan serf.Member, 32),
+		router:           router.NewRouter(logger, config.Datacenter),
+		rpcServer:        rpc.NewServer(),
+		rpcTLS:           incomingTLS,
+		reassertLeaderCh: make(chan chan error),
+		segmentLAN:       make(map[string]*serf.Serf, len(config.Segments)),
+		sessionTimers:    NewSessionTimers(),
+		tombstoneGC:      gc,
+		serverLookup:     NewServerLookup(),
+		shutdownCh:       shutdownCh,
 	}
-
-	// Set up the autopilot policy
-	s.autopilotPolicy = &BasicAutopilot{server: s}
 
 	// Initialize the stats fetcher that autopilot will use.
 	s.statsFetcher = NewStatsFetcher(logger, s.connPool, s.config.Datacenter)
@@ -429,8 +415,11 @@ func NewServerLogger(config *Config, logger *log.Logger, tokens *token.Store) (*
 	// Start the metrics handlers.
 	go s.sessionStats()
 
+	// Initialize Autopilot
+	s.initAutopilot(config)
+
 	// Start the server health checking.
-	go s.serverHealthLoop()
+	go s.autopilot.ServerHealthLoop(s.shutdownCh)
 
 	return s, nil
 }
@@ -732,7 +721,7 @@ func (s *Server) Leave() error {
 	// removed for some sane period of time.
 	isLeader := s.IsLeader()
 	if isLeader && numPeers > 1 {
-		minRaftProtocol, err := ServerMinRaftProtocol(s.serfLAN.Members())
+		minRaftProtocol, err := s.autopilot.MinRaftProtocol()
 		if err != nil {
 			return err
 		}
@@ -831,13 +820,7 @@ func (s *Server) numPeers() (int, error) {
 		return 0, err
 	}
 
-	var numPeers int
-	for _, server := range future.Configuration().Servers {
-		if server.Suffrage == raft.Voter {
-			numPeers++
-		}
-	}
-	return numPeers, nil
+	return autopilot.NumPeers(future.Configuration()), nil
 }
 
 // JoinLAN is used to have Consul join the inner-DC pool

@@ -25,9 +25,6 @@ func Backend() *backend {
 			LocalStorage: []string{
 				framework.WALPrefix,
 			},
-			SealWrapStorage: []string{
-				"config/root",
-			},
 		},
 
 		Paths: []*framework.Path{

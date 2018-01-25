@@ -23,36 +23,14 @@ func pathLogin(b *backend) *framework.Path {
 		},
 
 		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.UpdateOperation:         b.pathLogin,
-			logical.AliasLookaheadOperation: b.pathLoginAliasLookahead,
+			logical.UpdateOperation: b.pathLogin,
 		},
 	}
-}
-
-func (b *backend) pathLoginAliasLookahead(
-	req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	token := data.Get("token").(string)
-
-	var verifyResp *verifyCredentialsResp
-	if verifyResponse, resp, err := b.verifyCredentials(req, token); err != nil {
-		return nil, err
-	} else if resp != nil {
-		return resp, nil
-	} else {
-		verifyResp = verifyResponse
-	}
-
-	return &logical.Response{
-		Auth: &logical.Auth{
-			Alias: &logical.Alias{
-				Name: *verifyResp.User.Login,
-			},
-		},
-	}, nil
 }
 
 func (b *backend) pathLogin(
 	req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+
 	token := data.Get("token").(string)
 
 	var verifyResp *verifyCredentialsResp
@@ -74,7 +52,7 @@ func (b *backend) pathLogin(
 		return logical.ErrorResponse(fmt.Sprintf("error sanitizing TTLs: %s", err)), nil
 	}
 
-	resp := &logical.Response{
+	return &logical.Response{
 		Auth: &logical.Auth{
 			InternalData: map[string]interface{}{
 				"token": token,
@@ -89,22 +67,8 @@ func (b *backend) pathLogin(
 				TTL:       ttl,
 				Renewable: true,
 			},
-			Alias: &logical.Alias{
-				Name: *verifyResp.User.Login,
-			},
 		},
-	}
-
-	for _, teamName := range verifyResp.TeamNames {
-		if teamName == "" {
-			continue
-		}
-		resp.Auth.GroupAliases = append(resp.Auth.GroupAliases, &logical.Alias{
-			Name: teamName,
-		})
-	}
-
-	return resp, nil
+	}, nil
 }
 
 func (b *backend) pathLoginRenew(
@@ -136,22 +100,7 @@ func (b *backend) pathLoginRenew(
 	if err != nil {
 		return nil, err
 	}
-
-	resp, err := framework.LeaseExtend(config.TTL, config.MaxTTL, b.System())(req, d)
-	if err != nil {
-		return nil, err
-	}
-
-	// Remove old aliases
-	resp.Auth.GroupAliases = nil
-
-	for _, teamName := range verifyResp.TeamNames {
-		resp.Auth.GroupAliases = append(resp.Auth.GroupAliases, &logical.Alias{
-			Name: teamName,
-		})
-	}
-
-	return resp, nil
+	return framework.LeaseExtend(config.TTL, config.MaxTTL, b.System())(req, d)
 }
 
 func (b *backend) verifyCredentials(req *logical.Request, token string) (*verifyCredentialsResp, *logical.Response, error) {
@@ -259,16 +208,14 @@ func (b *backend) verifyCredentials(req *logical.Request, token string) (*verify
 	}
 
 	return &verifyCredentialsResp{
-		User:      user,
-		Org:       org,
-		Policies:  append(groupPoliciesList, userPoliciesList...),
-		TeamNames: teamNames,
+		User:     user,
+		Org:      org,
+		Policies: append(groupPoliciesList, userPoliciesList...),
 	}, nil, nil
 }
 
 type verifyCredentialsResp struct {
-	User      *github.User
-	Org       *github.Organization
-	Policies  []string
-	TeamNames []string
+	User     *github.User
+	Org      *github.Organization
+	Policies []string
 }

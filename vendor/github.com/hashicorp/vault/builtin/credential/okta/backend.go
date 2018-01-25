@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/chrismalek/oktasdk-go/okta"
-	"github.com/hashicorp/vault/helper/mfa"
 	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/logical/framework"
 )
@@ -23,13 +22,8 @@ func Backend() *backend {
 		Help: backendHelp,
 
 		PathsSpecial: &logical.Paths{
-			Root: mfa.MFARootPaths(),
-
 			Unauthenticated: []string{
 				"login/*",
-			},
-			SealWrapStorage: []string{
-				"config",
 			},
 		},
 
@@ -39,9 +33,8 @@ func Backend() *backend {
 			pathGroups(&b),
 			pathUsersList(&b),
 			pathGroupsList(&b),
-		},
-			mfa.MFAPaths(b.Backend, pathLogin(&b))...,
-		),
+			pathLogin(&b),
+		}),
 
 		AuthRenew:   b.pathLoginRenew,
 		BackendType: logical.TypeCredential,
@@ -54,13 +47,13 @@ type backend struct {
 	*framework.Backend
 }
 
-func (b *backend) Login(req *logical.Request, username string, password string) ([]string, *logical.Response, []string, error) {
+func (b *backend) Login(req *logical.Request, username string, password string) ([]string, *logical.Response, error) {
 	cfg, err := b.Config(req.Storage)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	if cfg == nil {
-		return nil, logical.ErrorResponse("Okta backend not configured"), nil, nil
+		return nil, logical.ErrorResponse("Okta backend not configured"), nil
 	}
 
 	client := cfg.OktaClient()
@@ -78,16 +71,16 @@ func (b *backend) Login(req *logical.Request, username string, password string) 
 		"password": password,
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	var result authResult
 	rsp, err := client.Do(authReq, &result)
 	if err != nil {
-		return nil, logical.ErrorResponse(fmt.Sprintf("Okta auth failed: %v", err)), nil, nil
+		return nil, logical.ErrorResponse(fmt.Sprintf("Okta auth failed: %v", err)), nil
 	}
 	if rsp == nil {
-		return nil, logical.ErrorResponse("okta auth backend unexpected failure"), nil, nil
+		return nil, logical.ErrorResponse("okta auth backend unexpected failure"), nil
 	}
 
 	oktaResponse := &logical.Response{
@@ -99,7 +92,7 @@ func (b *backend) Login(req *logical.Request, username string, password string) 
 	if cfg.Token != "" {
 		oktaGroups, err := b.getOktaGroups(client, &result.Embedded.User)
 		if err != nil {
-			return nil, logical.ErrorResponse(fmt.Sprintf("okta failure retrieving groups: %v", err)), nil, nil
+			return nil, logical.ErrorResponse(fmt.Sprintf("okta failure retrieving groups: %v", err)), nil
 		}
 		if len(oktaGroups) == 0 {
 			errString := fmt.Sprintf(
@@ -149,10 +142,10 @@ func (b *backend) Login(req *logical.Request, username string, password string) 
 		}
 
 		oktaResponse.Data["error"] = errStr
-		return nil, oktaResponse, nil, nil
+		return nil, oktaResponse, nil
 	}
 
-	return policies, oktaResponse, allGroups, nil
+	return policies, oktaResponse, nil
 }
 
 func (b *backend) getOktaGroups(client *okta.Client, user *okta.User) ([]string, error) {

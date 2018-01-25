@@ -1,7 +1,6 @@
 package mysql
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -109,7 +108,7 @@ func TestMySQL_Initialize(t *testing.T) {
 	db := dbRaw.(*MySQL)
 	connProducer := db.ConnectionProducer.(*connutil.SQLConnectionProducer)
 
-	err := db.Initialize(context.Background(), connectionDetails, true)
+	err := db.Initialize(connectionDetails, true)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -129,7 +128,7 @@ func TestMySQL_Initialize(t *testing.T) {
 		"max_open_connections": "5",
 	}
 
-	err = db.Initialize(context.Background(), connectionDetails, true)
+	err = db.Initialize(connectionDetails, true)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -147,7 +146,7 @@ func TestMySQL_CreateUser(t *testing.T) {
 	dbRaw, _ := f()
 	db := dbRaw.(*MySQL)
 
-	err := db.Initialize(context.Background(), connectionDetails, true)
+	err := db.Initialize(connectionDetails, true)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -158,7 +157,7 @@ func TestMySQL_CreateUser(t *testing.T) {
 	}
 
 	// Test with no configured Creation Statememt
-	_, _, err = db.CreateUser(context.Background(), dbplugin.Statements{}, usernameConfig, time.Now().Add(time.Minute))
+	_, _, err = db.CreateUser(dbplugin.Statements{}, usernameConfig, time.Now().Add(time.Minute))
 	if err == nil {
 		t.Fatal("Expected error when no creation statement is provided")
 	}
@@ -167,7 +166,7 @@ func TestMySQL_CreateUser(t *testing.T) {
 		CreationStatements: testMySQLRoleWildCard,
 	}
 
-	username, password, err := db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(time.Minute))
+	username, password, err := db.CreateUser(statements, usernameConfig, time.Now().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -177,7 +176,7 @@ func TestMySQL_CreateUser(t *testing.T) {
 	}
 
 	// Test a second time to make sure usernames don't collide
-	username, password, err = db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(time.Minute))
+	username, password, err = db.CreateUser(statements, usernameConfig, time.Now().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -185,19 +184,6 @@ func TestMySQL_CreateUser(t *testing.T) {
 	if err := testCredsExist(t, connURL, username, password); err != nil {
 		t.Fatalf("Could not connect with new credentials: %s", err)
 	}
-
-	// Test with a manualy prepare statement
-	statements.CreationStatements = testMySQLRolePreparedStmt
-
-	username, password, err = db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(time.Minute))
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
-
-	if err := testCredsExist(t, connURL, username, password); err != nil {
-		t.Fatalf("Could not connect with new credentials: %s", err)
-	}
-
 }
 
 func TestMySQL_CreateUser_Legacy(t *testing.T) {
@@ -212,7 +198,7 @@ func TestMySQL_CreateUser_Legacy(t *testing.T) {
 	dbRaw, _ := f()
 	db := dbRaw.(*MySQL)
 
-	err := db.Initialize(context.Background(), connectionDetails, true)
+	err := db.Initialize(connectionDetails, true)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -223,7 +209,7 @@ func TestMySQL_CreateUser_Legacy(t *testing.T) {
 	}
 
 	// Test with no configured Creation Statememt
-	_, _, err = db.CreateUser(context.Background(), dbplugin.Statements{}, usernameConfig, time.Now().Add(time.Minute))
+	_, _, err = db.CreateUser(dbplugin.Statements{}, usernameConfig, time.Now().Add(time.Minute))
 	if err == nil {
 		t.Fatal("Expected error when no creation statement is provided")
 	}
@@ -232,7 +218,7 @@ func TestMySQL_CreateUser_Legacy(t *testing.T) {
 		CreationStatements: testMySQLRoleWildCard,
 	}
 
-	username, password, err := db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(time.Minute))
+	username, password, err := db.CreateUser(statements, usernameConfig, time.Now().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -242,7 +228,7 @@ func TestMySQL_CreateUser_Legacy(t *testing.T) {
 	}
 
 	// Test a second time to make sure usernames don't collide
-	username, password, err = db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(time.Minute))
+	username, password, err = db.CreateUser(statements, usernameConfig, time.Now().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -264,7 +250,7 @@ func TestMySQL_RevokeUser(t *testing.T) {
 	dbRaw, _ := f()
 	db := dbRaw.(*MySQL)
 
-	err := db.Initialize(context.Background(), connectionDetails, true)
+	err := db.Initialize(connectionDetails, true)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -278,7 +264,7 @@ func TestMySQL_RevokeUser(t *testing.T) {
 		RoleName:    "test",
 	}
 
-	username, password, err := db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(time.Minute))
+	username, password, err := db.CreateUser(statements, usernameConfig, time.Now().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -288,7 +274,7 @@ func TestMySQL_RevokeUser(t *testing.T) {
 	}
 
 	// Test default revoke statememts
-	err = db.RevokeUser(context.Background(), statements, username)
+	err = db.RevokeUser(statements, username)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -298,7 +284,7 @@ func TestMySQL_RevokeUser(t *testing.T) {
 	}
 
 	statements.CreationStatements = testMySQLRoleWildCard
-	username, password, err = db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(time.Minute))
+	username, password, err = db.CreateUser(statements, usernameConfig, time.Now().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -309,7 +295,7 @@ func TestMySQL_RevokeUser(t *testing.T) {
 
 	// Test custom revoke statements
 	statements.RevocationStatements = testMySQLRevocationSQL
-	err = db.RevokeUser(context.Background(), statements, username)
+	err = db.RevokeUser(statements, username)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -330,13 +316,6 @@ func testCredsExist(t testing.TB, connURL, username, password string) error {
 	return db.Ping()
 }
 
-const testMySQLRolePreparedStmt = `
-CREATE USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';
-set @grants=CONCAT("GRANT SELECT ON ", "*", ".* TO '{{name}}'@'%'");
-PREPARE grantStmt from @grants;
-EXECUTE grantStmt;
-DEALLOCATE PREPARE grantStmt;
-`
 const testMySQLRoleWildCard = `
 CREATE USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';
 GRANT SELECT ON *.* TO '{{name}}'@'%';

@@ -11,9 +11,9 @@ import (
 
 func pathToken(b *backend) *framework.Path {
 	return &framework.Path{
-		Pattern: "creds/" + framework.GenericNameRegex("role"),
+		Pattern: "creds/" + framework.GenericNameRegex("name"),
 		Fields: map[string]*framework.FieldSchema{
-			"role": &framework.FieldSchema{
+			"name": &framework.FieldSchema{
 				Type:        framework.TypeString,
 				Description: "Name of the role",
 			},
@@ -27,14 +27,14 @@ func pathToken(b *backend) *framework.Path {
 
 func (b *backend) pathTokenRead(
 	req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
-	role := d.Get("role").(string)
+	name := d.Get("name").(string)
 
-	entry, err := req.Storage.Get("policy/" + role)
+	entry, err := req.Storage.Get("policy/" + name)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving role: %s", err)
 	}
 	if entry == nil {
-		return logical.ErrorResponse(fmt.Sprintf("role %q not found", role)), nil
+		return logical.ErrorResponse(fmt.Sprintf("Role '%s' not found", name)), nil
 	}
 
 	var result roleConfig
@@ -56,7 +56,7 @@ func (b *backend) pathTokenRead(
 	}
 
 	// Generate a name for the token
-	tokenName := fmt.Sprintf("Vault %s %s %d", role, req.DisplayName, time.Now().UnixNano())
+	tokenName := fmt.Sprintf("Vault %s %s %d", name, req.DisplayName, time.Now().UnixNano())
 
 	// Create it
 	token, _, err := c.ACL().Create(&api.ACLEntry{
@@ -73,7 +73,6 @@ func (b *backend) pathTokenRead(
 		"token": token,
 	}, map[string]interface{}{
 		"token": token,
-		"role":  role,
 	})
 	s.Secret.TTL = result.Lease
 

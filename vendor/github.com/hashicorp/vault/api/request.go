@@ -11,21 +11,15 @@ import (
 // Request is a raw request configuration structure used to initiate
 // API requests to the Vault server.
 type Request struct {
-	Method        string
-	URL           *url.URL
-	Params        url.Values
-	Headers       http.Header
-	ClientToken   string
-	MFAHeaderVals []string
-	WrapTTL       string
-	Obj           interface{}
-	Body          io.Reader
-	BodySize      int64
-
-	// Whether to request overriding soft-mandatory Sentinel policies (RGPs and
-	// EGPs). If set, the override flag will take effect for all policies
-	// evaluated during the request.
-	PolicyOverride bool
+	Method      string
+	URL         *url.URL
+	Params      url.Values
+	Headers     http.Header
+	ClientToken string
+	WrapTTL     string
+	Obj         interface{}
+	Body        io.Reader
+	BodySize    int64
 }
 
 // SetJSONBody is used to set a request body that is a JSON-encoded value.
@@ -81,16 +75,6 @@ func (r *Request) ToHTTP() (*http.Request, error) {
 
 	if len(r.WrapTTL) != 0 {
 		req.Header.Set("X-Vault-Wrap-TTL", r.WrapTTL)
-	}
-
-	if len(r.MFAHeaderVals) != 0 {
-		for _, mfaHeaderVal := range r.MFAHeaderVals {
-			req.Header.Add("X-Vault-MFA", mfaHeaderVal)
-		}
-	}
-
-	if r.PolicyOverride {
-		req.Header.Set("X-Vault-Policy-Override", "true")
 	}
 
 	return req, nil

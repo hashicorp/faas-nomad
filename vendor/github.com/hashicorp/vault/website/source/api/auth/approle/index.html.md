@@ -523,7 +523,7 @@ Assigns a "custom" SecretID against an existing AppRole. This is used in the
 
 ```json
 {
-  "secret_id": "testsecretid"
+  "secret-id": "testsecretid"
 }
 ```
 

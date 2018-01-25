@@ -19,13 +19,6 @@ func Factory(conf *logical.BackendConfig) (logical.Backend, error) {
 func Backend(conf *logical.BackendConfig) *backend {
 	var b backend
 	b.Backend = &framework.Backend{
-		PathsSpecial: &logical.Paths{
-			SealWrapStorage: []string{
-				"archive/",
-				"policy/",
-			},
-		},
-
 		Paths: []*framework.Path{
 			// Rotate/Config needs to come before Keys
 			// as the handler is greedy
@@ -43,8 +36,6 @@ func Backend(conf *logical.BackendConfig) *backend {
 			b.pathHMAC(),
 			b.pathSign(),
 			b.pathVerify(),
-			b.pathBackup(),
-			b.pathRestore(),
 		},
 
 		Secrets:     []*framework.Secret{},

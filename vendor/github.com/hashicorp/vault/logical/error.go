@@ -5,24 +5,21 @@ type HTTPCodedError interface {
 	Code() int
 }
 
-func CodedError(status int, msg string) HTTPCodedError {
-	return &codedError{
-		Status:  status,
-		Message: msg,
-	}
+func CodedError(c int, s string) HTTPCodedError {
+	return &codedError{s, c}
 }
 
 type codedError struct {
-	Status  int
-	Message string
+	s    string
+	code int
 }
 
 func (e *codedError) Error() string {
-	return e.Message
+	return e.s
 }
 
 func (e *codedError) Code() int {
-	return e.Status
+	return e.code
 }
 
 // Struct to identify user input errors.  This is helpful in responding the
@@ -37,9 +34,9 @@ func (s *StatusBadRequest) Error() string {
 }
 
 // This is a new type declared to not cause potential compatibility problems if
-// the logic around the CodedError changes; in particular for logical request
-// paths it is basically ignored, and changing that behavior might cause
-// unforseen issues.
+// the logic around the HTTPCodedError interface changes; in particular for
+// logical request paths it is basically ignored, and changing that behavior
+// might cause unforseen issues.
 type ReplicationCodedError struct {
 	Msg  string
 	Code int

@@ -2,7 +2,6 @@ package transit
 
 import (
 	"encoding/base64"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -65,7 +64,7 @@ func TestTransit_SignVerify_P256(t *testing.T) {
 		}
 	*/
 
-	keyEntry := p.Keys[strconv.Itoa(p.LatestVersion)]
+	keyEntry := p.Keys[p.LatestVersion]
 	_, ok := keyEntry.EC_X.SetString("7336010a6da5935113d26d9ea4bb61b3b8d102c9a8083ed432f9b58fd7e80686", 16)
 	if !ok {
 		t.Fatal("could not set X")
@@ -78,7 +77,7 @@ func TestTransit_SignVerify_P256(t *testing.T) {
 	if !ok {
 		t.Fatal("could not set D")
 	}
-	p.Keys[strconv.Itoa(p.LatestVersion)] = keyEntry
+	p.Keys[p.LatestVersion] = keyEntry
 	if err = p.Persist(storage); err != nil {
 		t.Fatal(err)
 	}
@@ -164,11 +163,6 @@ func TestTransit_SignVerify_P256(t *testing.T) {
 	req.Data["algorithm"] = "sha2-384"
 	sig = signRequest(req, false, "")
 	verifyRequest(req, false, "", sig)
-
-	req.Data["prehashed"] = true
-	sig = signRequest(req, false, "")
-	verifyRequest(req, false, "", sig)
-	delete(req.Data, "prehashed")
 
 	// Test 512 and save sig for later to ensure we can't validate once min
 	// decryption version is set

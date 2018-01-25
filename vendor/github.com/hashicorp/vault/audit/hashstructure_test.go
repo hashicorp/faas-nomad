@@ -148,7 +148,6 @@ func TestHash(t *testing.T) {
 				WrapInfo: &wrapping.ResponseWrapInfo{
 					TTL:             60,
 					Token:           "bar",
-					Accessor:        "flimflam",
 					CreationTime:    now,
 					WrappedAccessor: "bar",
 				},
@@ -161,7 +160,6 @@ func TestHash(t *testing.T) {
 				WrapInfo: &wrapping.ResponseWrapInfo{
 					TTL:             60,
 					Token:           "hmac-sha256:f9320baf0249169e73850cd6156ded0106e2bb6ad8cab01b7bbbebe6d1065317",
-					Accessor:        "hmac-sha256:7c9c6fe666d0af73b3ebcfbfabe6885015558213208e6635ba104047b22f6390",
 					CreationTime:    now,
 					WrappedAccessor: "hmac-sha256:f9320baf0249169e73850cd6156ded0106e2bb6ad8cab01b7bbbebe6d1065317",
 				},
@@ -207,11 +205,6 @@ func TestHash(t *testing.T) {
 		input := fmt.Sprintf("%#v", tc.Input)
 		if err := Hash(localSalt, tc.Input); err != nil {
 			t.Fatalf("err: %s\n\n%s", err, input)
-		}
-		if _, ok := tc.Input.(*logical.Response); ok {
-			if !reflect.DeepEqual(tc.Input.(*logical.Response).WrapInfo, tc.Output.(*logical.Response).WrapInfo) {
-				t.Fatalf("bad:\nInput:\n%s\nTest case input:\n%#v\nTest case output\n%#v", input, tc.Input.(*logical.Response).WrapInfo, tc.Output.(*logical.Response).WrapInfo)
-			}
 		}
 		if !reflect.DeepEqual(tc.Input, tc.Output) {
 			t.Fatalf("bad:\nInput:\n%s\nTest case input:\n%#v\nTest case output\n%#v", input, tc.Input, tc.Output)

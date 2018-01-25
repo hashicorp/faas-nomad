@@ -1,7 +1,6 @@
 package cassandra
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"strings"
@@ -44,7 +43,7 @@ type cassandraConnectionProducer struct {
 	sync.Mutex
 }
 
-func (c *cassandraConnectionProducer) Initialize(ctx context.Context, conf map[string]interface{}, verifyConnection bool) error {
+func (c *cassandraConnectionProducer) Initialize(conf map[string]interface{}, verifyConnection bool) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -107,7 +106,7 @@ func (c *cassandraConnectionProducer) Initialize(ctx context.Context, conf map[s
 	c.Initialized = true
 
 	if verifyConnection {
-		if _, err := c.Connection(ctx); err != nil {
+		if _, err := c.Connection(); err != nil {
 			return fmt.Errorf("error verifying connection: %s", err)
 		}
 	}
@@ -115,13 +114,13 @@ func (c *cassandraConnectionProducer) Initialize(ctx context.Context, conf map[s
 	return nil
 }
 
-func (c *cassandraConnectionProducer) Connection(_ context.Context) (interface{}, error) {
+func (c *cassandraConnectionProducer) Connection() (interface{}, error) {
 	if !c.Initialized {
 		return nil, connutil.ErrNotInitialized
 	}
 
 	// If we already have a DB, return it
-	if c.session != nil && !c.session.Closed() {
+	if c.session != nil {
 		return c.session, nil
 	}
 
@@ -229,7 +228,7 @@ func (c *cassandraConnectionProducer) createSession() (*gocql.Session, error) {
 	}
 
 	// Verify the info
-	err = session.Query(`LIST ALL`).Exec()
+	err = session.Query(`LIST USERS`).Exec()
 	if err != nil {
 		return nil, fmt.Errorf("error validating connection info: %s", err)
 	}

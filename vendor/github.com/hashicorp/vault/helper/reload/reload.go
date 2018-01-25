@@ -2,14 +2,8 @@ package reload
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"sync"
-
-	"github.com/hashicorp/errwrap"
 )
 
 // ReloadFunc are functions that are called when a reload is requested
@@ -23,44 +17,19 @@ type CertificateGetter struct {
 
 	cert *tls.Certificate
 
-	certFile   string
-	keyFile    string
-	passphrase string
+	certFile string
+	keyFile  string
 }
 
-func NewCertificateGetter(certFile, keyFile, passphrase string) *CertificateGetter {
+func NewCertificateGetter(certFile, keyFile string) *CertificateGetter {
 	return &CertificateGetter{
-		certFile:   certFile,
-		keyFile:    keyFile,
-		passphrase: passphrase,
+		certFile: certFile,
+		keyFile:  keyFile,
 	}
 }
 
 func (cg *CertificateGetter) Reload(_ map[string]interface{}) error {
-	certPEMBlock, err := ioutil.ReadFile(cg.certFile)
-	if err != nil {
-		return err
-	}
-	keyPEMBlock, err := ioutil.ReadFile(cg.keyFile)
-	if err != nil {
-		return err
-	}
-
-	// Check for encrypted pem block
-	keyBlock, _ := pem.Decode(keyPEMBlock)
-	if keyBlock == nil {
-		return errors.New("Decoded PEM is blank")
-	}
-
-	if x509.IsEncryptedPEMBlock(keyBlock) {
-		keyBlock.Bytes, err = x509.DecryptPEMBlock(keyBlock, []byte(cg.passphrase))
-		if err != nil {
-			return errwrap.Wrapf("Decrypting PEM block failed {{err}}", err)
-		}
-		keyPEMBlock = pem.EncodeToMemory(keyBlock)
-	}
-
-	cert, err := tls.X509KeyPair(certPEMBlock, keyPEMBlock)
+	cert, err := tls.LoadX509KeyPair(cg.certFile, cg.keyFile)
 	if err != nil {
 		return err
 	}

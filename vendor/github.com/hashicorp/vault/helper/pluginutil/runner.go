@@ -119,10 +119,6 @@ func (r *PluginRunner) runCommon(wrapper RunnerUtil, pluginMap map[string]plugin
 		SecureConfig:    secureConfig,
 		TLSConfig:       clientTLSConfig,
 		Logger:          namedLogger,
-		AllowedProtocols: []plugin.Protocol{
-			plugin.ProtocolNetRPC,
-			plugin.ProtocolGRPC,
-		},
 	}
 
 	client := plugin.NewClient(clientConfig)

@@ -42,12 +42,6 @@ func Backend(conf *logical.BackendConfig) (*backend, error) {
 			LocalStorage: []string{
 				"otp/",
 			},
-
-			SealWrapStorage: []string{
-				caPrivateKey,
-				caPrivateKeyStoragePath,
-				"keys/",
-			},
 		},
 
 		Paths: []*framework.Path{

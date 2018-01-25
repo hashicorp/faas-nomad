@@ -47,8 +47,7 @@ fi
 echo "==> Building..."
 gox \
     -osarch="${XC_OSARCH}" \
-    -gcflags "${GCFLAGS}" \
-    -ldflags "${LD_FLAGS}-X github.com/hashicorp/vault/version.GitCommit='${GIT_COMMIT}${GIT_DIRTY}'" \
+    -ldflags "-X github.com/hashicorp/vault/version.GitCommit='${GIT_COMMIT}${GIT_DIRTY}'" \
     -output "pkg/{{.OS}}_{{.Arch}}/vault" \
     -tags="${BUILD_TAGS}" \
     .

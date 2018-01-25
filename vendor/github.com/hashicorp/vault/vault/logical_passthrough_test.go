@@ -14,7 +14,7 @@ func TestPassthroughBackend_RootPaths(t *testing.T) {
 	b := testPassthroughBackend()
 	test := func(b logical.Backend) {
 		root := b.SpecialPaths()
-		if len(root.Root) != 0 {
+		if root != nil {
 			t.Fatalf("unexpected: %v", root)
 		}
 	}

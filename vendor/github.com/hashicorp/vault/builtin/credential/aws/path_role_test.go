@@ -66,24 +66,11 @@ func TestBackend_pathRoleEc2(t *testing.T) {
 		Data:      data,
 		Storage:   storage,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp == nil || !resp.IsError() {
-		t.Fatalf("expected failure to create role with both allow_instance_migration true and disallow_reauthentication true")
-	}
-	data["disallow_reauthentication"] = false
-	resp, err = b.HandleRequest(&logical.Request{
-		Operation: logical.UpdateOperation,
-		Path:      "role/ami-abcd123",
-		Data:      data,
-		Storage:   storage,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if resp != nil && resp.IsError() {
-		t.Fatalf("failure to update role: %v", resp.Data["error"])
+		t.Fatalf("failed to create role: %s", resp.Data["error"])
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 	resp, err = b.HandleRequest(&logical.Request{
 		Operation: logical.ReadOperation,
@@ -93,12 +80,8 @@ func TestBackend_pathRoleEc2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.Data["allow_instance_migration"].(bool) {
-		t.Fatal("bad: expected allow_instance_migration:true got:false\n")
-	}
-
-	if resp.Data["disallow_reauthentication"].(bool) {
-		t.Fatal("bad: expected disallow_reauthentication: false got:true\n")
+	if !resp.Data["allow_instance_migration"].(bool) || !resp.Data["disallow_reauthentication"].(bool) {
+		t.Fatal("bad: expected:true got:false\n")
 	}
 
 	// add another entry, to test listing of role entries
@@ -546,7 +529,7 @@ func TestAwsEc2_RoleCrud(t *testing.T) {
 		"ttl":                       "10m",
 		"max_ttl":                   "20m",
 		"policies":                  "testpolicy1,testpolicy2",
-		"disallow_reauthentication": false,
+		"disallow_reauthentication": true,
 		"hmac_key":                  "testhmackey",
 		"period":                    "1m",
 	}
@@ -584,7 +567,7 @@ func TestAwsEc2_RoleCrud(t *testing.T) {
 		"ttl":                       time.Duration(600),
 		"max_ttl":                   time.Duration(1200),
 		"policies":                  []string{"testpolicy1", "testpolicy2"},
-		"disallow_reauthentication": false,
+		"disallow_reauthentication": true,
 		"period":                    time.Duration(60),
 	}
 

@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"fmt"
 	"net/rpc"
 	"strings"
@@ -28,12 +27,6 @@ func Backend(conf *logical.BackendConfig) *databaseBackend {
 	var b databaseBackend
 	b.Backend = &framework.Backend{
 		Help: strings.TrimSpace(backendHelp),
-
-		PathsSpecial: &logical.Paths{
-			SealWrapStorage: []string{
-				"config/*",
-			},
-		},
 
 		Paths: []*framework.Path{
 			pathListPluginConnection(&b),
@@ -88,7 +81,7 @@ func (b *databaseBackend) getDBObj(name string) (dbplugin.Database, bool) {
 // This function creates a new db object from the stored configuration and
 // caches it in the connections map. The caller of this function needs to hold
 // the backend's write lock
-func (b *databaseBackend) createDBObj(ctx context.Context, s logical.Storage, name string) (dbplugin.Database, error) {
+func (b *databaseBackend) createDBObj(s logical.Storage, name string) (dbplugin.Database, error) {
 	db, ok := b.connections[name]
 	if ok {
 		return db, nil
@@ -104,7 +97,7 @@ func (b *databaseBackend) createDBObj(ctx context.Context, s logical.Storage, na
 		return nil, err
 	}
 
-	err = db.Initialize(ctx, config.ConnectionDetails, true)
+	err = db.Initialize(config.ConnectionDetails, true)
 	if err != nil {
 		return nil, err
 	}
@@ -131,21 +124,6 @@ func (b *databaseBackend) DatabaseConfig(s logical.Storage, name string) (*Datab
 	return &config, nil
 }
 
-type upgradeStatements struct {
-	// This json tag has a typo in it, the new version does not. This
-	// necessitates this upgrade logic.
-	CreationStatements   string `json:"creation_statments"`
-	RevocationStatements string `json:"revocation_statements"`
-	RollbackStatements   string `json:"rollback_statements"`
-	RenewStatements      string `json:"renew_statements"`
-}
-
-type upgradeCheck struct {
-	// This json tag has a typo in it, the new version does not. This
-	// necessitates this upgrade logic.
-	Statements upgradeStatements `json:"statments"`
-}
-
 func (b *databaseBackend) Role(s logical.Storage, roleName string) (*roleEntry, error) {
 	entry, err := s.Get("role/" + roleName)
 	if err != nil {
@@ -155,22 +133,9 @@ func (b *databaseBackend) Role(s logical.Storage, roleName string) (*roleEntry, 
 		return nil, nil
 	}
 
-	var upgradeCh upgradeCheck
-	if err := entry.DecodeJSON(&upgradeCh); err != nil {
-		return nil, err
-	}
-
 	var result roleEntry
 	if err := entry.DecodeJSON(&result); err != nil {
 		return nil, err
-	}
-
-	empty := upgradeCheck{}
-	if upgradeCh != empty {
-		result.Statements.CreationStatements = upgradeCh.Statements.CreationStatements
-		result.Statements.RevocationStatements = upgradeCh.Statements.RevocationStatements
-		result.Statements.RollbackStatements = upgradeCh.Statements.RollbackStatements
-		result.Statements.RenewStatements = upgradeCh.Statements.RenewStatements
 	}
 
 	return &result, nil
@@ -199,8 +164,7 @@ func (b *databaseBackend) clearConnection(name string) {
 
 func (b *databaseBackend) closeIfShutdown(name string, err error) {
 	// Plugin has shutdown, close it so next call can reconnect.
-	switch err {
-	case rpc.ErrShutdown, dbplugin.ErrPluginShutdown:
+	if err == rpc.ErrShutdown {
 		b.Lock()
 		b.clearConnection(name)
 		b.Unlock()

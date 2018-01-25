@@ -29,24 +29,20 @@ access the Kubernetes API.
 | `POST`   | `/auth/kubernetes/config`    | `204 (empty body)`     |
 
 ### Parameters
- - `kubernetes_host` `(string: <required>)` - Host must be a host string, a host:port pair, or a URL to the base of the Kubernetes API server.
- - `kubernetes_ca_cert` `(string: "")` - PEM encoded CA cert for use by the TLS client used to talk with the Kubernetes API.
- - `token_reviewer_jwt` `(string: "")` - A service account JWT used to access the TokenReview
-    API to validate other JWTs during login. If not set
-    the JWT used for login will be used to access the API.
- - `pem_keys` `(array: [])` - Optional list of PEM-formated public keys or certificates
-    used to verify the signatures of Kubernetes service account
+ - `pem_keys` `(array: <required>)` - List of PEM-formated public keys or certificates
+    used to verify the signatures of kubernetes service account
     JWTs. If a certificate is given, its public key will be
-    extracted. Not every installation of Kubernetes exposes these
-    keys. 
+    extracted.
+ - `kubernetes_host` `(string: <required>)` - Host must be a host string, a host:port pair, or a URL to the base of the Kubernetes API server.
+ - `kubernetes_ca_cert` `(string: "")` - PEM encoded CA cert for use by the TLS client used to talk with the API.
 
 ### Sample Payload
 
 ```json
 {
+  "pem_keys": "-----BEGIN CERTIFICATE-----.....-----END CERTIFICATE-----",
   "kubernetes_host": "https://192.168.99.100:8443",
-  "kubernetes_ca_cert": "-----BEGIN CERTIFICATE-----.....-----END CERTIFICATE-----",
-  "pem_keys": "-----BEGIN CERTIFICATE-----\n.....\n-----END CERTIFICATE-----"
+  "kubernetes_ca_cert": "-----BEGIN CERTIFICATE-----.....-----END CERTIFICATE-----"
 }
 ```
 
@@ -81,11 +77,9 @@ $ curl \
 ```json
 {
   "data":{
+      "pem_keys": "-----BEGIN CERTIFICATE-----.....-----END CERTIFICATE-----",
       "kubernetes_host": "https://192.168.99.100:8443",
-      "kubernetes_ca_cert": "-----BEGIN CERTIFICATE-----.....-----END CERTIFICATE-----",
-      "pem_keys": "-----BEGIN CERTIFICATE-----
-      .....
-      -----END CERTIFICATE-----"
+      "kubernetes_ca_cert": "-----BEGIN CERTIFICATE-----.....-----END CERTIFICATE-----"
   },
   ...
 }
@@ -191,8 +185,8 @@ Lists all the roles that are registered with the backend.
 
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
-| `LIST`   | `/auth/kubernetes/role`            | `200 application/json` |
-| `GET`   | `/auth/kubernetes/role?list=true`   | `200 application/json` |
+| `LIST`   | `/auth/kubernetes/roles`            | `200 application/json` |
+| `GET`   | `/auth/kubernetes/roles?list=true`   | `200 application/json` |
 
 ### Sample Request
 
@@ -200,7 +194,7 @@ Lists all the roles that are registered with the backend.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/auth/kubernetes/role
+    https://vault.rocks/v1/auth/kubernetes/roles
 ```
 
 ### Sample Response

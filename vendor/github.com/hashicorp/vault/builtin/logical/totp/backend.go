@@ -22,12 +22,6 @@ func Backend() *backend {
 	b.Backend = &framework.Backend{
 		Help: strings.TrimSpace(backendHelp),
 
-		PathsSpecial: &logical.Paths{
-			SealWrapStorage: []string{
-				"key/",
-			},
-		},
-
 		Paths: []*framework.Path{
 			pathListKeys(&b),
 			pathKeys(&b),

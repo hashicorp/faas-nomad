@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"layeh.com/radius"
-	. "layeh.com/radius/rfc2865"
 
 	"github.com/hashicorp/vault/helper/policyutil"
 	"github.com/hashicorp/vault/logical"
@@ -37,29 +36,12 @@ func pathLogin(b *backend) *framework.Path {
 		},
 
 		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.UpdateOperation:         b.pathLogin,
-			logical.AliasLookaheadOperation: b.pathLoginAliasLookahead,
+			logical.UpdateOperation: b.pathLogin,
 		},
 
 		HelpSynopsis:    pathLoginSyn,
 		HelpDescription: pathLoginDesc,
 	}
-}
-
-func (b *backend) pathLoginAliasLookahead(
-	req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
-	username := d.Get("username").(string)
-	if username == "" {
-		return nil, fmt.Errorf("missing username")
-	}
-
-	return &logical.Response{
-		Auth: &logical.Auth{
-			Alias: &logical.Alias{
-				Name: username,
-			},
-		},
-	}, nil
 }
 
 func (b *backend) pathLogin(
@@ -103,9 +85,6 @@ func (b *backend) pathLogin(
 		LeaseOptions: logical.LeaseOptions{
 			Renewable: true,
 		},
-		Alias: &logical.Alias{
-			Name: username,
-		},
 	}
 	return resp, nil
 }
@@ -145,8 +124,16 @@ func (b *backend) RadiusLogin(req *logical.Request, username string, password st
 	hostport := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 
 	packet := radius.New(radius.CodeAccessRequest, []byte(cfg.Secret))
-	UserName_SetString(packet, username)
-	UserPassword_SetString(packet, password)
+	usernameAttr, err := radius.NewString(username)
+	if err != nil {
+		return nil, nil, err
+	}
+	passwordAttr, err := radius.NewString(password)
+	if err != nil {
+		return nil, nil, err
+	}
+	packet.Add(1, usernameAttr)
+	packet.Add(2, passwordAttr)
 	packet.Add(5, radius.NewInteger(uint32(cfg.NasPort)))
 
 	client := radius.Client{
@@ -154,9 +141,7 @@ func (b *backend) RadiusLogin(req *logical.Request, username string, password st
 			Timeout: time.Duration(cfg.DialTimeout) * time.Second,
 		},
 	}
-	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(cfg.ReadTimeout)*time.Second)
-	received, err := client.Exchange(ctx, packet, hostport)
-	cancelFunc()
+	received, err := client.Exchange(context.Background(), packet, hostport)
 	if err != nil {
 		return nil, logical.ErrorResponse(err.Error()), nil
 	}

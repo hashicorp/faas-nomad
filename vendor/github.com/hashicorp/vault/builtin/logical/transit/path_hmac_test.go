@@ -2,7 +2,6 @@ package transit
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -37,10 +36,9 @@ func TestTransit_HMAC(t *testing.T) {
 	}
 	// We don't care as we're the only one using this
 	lock.RUnlock()
-	latestVersion := strconv.Itoa(p.LatestVersion)
-	keyEntry := p.Keys[latestVersion]
+	keyEntry := p.Keys[p.LatestVersion]
 	keyEntry.HMACKey = []byte("01234567890123456789012345678901")
-	p.Keys[latestVersion] = keyEntry
+	p.Keys[p.LatestVersion] = keyEntry
 	if err = p.Persist(storage); err != nil {
 		t.Fatal(err)
 	}
@@ -130,10 +128,10 @@ func TestTransit_HMAC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyEntry = p.Keys["2"]
+	keyEntry = p.Keys[2]
 	// Set to another value we control
 	keyEntry.HMACKey = []byte("12345678901234567890123456789012")
-	p.Keys["2"] = keyEntry
+	p.Keys[2] = keyEntry
 	if err = p.Persist(storage); err != nil {
 		t.Fatal(err)
 	}

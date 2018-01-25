@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/go-github/github"
 	"github.com/hashicorp/go-cleanhttp"
-	"github.com/hashicorp/vault/helper/mfa"
 	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/logical/framework"
 	"golang.org/x/oauth2"
@@ -36,11 +35,11 @@ func Backend() *backend {
 	}
 
 	allPaths := append(b.TeamMap.Paths(), b.UserMap.Paths()...)
+
 	b.Backend = &framework.Backend{
 		Help: backendHelp,
 
 		PathsSpecial: &logical.Paths{
-			Root: mfa.MFARootPaths(),
 			Unauthenticated: []string{
 				"login",
 			},
@@ -48,7 +47,9 @@ func Backend() *backend {
 
 		Paths: append([]*framework.Path{
 			pathConfig(&b),
-		}, append(allPaths, mfa.MFAPaths(b.Backend, pathLogin(&b))...)...),
+			pathLogin(&b),
+		}, allPaths...),
+
 		AuthRenew:   b.pathLoginRenew,
 		BackendType: logical.TypeCredential,
 	}

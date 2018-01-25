@@ -1,7 +1,6 @@
 package mssql
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -31,7 +30,7 @@ func TestMSSQL_Initialize(t *testing.T) {
 	dbRaw, _ := New()
 	db := dbRaw.(*MSSQL)
 
-	err := db.Initialize(context.Background(), connectionDetails, true)
+	err := db.Initialize(connectionDetails, true)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -52,7 +51,7 @@ func TestMSSQL_Initialize(t *testing.T) {
 		"max_open_connections": "5",
 	}
 
-	err = db.Initialize(context.Background(), connectionDetails, true)
+	err = db.Initialize(connectionDetails, true)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -70,7 +69,7 @@ func TestMSSQL_CreateUser(t *testing.T) {
 
 	dbRaw, _ := New()
 	db := dbRaw.(*MSSQL)
-	err := db.Initialize(context.Background(), connectionDetails, true)
+	err := db.Initialize(connectionDetails, true)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -81,7 +80,7 @@ func TestMSSQL_CreateUser(t *testing.T) {
 	}
 
 	// Test with no configured Creation Statememt
-	_, _, err = db.CreateUser(context.Background(), dbplugin.Statements{}, usernameConfig, time.Now().Add(time.Minute))
+	_, _, err = db.CreateUser(dbplugin.Statements{}, usernameConfig, time.Now().Add(time.Minute))
 	if err == nil {
 		t.Fatal("Expected error when no creation statement is provided")
 	}
@@ -90,7 +89,7 @@ func TestMSSQL_CreateUser(t *testing.T) {
 		CreationStatements: testMSSQLRole,
 	}
 
-	username, password, err := db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(time.Minute))
+	username, password, err := db.CreateUser(statements, usernameConfig, time.Now().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -112,7 +111,7 @@ func TestMSSQL_RevokeUser(t *testing.T) {
 
 	dbRaw, _ := New()
 	db := dbRaw.(*MSSQL)
-	err := db.Initialize(context.Background(), connectionDetails, true)
+	err := db.Initialize(connectionDetails, true)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -126,7 +125,7 @@ func TestMSSQL_RevokeUser(t *testing.T) {
 		RoleName:    "test",
 	}
 
-	username, password, err := db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(2*time.Second))
+	username, password, err := db.CreateUser(statements, usernameConfig, time.Now().Add(2*time.Second))
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -136,7 +135,7 @@ func TestMSSQL_RevokeUser(t *testing.T) {
 	}
 
 	// Test default revoke statememts
-	err = db.RevokeUser(context.Background(), statements, username)
+	err = db.RevokeUser(statements, username)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -145,7 +144,7 @@ func TestMSSQL_RevokeUser(t *testing.T) {
 		t.Fatal("Credentials were not revoked")
 	}
 
-	username, password, err = db.CreateUser(context.Background(), statements, usernameConfig, time.Now().Add(2*time.Second))
+	username, password, err = db.CreateUser(statements, usernameConfig, time.Now().Add(2*time.Second))
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -156,7 +155,7 @@ func TestMSSQL_RevokeUser(t *testing.T) {
 
 	// Test custom revoke statememt
 	statements.RevocationStatements = testMSSQLDrop
-	err = db.RevokeUser(context.Background(), statements, username)
+	err = db.RevokeUser(statements, username)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}

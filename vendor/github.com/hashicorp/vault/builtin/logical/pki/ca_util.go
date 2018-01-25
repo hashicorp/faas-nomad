@@ -17,14 +17,14 @@ func (b *backend) getGenerationParams(
 	case "internal":
 	default:
 		errorResp = logical.ErrorResponse(
-			`the "exported" path parameter must be "internal" or "exported"`)
+			`The "exported" path parameter must be "internal" or "exported"`)
 		return
 	}
 
 	format = getFormat(data)
 	if format == "" {
 		errorResp = logical.ErrorResponse(
-			`the "format" path parameter must be "pem", "der", "der_pkcs", or "pem_bundle"`)
+			`The "format" path parameter must be "pem", "der", or "pem_bundle"`)
 		return
 	}
 

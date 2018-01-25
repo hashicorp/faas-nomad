@@ -208,10 +208,7 @@ $ curl \
 ```json
 {
   "data": {
-    "policies": [
-      "admin",
-      "default"
-    ]
+    "policies": "admin,default"
   },
   "renewable": false,
   "lease_id": ""
@@ -335,10 +332,7 @@ $ curl \
 ```json
 {
   "data": {
-    "policies": [
-      "admin",
-      "default"
-    ],
+    "policies": "admin,default",
     "groups": ""
   },
   "renewable": false,

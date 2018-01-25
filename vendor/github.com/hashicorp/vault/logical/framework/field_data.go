@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/hashicorp/vault/helper/parseutil"
 	"github.com/hashicorp/vault/helper/strutil"
@@ -35,8 +34,7 @@ func (d *FieldData) Validate() error {
 
 		switch schema.Type {
 		case TypeBool, TypeInt, TypeMap, TypeDurationSecond, TypeString,
-			TypeNameString, TypeSlice, TypeStringSlice, TypeCommaStringSlice,
-			TypeKVPairs:
+			TypeNameString, TypeSlice, TypeStringSlice, TypeCommaStringSlice:
 			_, _, err := d.getPrimitive(field, schema)
 			if err != nil {
 				return fmt.Errorf("Error converting input %v for field %s: %s", value, field, err)
@@ -112,8 +110,7 @@ func (d *FieldData) GetOkErr(k string) (interface{}, bool, error) {
 
 	switch schema.Type {
 	case TypeBool, TypeInt, TypeMap, TypeDurationSecond, TypeString,
-		TypeNameString, TypeSlice, TypeStringSlice, TypeCommaStringSlice,
-		TypeKVPairs:
+		TypeNameString, TypeSlice, TypeStringSlice, TypeCommaStringSlice:
 		return d.getPrimitive(k, schema)
 	default:
 		return nil, false,
@@ -238,29 +235,6 @@ func (d *FieldData) getPrimitive(
 			return nil, false, err
 		}
 		return strutil.TrimStrings(result), true, nil
-
-	case TypeKVPairs:
-		// First try to parse this as a map
-		var mapResult map[string]string
-		if err := mapstructure.WeakDecode(raw, &mapResult); err == nil {
-			return mapResult, true, nil
-		}
-
-		// If map parse fails, parse as a string list of = delimited pairs
-		var listResult []string
-		if err := mapstructure.WeakDecode(raw, &listResult); err != nil {
-			return nil, true, err
-		}
-
-		result := make(map[string]string, len(listResult))
-		for _, keyPair := range listResult {
-			keyPairSlice := strings.SplitN(keyPair, "=", 2)
-			if len(keyPairSlice) != 2 || keyPairSlice[0] == "" {
-				return nil, false, fmt.Errorf("invalid key pair %q", keyPair)
-			}
-			result[keyPairSlice[0]] = keyPairSlice[1]
-		}
-		return result, true, nil
 
 	default:
 		panic(fmt.Sprintf("Unknown type: %s", schema.Type))

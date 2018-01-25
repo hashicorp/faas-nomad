@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -223,11 +222,8 @@ func testCoreMakeToken(t *testing.T, c *Core, root, client, ttl string, policy [
 	if err != nil {
 		t.Fatalf("err: %v %v", err, resp)
 	}
-	if resp.IsError() {
-		t.Fatalf("err: %v %v", err, *resp)
-	}
 	if resp.Auth.ClientToken != client {
-		t.Fatalf("bad: %#v", *resp)
+		t.Fatalf("bad: %#v", resp)
 	}
 }
 
@@ -568,8 +564,9 @@ func TestTokenStore_CreateLookup_ExpirationInRestoreMode(t *testing.T) {
 
 	// Reset expiration manager to restore mode
 	ts.expiration.restoreModeLock.Lock()
-	atomic.StoreInt32(&ts.expiration.restoreMode, 1)
+	ts.expiration.restoreMode = 1
 	ts.expiration.restoreLocks = locksutil.CreateLocks()
+	ts.expiration.quitCh = make(chan struct{})
 	ts.expiration.restoreModeLock.Unlock()
 
 	// Test that the token lookup does not return the token entry due to the
@@ -770,36 +767,41 @@ func TestTokenStore_Revoke_Orphan(t *testing.T) {
 	}
 }
 
-// This was the original function name, and now it just calls
-// the non recursive version for a variety of depths.
 func TestTokenStore_RevokeTree(t *testing.T) {
-	testTokenStore_RevokeTree_NonRecursive(t, 1)
-	testTokenStore_RevokeTree_NonRecursive(t, 2)
-	testTokenStore_RevokeTree_NonRecursive(t, 10)
-}
-
-// Revokes a given Token Store tree non recursively.
-// The second parameter refers to the depth of the tree.
-func testTokenStore_RevokeTree_NonRecursive(t testing.TB, depth uint64) {
 	_, ts, _, _ := TestCoreWithTokenStore(t)
-	root, children := buildTokenTree(t, ts, depth)
-	err := ts.RevokeTree("")
 
+	ent1 := &TokenEntry{}
+	if err := ts.create(ent1); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	ent2 := &TokenEntry{Parent: ent1.ID}
+	if err := ts.create(ent2); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	ent3 := &TokenEntry{Parent: ent2.ID}
+	if err := ts.create(ent3); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	ent4 := &TokenEntry{Parent: ent2.ID}
+	if err := ts.create(ent4); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	err := ts.RevokeTree("")
 	if err.Error() != "cannot tree-revoke blank token" {
 		t.Fatalf("err: %v", err)
 	}
-
-	// Nuke tree non recursively.
-	err = ts.RevokeTree(root.ID)
-
+	err = ts.RevokeTree(ent1.ID)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	// Append the root to ensure it was successfully
-	// deleted.
-	children = append(children, root)
-	for _, entry := range children {
-		out, err := ts.Lookup(entry.ID)
+
+	lookup := []string{ent1.ID, ent2.ID, ent3.ID, ent4.ID}
+	for _, id := range lookup {
+		out, err := ts.Lookup(id)
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
@@ -807,52 +809,6 @@ func testTokenStore_RevokeTree_NonRecursive(t testing.TB, depth uint64) {
 			t.Fatalf("bad: %#v", out)
 		}
 	}
-}
-
-// A benchmark function that tests testTokenStore_RevokeTree_NonRecursive
-// for a variety of different depths.
-func BenchmarkTokenStore_RevokeTree(b *testing.B) {
-	benchmarks := []uint64{0, 1, 2, 4, 8, 16, 20}
-	for _, depth := range benchmarks {
-		b.Run(fmt.Sprintf("Tree of Depth %d", depth), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				testTokenStore_RevokeTree_NonRecursive(b, depth)
-			}
-		})
-	}
-}
-
-// Builds a TokenTree of a specified depth, so that
-// we may run revoke tests on it.
-func buildTokenTree(t testing.TB, ts *TokenStore, depth uint64) (root *TokenEntry, children []*TokenEntry) {
-	root = &TokenEntry{}
-	if err := ts.create(root); err != nil {
-		t.Fatalf("err: %v", err)
-	}
-
-	frontier := []*TokenEntry{root}
-	current := uint64(0)
-	for current < depth {
-		next := make([]*TokenEntry, 0, 2*len(frontier))
-		for _, node := range frontier {
-			left := &TokenEntry{Parent: node.ID}
-			if err := ts.create(left); err != nil {
-				t.Fatalf("err: %v", err)
-			}
-
-			right := &TokenEntry{Parent: node.ID}
-			if err := ts.create(right); err != nil {
-				t.Fatalf("err: %v", err)
-			}
-
-			children = append(children, left, right)
-			next = append(next, left, right)
-		}
-		frontier = next
-		current++
-	}
-
-	return root, children
 }
 
 func TestTokenStore_RevokeSelf(t *testing.T) {
@@ -1154,7 +1110,7 @@ func TestTokenStore_HandleRequest_CreateToken_NonRoot_RootChild(t *testing.T) {
 	core, ts, _, root := TestCoreWithTokenStore(t)
 	ps := core.policyStore
 
-	policy, _ := ParseACLPolicy(tokenCreationPolicy)
+	policy, _ := Parse(tokenCreationPolicy)
 	policy.Name = "test1"
 	if err := ps.SetPolicy(policy); err != nil {
 		t.Fatal(err)
@@ -1493,7 +1449,6 @@ func TestTokenStore_HandleRequest_Lookup(t *testing.T) {
 		"ttl":              int64(0),
 		"explicit_max_ttl": int64(0),
 		"expire_time":      nil,
-		"entity_id":        "",
 	}
 
 	if resp.Data["creation_time"].(int64) == 0 {
@@ -1533,7 +1488,6 @@ func TestTokenStore_HandleRequest_Lookup(t *testing.T) {
 		"ttl":              int64(3600),
 		"explicit_max_ttl": int64(0),
 		"renewable":        true,
-		"entity_id":        "",
 	}
 
 	if resp.Data["creation_time"].(int64) == 0 {
@@ -1584,7 +1538,6 @@ func TestTokenStore_HandleRequest_Lookup(t *testing.T) {
 		"ttl":              int64(3600),
 		"explicit_max_ttl": int64(0),
 		"renewable":        true,
-		"entity_id":        "",
 	}
 
 	if resp.Data["creation_time"].(int64) == 0 {
@@ -1666,7 +1619,6 @@ func TestTokenStore_HandleRequest_LookupSelf(t *testing.T) {
 		"creation_ttl":     int64(3600),
 		"ttl":              int64(3600),
 		"explicit_max_ttl": int64(0),
-		"entity_id":        "",
 	}
 
 	if resp.Data["creation_time"].(int64) == 0 {
@@ -2010,19 +1962,19 @@ func TestTokenStore_RoleDisallowedPolicies(t *testing.T) {
 	ps := core.policyStore
 
 	// Create 3 different policies
-	policy, _ := ParseACLPolicy(tokenCreationPolicy)
+	policy, _ := Parse(tokenCreationPolicy)
 	policy.Name = "test1"
 	if err := ps.SetPolicy(policy); err != nil {
 		t.Fatal(err)
 	}
 
-	policy, _ = ParseACLPolicy(tokenCreationPolicy)
+	policy, _ = Parse(tokenCreationPolicy)
 	policy.Name = "test2"
 	if err := ps.SetPolicy(policy); err != nil {
 		t.Fatal(err)
 	}
 
-	policy, _ = ParseACLPolicy(tokenCreationPolicy)
+	policy, _ = Parse(tokenCreationPolicy)
 	policy.Name = "test3"
 	if err := ps.SetPolicy(policy); err != nil {
 		t.Fatal(err)
@@ -2312,7 +2264,7 @@ func TestTokenStore_RolePeriod(t *testing.T) {
 	req := logical.TestRequest(t, logical.UpdateOperation, "auth/token/roles/test")
 	req.ClientToken = root
 	req.Data = map[string]interface{}{
-		"period": 5,
+		"period": 300,
 	}
 
 	resp, err := core.HandleRequest(req)
@@ -2425,8 +2377,8 @@ func TestTokenStore_RolePeriod(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl := resp.Data["ttl"].(int64)
-		if ttl > 5 {
-			t.Fatalf("TTL too large (expected %d, got %d", 5, ttl)
+		if ttl < 299 {
+			t.Fatalf("TTL too small (expected %d, got %d", 299, ttl)
 		}
 
 		// Let the TTL go down a bit to 3 seconds
@@ -2449,8 +2401,8 @@ func TestTokenStore_RolePeriod(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl = resp.Data["ttl"].(int64)
-		if ttl > 5 {
-			t.Fatalf("TTL too large (expected %d, got %d", 5, ttl)
+		if ttl < 299 {
+			t.Fatalf("TTL too small (expected %d, got %d", 299, ttl)
 		}
 	}
 }
@@ -2677,7 +2629,7 @@ func TestTokenStore_Periodic(t *testing.T) {
 	req := logical.TestRequest(t, logical.UpdateOperation, "auth/token/roles/test")
 	req.ClientToken = root
 	req.Data = map[string]interface{}{
-		"period": 5,
+		"period": 300,
 	}
 
 	resp, err := core.HandleRequest(req)
@@ -2715,8 +2667,8 @@ func TestTokenStore_Periodic(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl := resp.Data["ttl"].(int64)
-		if ttl > 5 {
-			t.Fatalf("TTL too large (expected %d, got %d)", 5, ttl)
+		if ttl < 299 {
+			t.Fatalf("TTL too small (expected %d, got %d)", 299, ttl)
 		}
 
 		// Let the TTL go down a bit
@@ -2739,8 +2691,8 @@ func TestTokenStore_Periodic(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl = resp.Data["ttl"].(int64)
-		if ttl > 5 {
-			t.Fatalf("TTL too large (expected %d, got %d)", 5, ttl)
+		if ttl < 299 {
+			t.Fatalf("TTL too small (expected %d, got %d)", 299, ttl)
 		}
 	}
 
@@ -2750,8 +2702,8 @@ func TestTokenStore_Periodic(t *testing.T) {
 		req.Operation = logical.UpdateOperation
 		req.Path = "auth/token/create"
 		req.Data = map[string]interface{}{
-			"period":           5,
-			"explicit_max_ttl": 4,
+			"period":           300,
+			"explicit_max_ttl": 150,
 		}
 		resp, err = core.HandleRequest(req)
 		if err != nil {
@@ -2775,8 +2727,8 @@ func TestTokenStore_Periodic(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl := resp.Data["ttl"].(int64)
-		if ttl < 3 || ttl > 4 {
-			t.Fatalf("TTL bad (expected %d, got %d)", 3, ttl)
+		if ttl < 149 || ttl > 150 {
+			t.Fatalf("TTL bad (expected %d, got %d)", 149, ttl)
 		}
 
 		// Let the TTL go down a bit
@@ -2799,8 +2751,8 @@ func TestTokenStore_Periodic(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl = resp.Data["ttl"].(int64)
-		if ttl > 2 {
-			t.Fatalf("TTL bad (expected less than %d, got %d)", 2, ttl)
+		if ttl < 140 || ttl > 150 {
+			t.Fatalf("TTL bad (expected around %d, got %d)", 145, ttl)
 		}
 	}
 
@@ -2812,7 +2764,7 @@ func TestTokenStore_Periodic(t *testing.T) {
 		req.Operation = logical.UpdateOperation
 		req.Path = "auth/token/create/test"
 		req.Data = map[string]interface{}{
-			"period": 5,
+			"period": 150,
 		}
 		resp, err = core.HandleRequest(req)
 		if err != nil {
@@ -2836,8 +2788,8 @@ func TestTokenStore_Periodic(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl := resp.Data["ttl"].(int64)
-		if ttl < 4 || ttl > 5 {
-			t.Fatalf("TTL bad (expected %d, got %d)", 4, ttl)
+		if ttl < 149 || ttl > 150 {
+			t.Fatalf("TTL bad (expected %d, got %d)", 149, ttl)
 		}
 
 		// Let the TTL go down a bit
@@ -2860,8 +2812,8 @@ func TestTokenStore_Periodic(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl = resp.Data["ttl"].(int64)
-		if ttl > 5 {
-			t.Fatalf("TTL bad (expected less than %d, got %d)", 5, ttl)
+		if ttl < 149 {
+			t.Fatalf("TTL bad (expected %d, got %d)", 149, ttl)
 		}
 	}
 
@@ -2869,23 +2821,18 @@ func TestTokenStore_Periodic(t *testing.T) {
 	{
 		req.Path = "auth/token/roles/test"
 		req.ClientToken = root
-		req.Operation = logical.UpdateOperation
 		req.Data = map[string]interface{}{
-			"period":           5,
-			"explicit_max_ttl": 4,
-		}
-
-		resp, err := core.HandleRequest(req)
-		if err != nil {
-			t.Fatalf("err: %v %v", err, resp)
-		}
-		if resp != nil {
-			t.Fatalf("expected a nil response")
+			"period":           300,
+			"explicit_max_ttl": 150,
 		}
 
 		req.ClientToken = root
 		req.Operation = logical.UpdateOperation
 		req.Path = "auth/token/create/test"
+		req.Data = map[string]interface{}{
+			"period":           150,
+			"explicit_max_ttl": 130,
+		}
 		resp, err = core.HandleRequest(req)
 		if err != nil {
 			t.Fatalf("err: %v %v", err, resp)
@@ -2908,12 +2855,12 @@ func TestTokenStore_Periodic(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl := resp.Data["ttl"].(int64)
-		if ttl < 3 || ttl > 4 {
-			t.Fatalf("TTL bad (expected %d, got %d)", 3, ttl)
+		if ttl < 129 || ttl > 130 {
+			t.Fatalf("TTL bad (expected %d, got %d)", 129, ttl)
 		}
 
 		// Let the TTL go down a bit
-		time.Sleep(2 * time.Second)
+		time.Sleep(4 * time.Second)
 
 		req.Operation = logical.UpdateOperation
 		req.Path = "auth/token/renew-self"
@@ -2932,8 +2879,8 @@ func TestTokenStore_Periodic(t *testing.T) {
 			t.Fatalf("err: %v", err)
 		}
 		ttl = resp.Data["ttl"].(int64)
-		if ttl > 2 {
-			t.Fatalf("TTL bad (expected less than %d, got %d)", 2, ttl)
+		if ttl > 127 {
+			t.Fatalf("TTL bad (expected < %d, got %d)", 128, ttl)
 		}
 	}
 }
@@ -2944,7 +2891,7 @@ func TestTokenStore_NoDefaultPolicy(t *testing.T) {
 
 	core, ts, _, root := TestCoreWithTokenStore(t)
 	ps := core.policyStore
-	policy, _ := ParseACLPolicy(tokenCreationPolicy)
+	policy, _ := Parse(tokenCreationPolicy)
 	policy.Name = "policy1"
 	if err := ps.SetPolicy(policy); err != nil {
 		t.Fatal(err)

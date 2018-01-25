@@ -604,8 +604,6 @@ func (s *FieldSchema) DefaultOrZero() interface{} {
 // Zero returns the correct zero-value for a specific FieldType
 func (t FieldType) Zero() interface{} {
 	switch t {
-	case TypeNameString:
-		return ""
 	case TypeString:
 		return ""
 	case TypeInt:
@@ -614,8 +612,6 @@ func (t FieldType) Zero() interface{} {
 		return false
 	case TypeMap:
 		return map[string]interface{}{}
-	case TypeKVPairs:
-		return map[string]string{}
 	case TypeDurationSecond:
 		return 0
 	case TypeSlice:

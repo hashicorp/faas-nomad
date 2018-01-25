@@ -121,12 +121,7 @@ func handleSysUnseal(core *vault.Core) http.Handler {
 			}
 
 			// Attempt the unseal
-			if core.SealAccess().RecoveryKeySupported() {
-				_, err = core.UnsealWithRecoveryKeys(key)
-			} else {
-				_, err = core.Unseal(key)
-			}
-			if err != nil {
+			if _, err := core.Unseal(key); err != nil {
 				switch {
 				case errwrap.ContainsType(err, new(vault.ErrInvalidKey)):
 				case errwrap.Contains(err, vault.ErrBarrierInvalidKey.Error()):
@@ -165,17 +160,11 @@ func handleSysSealStatusRaw(core *vault.Core, w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var sealConfig *vault.SealConfig
-	if core.SealAccess().RecoveryKeySupported() {
-		sealConfig, err = core.SealAccess().RecoveryConfig()
-	} else {
-		sealConfig, err = core.SealAccess().BarrierConfig()
-	}
+	sealConfig, err := core.SealAccess().BarrierConfig()
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
-
 	if sealConfig == nil {
 		respondError(w, http.StatusBadRequest, fmt.Errorf(
 			"server is not yet initialized"))
@@ -201,7 +190,6 @@ func handleSysSealStatusRaw(core *vault.Core, w http.ResponseWriter, r *http.Req
 	progress, nonce := core.SecretProgress()
 
 	respondOk(w, &SealStatusResponse{
-		Type:        sealConfig.Type,
 		Sealed:      sealed,
 		T:           sealConfig.SecretThreshold,
 		N:           sealConfig.SecretShares,
@@ -214,7 +202,6 @@ func handleSysSealStatusRaw(core *vault.Core, w http.ResponseWriter, r *http.Req
 }
 
 type SealStatusResponse struct {
-	Type        string `json:"type"`
 	Sealed      bool   `json:"sealed"`
 	T           int    `json:"t"`
 	N           int    `json:"n"`

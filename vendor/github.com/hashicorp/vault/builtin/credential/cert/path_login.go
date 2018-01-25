@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/asn1"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/vault/helper/certutil"
 	"github.com/hashicorp/vault/helper/policyutil"
@@ -36,26 +34,9 @@ func pathLogin(b *backend) *framework.Path {
 			},
 		},
 		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.UpdateOperation:         b.pathLogin,
-			logical.AliasLookaheadOperation: b.pathLoginAliasLookahead,
+			logical.UpdateOperation: b.pathLogin,
 		},
 	}
-}
-
-func (b *backend) pathLoginAliasLookahead(
-	req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
-	clientCerts := req.Connection.ConnState.PeerCertificates
-	if len(clientCerts) == 0 {
-		return nil, fmt.Errorf("no client certificate found")
-	}
-
-	return &logical.Response{
-		Auth: &logical.Auth{
-			Alias: &logical.Alias{
-				Name: clientCerts[0].Subject.CommonName,
-			},
-		},
-	}, nil
 }
 
 func (b *backend) pathLogin(
@@ -86,9 +67,9 @@ func (b *backend) pathLogin(
 	skid := base64.StdEncoding.EncodeToString(clientCerts[0].SubjectKeyId)
 	akid := base64.StdEncoding.EncodeToString(clientCerts[0].AuthorityKeyId)
 
+	// Generate a response
 	resp := &logical.Response{
 		Auth: &logical.Auth{
-			Period: matched.Entry.Period,
 			InternalData: map[string]interface{}{
 				"subject_key_id":   skid,
 				"authority_key_id": akid,
@@ -105,27 +86,8 @@ func (b *backend) pathLogin(
 				Renewable: true,
 				TTL:       ttl,
 			},
-			Alias: &logical.Alias{
-				Name: clientCerts[0].SerialNumber.String(),
-			},
 		},
 	}
-
-	if matched.Entry.MaxTTL > time.Duration(0) {
-		// Cap maxTTL to the sysview's max TTL
-		maxTTL := matched.Entry.MaxTTL
-		if maxTTL > b.System().MaxLeaseTTL() {
-			maxTTL = b.System().MaxLeaseTTL()
-		}
-
-		// Cap TTL to MaxTTL
-		if resp.Auth.TTL > maxTTL {
-			resp.AddWarning(fmt.Sprintf("Effective TTL of '%s' exceeded the effective max_ttl of '%s'; TTL value is capped accordingly", (resp.Auth.TTL / time.Second), (maxTTL / time.Second)))
-			resp.Auth.TTL = maxTTL
-		}
-	}
-
-	// Generate a response
 	return resp, nil
 }
 
@@ -152,7 +114,7 @@ func (b *backend) pathLoginRenew(
 
 		clientCerts := req.Connection.ConnState.PeerCertificates
 		if len(clientCerts) == 0 {
-			return logical.ErrorResponse("no client certificate found"), nil
+			return nil, fmt.Errorf("no client certificate found")
 		}
 		skid := base64.StdEncoding.EncodeToString(clientCerts[0].SubjectKeyId)
 		akid := base64.StdEncoding.EncodeToString(clientCerts[0].AuthorityKeyId)
@@ -178,12 +140,7 @@ func (b *backend) pathLoginRenew(
 		return nil, fmt.Errorf("policies have changed, not renewing")
 	}
 
-	resp, err := framework.LeaseExtend(cert.TTL, cert.MaxTTL, b.System())(req, d)
-	if err != nil {
-		return nil, err
-	}
-	resp.Auth.Period = cert.Period
-	return resp, nil
+	return framework.LeaseExtend(cert.TTL, 0, b.System())(req, d)
 }
 
 func (b *backend) verifyCredentials(req *logical.Request, d *framework.FieldData) (*ParsedCert, *logical.Response, error) {
@@ -260,70 +217,28 @@ func (b *backend) verifyCredentials(req *logical.Request, d *framework.FieldData
 }
 
 func (b *backend) matchesConstraints(clientCert *x509.Certificate, trustedChain []*x509.Certificate, config *ParsedCert) bool {
-	return !b.checkForChainInCRLs(trustedChain) &&
-		b.matchesNames(clientCert, config) &&
-		b.matchesCertificateExtenions(clientCert, config)
-}
-
-// matchesNames verifies that the certificate matches at least one configured
-// allowed name
-func (b *backend) matchesNames(clientCert *x509.Certificate, config *ParsedCert) bool {
 	// Default behavior (no names) is to allow all names
-	if len(config.Entry.AllowedNames) == 0 {
-		return true
-	}
+	nameMatched := len(config.Entry.AllowedNames) == 0
 	// At least one pattern must match at least one name if any patterns are specified
 	for _, allowedName := range config.Entry.AllowedNames {
 		if glob.Glob(allowedName, clientCert.Subject.CommonName) {
-			return true
+			nameMatched = true
 		}
 
 		for _, name := range clientCert.DNSNames {
 			if glob.Glob(allowedName, name) {
-				return true
+				nameMatched = true
 			}
 		}
 
 		for _, name := range clientCert.EmailAddresses {
 			if glob.Glob(allowedName, name) {
-				return true
+				nameMatched = true
 			}
 		}
 	}
-	return false
-}
 
-// matchesCertificateExtenions verifies that the certificate matches configured
-// required extensions
-func (b *backend) matchesCertificateExtenions(clientCert *x509.Certificate, config *ParsedCert) bool {
-	// If no required extensions, nothing to check here
-	if len(config.Entry.RequiredExtensions) == 0 {
-		return true
-	}
-	// Fail fast if we have required extensions but no extensions on the cert
-	if len(clientCert.Extensions) == 0 {
-		return false
-	}
-
-	// Build Client Extensions Map for Constraint Matching
-	// x509 Writes Extensions in ASN1 with a bitstring tag, which results in the field
-	// including its ASN.1 type tag bytes. For the sake of simplicity, assume string type
-	// and drop the tag bytes. And get the number of bytes from the tag.
-	clientExtMap := make(map[string]string, len(clientCert.Extensions))
-	for _, ext := range clientCert.Extensions {
-		var parsedValue string
-		asn1.Unmarshal(ext.Value, &parsedValue)
-		clientExtMap[ext.Id.String()] = parsedValue
-	}
-	// If any of the required extensions don't match the constraint fails
-	for _, requiredExt := range config.Entry.RequiredExtensions {
-		reqExt := strings.SplitN(requiredExt, ":", 2)
-		clientExtValue, clientExtValueOk := clientExtMap[reqExt[0]]
-		if !clientExtValueOk || !glob.Glob(reqExt[1], clientExtValue) {
-			return false
-		}
-	}
-	return true
+	return !b.checkForChainInCRLs(trustedChain) && nameMatched
 }
 
 // loadTrustedCerts is used to load all the trusted certificates from the backend

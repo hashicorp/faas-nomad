@@ -149,7 +149,7 @@ func (b *backend) pathCAGenerateRoot(
 
 	cb, err := parsedBundle.ToCertBundle()
 	if err != nil {
-		return nil, errwrap.Wrapf("error converting raw cert bundle to cert bundle: {{err}}", err)
+		return nil, fmt.Errorf("error converting raw cert bundle to cert bundle: %s", err)
 	}
 
 	resp := &logical.Response{
@@ -188,13 +188,6 @@ func (b *backend) pathCAGenerateRoot(
 		}
 	}
 
-	if data.Get("private_key_format").(string) == "pkcs8" {
-		err = convertRespToPKCS8(resp)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// Store it as the CA bundle
 	entry, err = logical.StorageEntryJSON("config/ca_bundle", cb)
 	if err != nil {
@@ -212,7 +205,7 @@ func (b *backend) pathCAGenerateRoot(
 		Value: parsedBundle.CertificateBytes,
 	})
 	if err != nil {
-		return nil, errwrap.Wrapf("unable to store certificate locally: {{err}}", err)
+		return nil, fmt.Errorf("Unable to store certificate locally: %v", err)
 	}
 
 	// For ease of later use, also store just the certificate at a known

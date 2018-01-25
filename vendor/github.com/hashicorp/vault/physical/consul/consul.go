@@ -26,7 +26,6 @@ import (
 	"github.com/hashicorp/errwrap"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/vault/helper/consts"
-	"github.com/hashicorp/vault/helper/parseutil"
 	"github.com/hashicorp/vault/helper/strutil"
 	"github.com/hashicorp/vault/helper/tlsutil"
 	"github.com/hashicorp/vault/physical"
@@ -114,7 +113,7 @@ func NewConsulBackend(conf map[string]string, logger log.Logger) (physical.Backe
 	disableReg, ok := conf["disable_registration"]
 	var disableRegistration bool
 	if ok && disableReg != "" {
-		b, err := parseutil.ParseBool(disableReg)
+		b, err := strconv.ParseBool(disableReg)
 		if err != nil {
 			return nil, errwrap.Wrapf("failed parsing disable_registration parameter: {{err}}", err)
 		}
@@ -252,14 +251,8 @@ func setupTLSConfig(conf map[string]string) (*tls.Config, error) {
 	}
 
 	insecureSkipVerify := false
-	tlsSkipVerify, ok := conf["tls_skip_verify"]
-
-	if ok && tlsSkipVerify != "" {
-		b, err := parseutil.ParseBool(tlsSkipVerify)
-		if err != nil {
-			return nil, errwrap.Wrapf("failed parsing tls_skip_verify parameter: {{err}}", err)
-		}
-		insecureSkipVerify = b
+	if _, ok := conf["tls_skip_verify"]; ok {
+		insecureSkipVerify = true
 	}
 
 	tlsMinVersionStr, ok := conf["tls_min_version"]
@@ -310,7 +303,7 @@ func setupTLSConfig(conf map[string]string) (*tls.Config, error) {
 }
 
 // Used to run multiple entries via a transaction
-func (c *ConsulBackend) Transaction(txns []*physical.TxnEntry) error {
+func (c *ConsulBackend) Transaction(txns []physical.TxnEntry) error {
 	if len(txns) == 0 {
 		return nil
 	}
@@ -341,7 +334,7 @@ func (c *ConsulBackend) Transaction(txns []*physical.TxnEntry) error {
 	if err != nil {
 		return err
 	}
-	if ok && len(resp.Errors) == 0 {
+	if ok {
 		return nil
 	}
 

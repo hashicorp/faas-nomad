@@ -12,42 +12,6 @@ import (
 	"github.com/hashicorp/vault/shamir"
 )
 
-const coreDROperationTokenPath = "core/dr-operation-token"
-
-var (
-	// GenerateStandardRootTokenStrategy is the strategy used to generate a
-	// typical root token
-	GenerateStandardRootTokenStrategy GenerateRootStrategy = generateStandardRootToken{}
-)
-
-// GenerateRootStrategy allows us to swap out the strategy we want to use to
-// create a token upon completion of the generate root process.
-type GenerateRootStrategy interface {
-	generate(*Core) (string, func(), error)
-}
-
-// generateStandardRootToken implements the GenerateRootStrategy and is in
-// charge of creating standard root tokens.
-type generateStandardRootToken struct{}
-
-func (g generateStandardRootToken) generate(c *Core) (string, func(), error) {
-	te, err := c.tokenStore.rootToken()
-	if err != nil {
-		c.logger.Error("core: root token generation failed", "error", err)
-		return "", nil, err
-	}
-	if te == nil {
-		c.logger.Error("core: got nil token entry back from root generation")
-		return "", nil, fmt.Errorf("got nil token entry back from root generation")
-	}
-
-	cleanupFunc := func() {
-		c.tokenStore.Revoke(te.ID)
-	}
-
-	return te.ID, cleanupFunc, nil
-}
-
 // GenerateRootConfig holds the configuration for a root generation
 // command.
 type GenerateRootConfig struct {
@@ -55,19 +19,18 @@ type GenerateRootConfig struct {
 	PGPKey         string
 	PGPFingerprint string
 	OTP            string
-	Strategy       GenerateRootStrategy
 }
 
 // GenerateRootResult holds the result of a root generation update
 // command
 type GenerateRootResult struct {
-	Progress       int
-	Required       int
-	EncodedToken   string
-	PGPFingerprint string
+	Progress         int
+	Required         int
+	EncodedRootToken string
+	PGPFingerprint   string
 }
 
-// GenerateRootProgress is used to return the root generation progress (num shares)
+// GenerateRoot is used to return the root generation progress (num shares)
 func (c *Core) GenerateRootProgress() (int, error) {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
@@ -84,7 +47,7 @@ func (c *Core) GenerateRootProgress() (int, error) {
 	return len(c.generateRootProgress), nil
 }
 
-// GenerateRootConfiguration is used to read the root generation configuration
+// GenerateRootConfig is used to read the root generation configuration
 // It stubbornly refuses to return the OTP if one is there.
 func (c *Core) GenerateRootConfiguration() (*GenerateRootConfig, error) {
 	c.stateLock.RLock()
@@ -105,13 +68,12 @@ func (c *Core) GenerateRootConfiguration() (*GenerateRootConfig, error) {
 		conf = new(GenerateRootConfig)
 		*conf = *c.generateRootConfig
 		conf.OTP = ""
-		conf.Strategy = nil
 	}
 	return conf, nil
 }
 
 // GenerateRootInit is used to initialize the root generation settings
-func (c *Core) GenerateRootInit(otp, pgpKey string, strategy GenerateRootStrategy) error {
+func (c *Core) GenerateRootInit(otp, pgpKey string) error {
 	var fingerprint string
 	switch {
 	case len(otp) > 0:
@@ -165,7 +127,6 @@ func (c *Core) GenerateRootInit(otp, pgpKey string, strategy GenerateRootStrateg
 		OTP:            otp,
 		PGPKey:         pgpKey,
 		PGPFingerprint: fingerprint,
-		Strategy:       strategy,
 	}
 
 	if c.logger.IsInfo() {
@@ -175,7 +136,7 @@ func (c *Core) GenerateRootInit(otp, pgpKey string, strategy GenerateRootStrateg
 }
 
 // GenerateRootUpdate is used to provide a new key part
-func (c *Core) GenerateRootUpdate(key []byte, nonce string, strategy GenerateRootStrategy) (*GenerateRootResult, error) {
+func (c *Core) GenerateRootUpdate(key []byte, nonce string) (*GenerateRootResult, error) {
 	// Verify the key length
 	min, max := c.barrier.KeyLength()
 	max += shamir.ShareOverhead
@@ -228,10 +189,6 @@ func (c *Core) GenerateRootUpdate(key []byte, nonce string, strategy GenerateRoo
 		return nil, fmt.Errorf("incorrect nonce supplied; nonce for this root generation operation is %s", c.generateRootConfig.Nonce)
 	}
 
-	if strategy != c.generateRootConfig.Strategy {
-		return nil, fmt.Errorf("incorrect stategy supplied; a generate root operation of another type is already in progress")
-	}
-
 	// Check if we already have this piece
 	for _, existing := range c.generateRootProgress {
 		if bytes.Equal(existing, key) {
@@ -281,20 +238,24 @@ func (c *Core) GenerateRootUpdate(key []byte, nonce string, strategy GenerateRoo
 		}
 	}
 
-	// Run the generate strategy
-	tokenUUID, cleanupFunc, err := strategy.generate(c)
+	te, err := c.tokenStore.rootToken()
 	if err != nil {
+		c.logger.Error("core: root token generation failed", "error", err)
 		return nil, err
 	}
+	if te == nil {
+		c.logger.Error("core: got nil token entry back from root generation")
+		return nil, fmt.Errorf("got nil token entry back from root generation")
+	}
 
-	uuidBytes, err := uuid.ParseUUID(tokenUUID)
+	uuidBytes, err := uuid.ParseUUID(te.ID)
 	if err != nil {
-		cleanupFunc()
+		c.tokenStore.Revoke(te.ID)
 		c.logger.Error("core: error getting generated token bytes", "error", err)
 		return nil, err
 	}
 	if uuidBytes == nil {
-		cleanupFunc()
+		c.tokenStore.Revoke(te.ID)
 		c.logger.Error("core: got nil parsed UUID bytes")
 		return nil, fmt.Errorf("got nil parsed UUID bytes")
 	}
@@ -308,30 +269,30 @@ func (c *Core) GenerateRootUpdate(key []byte, nonce string, strategy GenerateRoo
 		// just encode the value we're passing in.
 		tokenBytes, err = xor.XORBase64(c.generateRootConfig.OTP, base64.StdEncoding.EncodeToString(uuidBytes))
 		if err != nil {
-			cleanupFunc()
+			c.tokenStore.Revoke(te.ID)
 			c.logger.Error("core: xor of root token failed", "error", err)
 			return nil, err
 		}
 
 	case len(c.generateRootConfig.PGPKey) > 0:
-		_, tokenBytesArr, err := pgpkeys.EncryptShares([][]byte{[]byte(tokenUUID)}, []string{c.generateRootConfig.PGPKey})
+		_, tokenBytesArr, err := pgpkeys.EncryptShares([][]byte{[]byte(te.ID)}, []string{c.generateRootConfig.PGPKey})
 		if err != nil {
-			cleanupFunc()
+			c.tokenStore.Revoke(te.ID)
 			c.logger.Error("core: error encrypting new root token", "error", err)
 			return nil, err
 		}
 		tokenBytes = tokenBytesArr[0]
 
 	default:
-		cleanupFunc()
+		c.tokenStore.Revoke(te.ID)
 		return nil, fmt.Errorf("unreachable condition")
 	}
 
 	results := &GenerateRootResult{
-		Progress:       progress,
-		Required:       config.SecretThreshold,
-		EncodedToken:   base64.StdEncoding.EncodeToString(tokenBytes),
-		PGPFingerprint: c.generateRootConfig.PGPFingerprint,
+		Progress:         progress,
+		Required:         config.SecretThreshold,
+		EncodedRootToken: base64.StdEncoding.EncodeToString(tokenBytes),
+		PGPFingerprint:   c.generateRootConfig.PGPFingerprint,
 	}
 
 	if c.logger.IsInfo() {

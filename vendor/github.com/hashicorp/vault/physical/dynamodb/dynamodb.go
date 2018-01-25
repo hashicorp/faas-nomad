@@ -74,6 +74,7 @@ const (
 type DynamoDBBackend struct {
 	table      string
 	client     *dynamodb.DynamoDB
+	recovery   bool
 	logger     log.Logger
 	haEnabled  bool
 	permitPool *physical.PermitPool
@@ -95,6 +96,7 @@ type DynamoDBLock struct {
 	identity   string
 	held       bool
 	lock       sync.Mutex
+	recovery   bool
 	// Allow modifying the Lock durations for ease of unit testing.
 	renewInterval      time.Duration
 	ttl                time.Duration
@@ -209,6 +211,12 @@ func NewDynamoDBBackend(conf map[string]string, logger log.Logger) (physical.Bac
 	}
 	haEnabledBool, _ := strconv.ParseBool(haEnabled)
 
+	recoveryMode := os.Getenv("RECOVERY_MODE")
+	if recoveryMode == "" {
+		recoveryMode = conf["recovery_mode"]
+	}
+	recoveryModeBool, _ := strconv.ParseBool(recoveryMode)
+
 	maxParStr, ok := conf["max_parallel"]
 	var maxParInt int
 	if ok {
@@ -225,6 +233,7 @@ func NewDynamoDBBackend(conf map[string]string, logger log.Logger) (physical.Bac
 		table:      table,
 		client:     client,
 		permitPool: physical.NewPermitPool(maxParInt),
+		recovery:   recoveryModeBool,
 		haEnabled:  haEnabledBool,
 		logger:     logger,
 	}, nil
@@ -424,6 +433,7 @@ func (d *DynamoDBBackend) LockWith(key, value string) (physical.Lock, error) {
 		key:                pkgPath.Join(pkgPath.Dir(key), DynamoDBLockPrefix+pkgPath.Base(key)),
 		value:              value,
 		identity:           identity,
+		recovery:           d.recovery,
 		renewInterval:      DynamoDBLockRenewInterval,
 		ttl:                DynamoDBLockTTL,
 		watchRetryInterval: DynamoDBWatchRetryInterval,

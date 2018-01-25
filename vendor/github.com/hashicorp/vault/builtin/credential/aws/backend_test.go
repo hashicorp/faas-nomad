@@ -1125,11 +1125,6 @@ func TestBackendAcc_LoginWithInstanceIdentityDocAndWhitelistIdentity(t *testing.
 		t.Fatalf("instance ID not present in the response object")
 	}
 
-	_, ok := resp.Auth.Metadata["nonce"]
-	if ok {
-		t.Fatalf("client nonce should not have been returned")
-	}
-
 	loginInput["nonce"] = "changed-vault-client-nonce"
 	// try to login again with changed nonce
 	resp, err = b.HandleRequest(loginRequest)
@@ -1164,20 +1159,13 @@ func TestBackendAcc_LoginWithInstanceIdentityDocAndWhitelistIdentity(t *testing.
 		t.Fatalf("failed to delete whitelist identity")
 	}
 
-	// Allow a fresh login without supplying the nonce
-	delete(loginInput, "nonce")
-
+	// Allow a fresh login.
 	resp, err = b.HandleRequest(loginRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp == nil || resp.Auth == nil || resp.IsError() {
 		t.Fatalf("login attempt failed")
-	}
-
-	_, ok = resp.Auth.Metadata["nonce"]
-	if !ok {
-		t.Fatalf("expected nonce to be returned")
 	}
 }
 

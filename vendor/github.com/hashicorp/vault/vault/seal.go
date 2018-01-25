@@ -21,33 +21,11 @@ const (
 	barrierSealConfigPath = "core/seal-config"
 
 	// recoverySealConfigPath is the path to the recovery key seal
-	// configuration. It lives inside the barrier.
-	// DEPRECATED: Use recoverySealConfigPlaintextPath instead.
+	// configuration. It is inside the barrier.
 	recoverySealConfigPath = "core/recovery-seal-config"
-
-	// recoverySealConfigPlaintextPath is the path to the recovery key seal
-	// configuration. This is stored in plaintext so that we can perform
-	// auto-unseal.
-	recoverySealConfigPlaintextPath = "core/recovery-config"
 
 	// recoveryKeyPath is the path to the recovery key
 	recoveryKeyPath = "core/recovery-key"
-
-	// storedBarrierKeysPath is the path used for storing HSM-encrypted unseal keys
-	storedBarrierKeysPath = "core/hsm/barrier-unseal-keys"
-
-	// hsmStoredIVPath is the path to the initialization vector for stored keys
-	hsmStoredIVPath = "core/hsm/iv"
-)
-
-const (
-	SealTypeShamir = "shamir"
-	SealTypePKCS11 = "pkcs11"
-	SealTypeAWSKMS = "awskms"
-	SealTypeTest   = "test-auto"
-
-	RecoveryTypeUnsupported = "unsupported"
-	RecoveryTypeShamir      = "shamir"
 )
 
 type KeyNotFoundError struct {
@@ -108,7 +86,7 @@ func (d *DefaultSeal) Finalize() error {
 }
 
 func (d *DefaultSeal) BarrierType() string {
-	return SealTypeShamir
+	return "shamir"
 }
 
 func (d *DefaultSeal) StoredKeysSupported() bool {
@@ -214,7 +192,7 @@ func (d *DefaultSeal) SetBarrierConfig(config *SealConfig) error {
 }
 
 func (d *DefaultSeal) RecoveryType() string {
-	return RecoveryTypeUnsupported
+	return "unsupported"
 }
 
 func (d *DefaultSeal) RecoveryConfig() (*SealConfig, error) {
@@ -320,4 +298,28 @@ func (s *SealConfig) Clone() *SealConfig {
 		copy(ret.PGPKeys, s.PGPKeys)
 	}
 	return ret
+}
+
+type SealAccess struct {
+	seal Seal
+}
+
+func (s *SealAccess) SetSeal(seal Seal) {
+	s.seal = seal
+}
+
+func (s *SealAccess) StoredKeysSupported() bool {
+	return s.seal.StoredKeysSupported()
+}
+
+func (s *SealAccess) BarrierConfig() (*SealConfig, error) {
+	return s.seal.BarrierConfig()
+}
+
+func (s *SealAccess) RecoveryKeySupported() bool {
+	return s.seal.RecoveryKeySupported()
+}
+
+func (s *SealAccess) RecoveryConfig() (*SealConfig, error) {
+	return s.seal.RecoveryConfig()
 }

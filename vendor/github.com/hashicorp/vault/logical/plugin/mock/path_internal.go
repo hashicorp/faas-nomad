@@ -26,6 +26,7 @@ func (b *backend) pathInternalUpdate(
 	b.internal = value
 	// Return the secret
 	return nil, nil
+
 }
 
 func (b *backend) pathInternalRead(
@@ -36,4 +37,5 @@ func (b *backend) pathInternalRead(
 			"value": b.internal,
 		},
 	}, nil
+
 }

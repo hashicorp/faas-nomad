@@ -30,8 +30,7 @@ const (
 
 	// keyringPath is the location of the keyring data. This is encrypted
 	// by the master key.
-	keyringPath   = "core/keyring"
-	keyringPrefix = "core/"
+	keyringPath = "core/keyring"
 
 	// keyringUpgradePrefix is the path used to store keyring update entries.
 	// When running in HA mode, the active instance will install the new key
@@ -161,17 +160,15 @@ type BarrierEncryptor interface {
 
 // Entry is used to represent data stored by the security barrier
 type Entry struct {
-	Key      string
-	Value    []byte
-	SealWrap bool
+	Key   string
+	Value []byte
 }
 
 // Logical turns the Entry into a logical storage entry.
 func (e *Entry) Logical() *logical.StorageEntry {
 	return &logical.StorageEntry{
-		Key:      e.Key,
-		Value:    e.Value,
-		SealWrap: e.SealWrap,
+		Key:   e.Key,
+		Value: e.Value,
 	}
 }
 

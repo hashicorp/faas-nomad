@@ -1,7 +1,6 @@
 package mssql
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -18,8 +17,6 @@ import (
 )
 
 const msSQLTypeName = "mssql"
-
-var _ dbplugin.Database = &MSSQL{}
 
 // MSSQL is an implementation of Database interface
 type MSSQL struct {
@@ -63,8 +60,8 @@ func (m *MSSQL) Type() (string, error) {
 	return msSQLTypeName, nil
 }
 
-func (m *MSSQL) getConnection(ctx context.Context) (*sql.DB, error) {
-	db, err := m.Connection(ctx)
+func (m *MSSQL) getConnection() (*sql.DB, error) {
+	db, err := m.Connection()
 	if err != nil {
 		return nil, err
 	}
@@ -74,13 +71,13 @@ func (m *MSSQL) getConnection(ctx context.Context) (*sql.DB, error) {
 
 // CreateUser generates the username/password on the underlying MSSQL secret backend as instructed by
 // the CreationStatement provided.
-func (m *MSSQL) CreateUser(ctx context.Context, statements dbplugin.Statements, usernameConfig dbplugin.UsernameConfig, expiration time.Time) (username string, password string, err error) {
+func (m *MSSQL) CreateUser(statements dbplugin.Statements, usernameConfig dbplugin.UsernameConfig, expiration time.Time) (username string, password string, err error) {
 	// Grab the lock
 	m.Lock()
 	defer m.Unlock()
 
 	// Get the connection
-	db, err := m.getConnection(ctx)
+	db, err := m.getConnection()
 	if err != nil {
 		return "", "", err
 	}
@@ -105,7 +102,7 @@ func (m *MSSQL) CreateUser(ctx context.Context, statements dbplugin.Statements, 
 	}
 
 	// Start a transaction
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := db.Begin()
 	if err != nil {
 		return "", "", err
 	}
@@ -118,7 +115,7 @@ func (m *MSSQL) CreateUser(ctx context.Context, statements dbplugin.Statements, 
 			continue
 		}
 
-		stmt, err := tx.PrepareContext(ctx, dbutil.QueryHelper(query, map[string]string{
+		stmt, err := tx.Prepare(dbutil.QueryHelper(query, map[string]string{
 			"name":       username,
 			"password":   password,
 			"expiration": expirationStr,
@@ -127,7 +124,7 @@ func (m *MSSQL) CreateUser(ctx context.Context, statements dbplugin.Statements, 
 			return "", "", err
 		}
 		defer stmt.Close()
-		if _, err := stmt.ExecContext(ctx); err != nil {
+		if _, err := stmt.Exec(); err != nil {
 			return "", "", err
 		}
 	}
@@ -141,7 +138,7 @@ func (m *MSSQL) CreateUser(ctx context.Context, statements dbplugin.Statements, 
 }
 
 // RenewUser is not supported on MSSQL, so this is a no-op.
-func (m *MSSQL) RenewUser(ctx context.Context, statements dbplugin.Statements, username string, expiration time.Time) error {
+func (m *MSSQL) RenewUser(statements dbplugin.Statements, username string, expiration time.Time) error {
 	// NOOP
 	return nil
 }
@@ -149,19 +146,19 @@ func (m *MSSQL) RenewUser(ctx context.Context, statements dbplugin.Statements, u
 // RevokeUser attempts to drop the specified user. It will first attempt to disable login,
 // then kill pending connections from that user, and finally drop the user and login from the
 // database instance.
-func (m *MSSQL) RevokeUser(ctx context.Context, statements dbplugin.Statements, username string) error {
+func (m *MSSQL) RevokeUser(statements dbplugin.Statements, username string) error {
 	if statements.RevocationStatements == "" {
-		return m.revokeUserDefault(ctx, username)
+		return m.revokeUserDefault(username)
 	}
 
 	// Get connection
-	db, err := m.getConnection(ctx)
+	db, err := m.getConnection()
 	if err != nil {
 		return err
 	}
 
 	// Start a transaction
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
@@ -174,14 +171,14 @@ func (m *MSSQL) RevokeUser(ctx context.Context, statements dbplugin.Statements, 
 			continue
 		}
 
-		stmt, err := tx.PrepareContext(ctx, dbutil.QueryHelper(query, map[string]string{
+		stmt, err := tx.Prepare(dbutil.QueryHelper(query, map[string]string{
 			"name": username,
 		}))
 		if err != nil {
 			return err
 		}
 		defer stmt.Close()
-		if _, err := stmt.ExecContext(ctx); err != nil {
+		if _, err := stmt.Exec(); err != nil {
 			return err
 		}
 	}
@@ -194,20 +191,20 @@ func (m *MSSQL) RevokeUser(ctx context.Context, statements dbplugin.Statements, 
 	return nil
 }
 
-func (m *MSSQL) revokeUserDefault(ctx context.Context, username string) error {
+func (m *MSSQL) revokeUserDefault(username string) error {
 	// Get connection
-	db, err := m.getConnection(ctx)
+	db, err := m.getConnection()
 	if err != nil {
 		return err
 	}
 
 	// First disable server login
-	disableStmt, err := db.PrepareContext(ctx, fmt.Sprintf("ALTER LOGIN [%s] DISABLE;", username))
+	disableStmt, err := db.Prepare(fmt.Sprintf("ALTER LOGIN [%s] DISABLE;", username))
 	if err != nil {
 		return err
 	}
 	defer disableStmt.Close()
-	if _, err := disableStmt.ExecContext(ctx); err != nil {
+	if _, err := disableStmt.Exec(); err != nil {
 		return err
 	}
 
@@ -215,14 +212,14 @@ func (m *MSSQL) revokeUserDefault(ctx context.Context, username string) error {
 	// sessions.  There cannot be any active sessions before we drop the logins
 	// This isn't done in a transaction because even if we fail along the way,
 	// we want to remove as much access as possible
-	sessionStmt, err := db.PrepareContext(ctx, fmt.Sprintf(
+	sessionStmt, err := db.Prepare(fmt.Sprintf(
 		"SELECT session_id FROM sys.dm_exec_sessions WHERE login_name = '%s';", username))
 	if err != nil {
 		return err
 	}
 	defer sessionStmt.Close()
 
-	sessionRows, err := sessionStmt.QueryContext(ctx)
+	sessionRows, err := sessionStmt.Query()
 	if err != nil {
 		return err
 	}
@@ -243,13 +240,13 @@ func (m *MSSQL) revokeUserDefault(ctx context.Context, username string) error {
 	// we need to drop the database users before we can drop the login and the role
 	// This isn't done in a transaction because even if we fail along the way,
 	// we want to remove as much access as possible
-	stmt, err := db.PrepareContext(ctx, fmt.Sprintf("EXEC master.dbo.sp_msloginmappings '%s';", username))
+	stmt, err := db.Prepare(fmt.Sprintf("EXEC master.dbo.sp_msloginmappings '%s';", username))
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	rows, err := stmt.QueryContext(ctx)
+	rows, err := stmt.Query()
 	if err != nil {
 		return err
 	}
@@ -269,13 +266,13 @@ func (m *MSSQL) revokeUserDefault(ctx context.Context, username string) error {
 	// many permissions as possible right now
 	var lastStmtError error
 	for _, query := range revokeStmts {
-		stmt, err := db.PrepareContext(ctx, query)
+		stmt, err := db.Prepare(query)
 		if err != nil {
 			lastStmtError = err
 			continue
 		}
 		defer stmt.Close()
-		_, err = stmt.ExecContext(ctx)
+		_, err = stmt.Exec()
 		if err != nil {
 			lastStmtError = err
 		}
@@ -290,12 +287,12 @@ func (m *MSSQL) revokeUserDefault(ctx context.Context, username string) error {
 	}
 
 	// Drop this login
-	stmt, err = db.PrepareContext(ctx, fmt.Sprintf(dropLoginSQL, username, username))
+	stmt, err = db.Prepare(fmt.Sprintf(dropLoginSQL, username, username))
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
-	if _, err := stmt.ExecContext(ctx); err != nil {
+	if _, err := stmt.Exec(); err != nil {
 		return err
 	}
 

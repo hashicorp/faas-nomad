@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/vault/helper/forwarding"
+	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -90,13 +90,6 @@ func (c *Core) startForwarding() error {
 		go func() {
 			defer shutdownWg.Done()
 
-			// closeCh is used to shutdown the spawned goroutines once this
-			// function returns
-			closeCh := make(chan struct{})
-			defer func() {
-				close(closeCh)
-			}()
-
 			if c.logger.IsInfo() {
 				c.logger.Info("core/startClusterListener: starting listener", "listener_address", laddr)
 			}
@@ -129,16 +122,11 @@ func (c *Core) startForwarding() error {
 
 				// Accept the connection
 				conn, err := tlsLn.Accept()
-				if err != nil {
-					if err, ok := err.(net.Error); ok && !err.Timeout() {
-						c.logger.Debug("core: non-timeout error accepting on cluster port", "error", err)
-					}
-					if conn != nil {
-						conn.Close()
-					}
-					continue
+				if conn != nil {
+					// Always defer although it may be closed ahead of time
+					defer conn.Close()
 				}
-				if conn == nil {
+				if err != nil {
 					continue
 				}
 
@@ -150,48 +138,27 @@ func (c *Core) startForwarding() error {
 					if c.logger.IsDebug() {
 						c.logger.Debug("core: error handshaking cluster connection", "error", err)
 					}
-					tlsConn.Close()
+					if conn != nil {
+						conn.Close()
+					}
 					continue
 				}
 
 				switch tlsConn.ConnectionState().NegotiatedProtocol {
 				case requestForwardingALPN:
 					if !ha {
-						tlsConn.Close()
+						conn.Close()
 						continue
 					}
 
 					c.logger.Trace("core: got request forwarding connection")
-					c.clusterParamsLock.RLock()
-					rpcServer := c.rpcServer
-					c.clusterParamsLock.RUnlock()
-
-					shutdownWg.Add(2)
-					// quitCh is used to close the connection and the second
-					// goroutine if the server closes before closeCh.
-					quitCh := make(chan struct{})
-					go func() {
-						select {
-						case <-quitCh:
-						case <-closeCh:
-						}
-						tlsConn.Close()
-						shutdownWg.Done()
-					}()
-
-					go func() {
-						fws.ServeConn(tlsConn, &http2.ServeConnOpts{
-							Handler: rpcServer,
-						})
-						// close the quitCh which will close the connection and
-						// the other goroutine.
-						close(quitCh)
-						shutdownWg.Done()
-					}()
+					go fws.ServeConn(conn, &http2.ServeConnOpts{
+						Handler: c.rpcServer,
+					})
 
 				default:
 					c.logger.Debug("core: unknown negotiated protocol on cluster port")
-					tlsConn.Close()
+					conn.Close()
 					continue
 				}
 			}
@@ -330,7 +297,9 @@ func (c *Core) ForwardRequest(req *http.Request) (int, http.Header, []byte, erro
 	if resp.HeaderEntries != nil {
 		header = make(http.Header)
 		for k, v := range resp.HeaderEntries {
-			header[k] = v.Values
+			for _, j := range v.Values {
+				header.Add(k, j)
+			}
 		}
 	}
 
