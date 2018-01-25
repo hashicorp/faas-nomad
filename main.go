@@ -74,6 +74,7 @@ func main() {
 		ReplicaReader:  makeReplicationReader(nomadClient.Jobs(), logger, stats),
 		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), logger, stats),
 		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats),
+		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
 	}
 
 	config := &types.FaaSConfig{}
