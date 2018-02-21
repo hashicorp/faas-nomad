@@ -72,7 +72,7 @@ EOH
       }
 
       config {
-        image = "functions/gateway:0.6.14"
+        image = "functions/gateway:0.7.0"
 
         port_map {
           http = 8080
