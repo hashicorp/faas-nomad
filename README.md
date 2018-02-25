@@ -272,6 +272,20 @@ functions:
       datacentres: "dc1"
 ```
 
+### Async functions
+OpenFaaS has the capability to immediately return when you call a function and add the work to a nats streaming queue.  To enable this feature in addition to the OpenFaaS gateway and Nomad provider you must run a nats streaming server.  
+To run the server please use the `nats.hcl` job file.
+
+```bash
+$ nomad run ./nomad_job_files/nats.hcl
+```
+
+You can then invoke a function using the `async-function` API, the call will be immediately retuned and OpenFaaS will queue your work for later execution.
+
+```
+curl -d '{...}' http://gateway:8080/async-function/{function_name}
+```
+
 ### Contributing
 The application including docker containers is built using goreleaser [https://goreleaser.com](https://goreleaser.com).  
 
