@@ -30,7 +30,7 @@ job "faas-nomadd" {
       }
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:0.2.22"
+        image = "quay.io/nicholasjackson/faas-nomad:v0.2.22"
 
         port_map {
           http = 8080
@@ -64,14 +64,16 @@ job "faas-nomadd" {
         destination   = "secrets/gateway.env"
 
         data = <<EOH
-functions_provider_url="http://{{ env "NOMAD_IP_http" }}:8081/"
-{{ range service "prometheus" }}
-faas_prometheus_host="{{ .Address }}"
-faas_prometheus_port="{{ .Port }}"{{ end }}
-{{ range service "nats" }}
-faas_nats_address: "{{ .Address }}"{{ end }}
-faas_nats_port: 4222
-EOH
+          functions_provider_url="http://{{ env "NOMAD_IP_http" }}:8081/"
+          {{ range service "prometheus" }}
+          faas_prometheus_host="{{ .Address }}"
+          faas_prometheus_port="{{ .Port }}"{{ end }}
+          {{ range service "nats" }}
+          faas_nats_address="{{ .Address }}"{{ end }}
+          faas_nats_port=4222
+          read_timeout="20s"
+          write_timeout="20s"
+          EOH
       }
 
       config {
@@ -165,6 +167,7 @@ EOH
         args = [
           "-store", "file", "-dir", "/tmp/nats",
           "-m", "8222",
+          "--cluster_id", "faas-cluster"
         ]
 
         port_map {
