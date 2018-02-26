@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -38,7 +39,7 @@ func setupProxyClient(body []byte) (
 		bytes.NewReader(body),
 	)
 
-	return MakeProxyClient(), r, server
+	return MakeProxyClient(5 * time.Second), r, server
 }
 
 func TestClientPostsGivenRequestBody(t *testing.T) {

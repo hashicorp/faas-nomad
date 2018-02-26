@@ -17,4 +17,4 @@ build:
 	go build -o faas-nomad .
 
 build_all:
-	goreleaser -snapshot -rm-dist -skip-validate
+	goreleaser -snapshot -rm-dist

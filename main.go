@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/gorilla/mux"
@@ -64,6 +65,16 @@ func main() {
 		os.Getenv("NOMAD_REGION"),
 	)
 
+	timeoutDuration := 30 * time.Second
+	timeout := os.Getenv("FUNCTION_TIMEOUT")
+	if timeout != "" {
+		if d, err := time.ParseDuration(timeout); err != nil {
+			logger.Info("Unable to set function timeout, using standard value 30s", "error", err)
+		} else {
+			timeoutDuration = d
+		}
+	}
+
 	logger.Info("Started version: " + version)
 	stats.Incr("started", nil, 1)
 
@@ -73,7 +84,7 @@ func main() {
 		DeleteHandler:  handlers.MakeDelete(consulResolver, nomadClient.Jobs(), logger, stats),
 		ReplicaReader:  makeReplicationReader(nomadClient.Jobs(), logger, stats),
 		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), logger, stats),
-		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats),
+		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats, timeoutDuration),
 		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
 	}
 
@@ -106,12 +117,12 @@ func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, region string
 	return logger, stats, nomadClient, cr
 }
 
-func makeFunctionProxyHandler(r consul.ServiceResolver, logger hclog.Logger, s *statsd.Client) http.HandlerFunc {
+func makeFunctionProxyHandler(r consul.ServiceResolver, logger hclog.Logger, s *statsd.Client, timeout time.Duration) http.HandlerFunc {
 	return handlers.MakeExtractFunctionMiddleWare(
 		func(r *http.Request) map[string]string {
 			return mux.Vars(r)
 		},
-		handlers.MakeProxy(handlers.MakeProxyClient(), r, logger, s),
+		handlers.MakeProxy(handlers.MakeProxyClient(timeout), r, logger, s, timeout),
 	)
 }
 

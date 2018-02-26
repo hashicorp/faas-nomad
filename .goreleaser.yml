@@ -21,7 +21,8 @@ dockers:
     goarch: amd64
     dockerfile: Dockerfile
     latest: true
-    tag_template: "{{ .Tag }}"
+    tag_templates: 
+      - "{{ .Tag }}"
   - 
     binary: faas-nomad
     image: quay.io/nicholasjackson/faas-nomad
@@ -29,4 +30,5 @@ dockers:
     goarch: arm
     goarm: 7
     dockerfile: Dockerfile_arm7
-    tag_template: "arm7-{{ .Tag }}"
+    tag_templates: 
+      - "arm7-{{ .Tag }}"

@@ -25,12 +25,12 @@ type HTTPProxyClient struct {
 }
 
 // MakeProxyClient creates a new HTTPProxyClient
-func MakeProxyClient() *HTTPProxyClient {
+func MakeProxyClient(timeout time.Duration) *HTTPProxyClient {
 	proxyClient := &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
+				Timeout:   timeout,
 				KeepAlive: 0,
 			}).DialContext,
 			MaxIdleConns:          200,
