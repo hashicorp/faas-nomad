@@ -22,15 +22,16 @@ job "faas-nomadd" {
     task "nomadd" {
       driver = "docker"
 
-      env {
-        NOMAD_REGION = "${NOMAD_REGION}"
-        NOMAD_ADDR   = "${NOMAD_IP_http}:4646"
-        CONSUL_ADDR  = "${NOMAD_IP_http}:8500"
-        STATSD_ADDR  = "${NOMAD_ADDR_statsd_statsd}"
-      }
-
       config {
         image = "quay.io/nicholasjackson/faas-nomad:v0.2.23"
+
+        args = [
+          "-nomad_region", "${NOMAD_REGION}",
+          "-nomad_addr", "${NOMAD_IP_http}:4646",
+          "-consul_addr", "${NOMAD_IP_http}:8500",
+          "-statsd_addr", "${NOMAD_ADDR_statsd_statsd}",
+          "-node_addr", "${NOMAD_IP_http}"
+        ]
 
         port_map {
           http = 8080

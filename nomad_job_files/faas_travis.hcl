@@ -32,6 +32,14 @@ job "faas-nomadd" {
       config {
         image = "localhost:5000/faas-nomad:latest"
 
+        args = [
+          "-nomad_region", "${NOMAD_REGION}",
+          "-nomad_addr", "${NOMAD_IP_http}:4646",
+          "-consul_addr", "${NOMAD_IP_http}:8500",
+          "-statsd_addr", "${NOMAD_ADDR_statsd_statsd}",
+          "-node_addr", "${NOMAD_IP_http}",
+        ]
+
         port_map {
           http = 8080
         }
