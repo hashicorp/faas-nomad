@@ -32,7 +32,7 @@ job "faas-nomadd" {
       }
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:0.2.22"
+        image = "quay.io/nicholasjackson/faas-nomad:v0.2.22"
 
         port_map {
           http = 8080

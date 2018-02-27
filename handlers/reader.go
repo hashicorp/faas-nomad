@@ -22,12 +22,14 @@ func MakeReader(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) htt
 		options := &api.QueryOptions{}
 		options.Prefix = nomad.JobPrefix
 
+		log.Info("List functions called")
 		stats.Incr("reader.called", nil, 1)
 
 		jobs, _, err := client.List(options)
 		if err != nil {
 			writeError(w, err)
 
+			log.Error("Error getting functions", "error", err)
 			stats.Incr("reader.error.getjobs", nil, 1)
 			return
 		}
@@ -46,6 +48,7 @@ func MakeReader(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) htt
 		w.WriteHeader(200)
 		w.Write(functionBytes)
 
+		log.Info("List functions success")
 		stats.Incr("reader.success", nil, 1)
 	}
 }
