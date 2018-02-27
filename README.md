@@ -286,17 +286,20 @@ You can then invoke a function using the `async-function` API, the call will be 
 curl -d '{...}' http://gateway:8080/async-function/{function_name}
 ```
 
-### Function timeouts
-By Default a function is allowed to run for 30s before it is terminated, should you require longer running functions timeout is configurable by setting the environment variable `FUNCTION_TIMEOUT` on the Nomad provider e.g:
+### Configuration and Function timeouts
+By Default a function is allowed to run for 30s before it is terminated, should you require longer running functions timeout is configurable by setting the flag `-function_timeout` on the Nomad provider e.g:
 
 ```hcl
-env {
-  NOMAD_REGION     = "${NOMAD_REGION}"
-  NOMAD_ADDR       = "${NOMAD_IP_http}:4646"
-  CONSUL_ADDR      = "${NOMAD_IP_http}:8500"
-  STATSD_ADDR      = "${NOMAD_ADDR_statsd_statsd}"
-  FUNCTION_TIMEOUT = "5m"
-}
+ args = [
+   "-nomad_region", "${NOMAD_REGION}",
+   "-nomad_addr", "${NOMAD_IP_http}:4646",
+   "-consul_addr", "${NOMAD_IP_http}:8500",
+   "-statsd_addr", "${NOMAD_ADDR_statsd_statsd}",
+   "-node_addr", "${NOMAD_IP_http}",
+   "-logger_format", "json",
+   "-logger_output", "/logs/nomadd.log"
+   "-function_timeout", "5m"
+]
 ```
 
 This would set the timeout to 5m for a function.
