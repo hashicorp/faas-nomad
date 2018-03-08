@@ -33,13 +33,13 @@ func setupProxy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *htt
 	logger := hclog.Default()
 
 	return MakeProxy(
-		ProxyConfig {
-			Client:mockProxyClient, 
-			Resolver:mockServiceResolver, 
-			Logger:logger, 
-			StatsD:nil, 
-			Timeout:5*time.Second,
-		}
+		ProxyConfig{
+			Client:   mockProxyClient,
+			Resolver: mockServiceResolver,
+			Logger:   logger,
+			StatsD:   nil,
+			Timeout:  5 * time.Second,
+		},
 	), rr, r
 }
 
