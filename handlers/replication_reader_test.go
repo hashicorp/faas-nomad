@@ -51,6 +51,17 @@ func TestReplicationRReturnsFunctionWhenFound(t *testing.T) {
 	mockJob.On("Info", jobName, mock.Anything).
 		Return(&api.Job{ID: &jobName}, nil, nil)
 
+	mockJob.On("Allocations", jobName, true, mock.Anything).Return(
+		[]*api.AllocationListStub{
+			{
+				TaskStates: map[string]*api.TaskState{
+					"abc": &api.TaskState{State: "running"},
+				},
+			},
+		},
+		nil,
+		nil,
+	)
 	h(rr, r)
 
 	f := &requests.Function{}
@@ -62,4 +73,39 @@ func TestReplicationRReturnsFunctionWhenFound(t *testing.T) {
 	assert.Equal(t, rr.Code, http.StatusOK)
 	assert.Equal(t, rr.Header().Get("Content-Type"), "application/json")
 	assert.Equal(t, functionName, f.Name)
+}
+
+func TestReplicationRReturnsCorrectAllocationCount(t *testing.T) {
+	functionName := "tester"
+	jobName := nomad.JobPrefix + functionName
+
+	h, rr, r := setupReplicationReader(functionName)
+	mockJob.On("Info", jobName, mock.Anything).
+		Return(&api.Job{ID: &jobName}, nil, nil)
+	mockJob.On("Allocations", jobName, true, mock.Anything).Return(
+		[]*api.AllocationListStub{
+			{
+				TaskStates: map[string]*api.TaskState{
+					"abc": &api.TaskState{State: "running"},
+				},
+			},
+			{
+				TaskStates: map[string]*api.TaskState{
+					"abc": &api.TaskState{State: "pending"},
+				},
+			},
+		},
+		nil,
+		nil,
+	)
+
+	h(rr, r)
+
+	f := &requests.Function{}
+	err := json.NewDecoder(rr.Body).Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Equal(t, uint64(1), f.AvailableReplicas)
 }

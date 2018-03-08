@@ -21,7 +21,7 @@ GIT_DIRTY="$(test -n "`git status --porcelain`" && echo "+CHANGES" || true)"
 # Determine the arch/os combos we're building for
 XC_ARCH=${XC_ARCH:-"386 amd64"}
 XC_OS=${XC_OS:-linux darwin windows freebsd openbsd netbsd solaris}
-XC_OSARCH=${XC_OSARCH:-"linux/386 linux/amd64 linux/arm linux/arm64 darwin/386 darwin/amd64 windows/386 windows/amd64 freebsd/386 freebsd/amd64 freebsd/arm openbsd/386 openbsd/amd64 openbsd/arm netbsd/386 netbsd/amd64 netbsd/arm solaris/amd64"}
+XC_OSARCH=${XC_OSARCH:-"linux/386 linux/amd64 linux/arm linux/arm64 darwin/386 darwin/amd64 windows/386 windows/amd64 freebsd/386 freebsd/amd64 freebsd/arm openbsd/386 openbsd/amd64 openbsd/arm netbsd/386 netbsd/amd64 solaris/amd64"}
 
 GOPATH=${GOPATH:-$(go env GOPATH)}
 case $(uname) in
@@ -47,7 +47,8 @@ fi
 echo "==> Building..."
 gox \
     -osarch="${XC_OSARCH}" \
-    -ldflags "-X github.com/hashicorp/vault/version.GitCommit='${GIT_COMMIT}${GIT_DIRTY}'" \
+    -gcflags "${GCFLAGS}" \
+    -ldflags "${LD_FLAGS}-X github.com/hashicorp/vault/version.GitCommit='${GIT_COMMIT}${GIT_DIRTY}'" \
     -output "pkg/{{.OS}}_{{.Arch}}/vault" \
     -tags="${BUILD_TAGS}" \
     .

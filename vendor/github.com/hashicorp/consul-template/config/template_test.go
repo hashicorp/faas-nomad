@@ -27,7 +27,6 @@ func TestTemplateConfig_Copy(t *testing.T) {
 				Command:        String("command"),
 				CommandTimeout: TimeDuration(10 * time.Second),
 				Contents:       String("contents"),
-				CreateDestDirs: Bool(true),
 				Destination:    String("destination"),
 				Exec:           &ExecConfig{Command: String("command")},
 				Perms:          FileMode(0600),
@@ -177,30 +176,6 @@ func TestTemplateConfig_Merge(t *testing.T) {
 			&TemplateConfig{Contents: String("contents")},
 		},
 		{
-			"create_dest_dirs_overrides",
-			&TemplateConfig{CreateDestDirs: Bool(false)},
-			&TemplateConfig{CreateDestDirs: Bool(true)},
-			&TemplateConfig{CreateDestDirs: Bool(true)},
-		},
-		{
-			"create_dest_dirs_empty_one",
-			&TemplateConfig{CreateDestDirs: Bool(false)},
-			&TemplateConfig{},
-			&TemplateConfig{CreateDestDirs: Bool(false)},
-		},
-		{
-			"create_dest_dirs_empty_two",
-			&TemplateConfig{},
-			&TemplateConfig{CreateDestDirs: Bool(false)},
-			&TemplateConfig{CreateDestDirs: Bool(false)},
-		},
-		{
-			"create_dest_dirs_same",
-			&TemplateConfig{CreateDestDirs: Bool(false)},
-			&TemplateConfig{CreateDestDirs: Bool(false)},
-			&TemplateConfig{CreateDestDirs: Bool(false)},
-		},
-		{
 			"destination_overrides",
 			&TemplateConfig{Destination: String("destination")},
 			&TemplateConfig{Destination: String("")},
@@ -223,30 +198,6 @@ func TestTemplateConfig_Merge(t *testing.T) {
 			&TemplateConfig{Destination: String("destination")},
 			&TemplateConfig{Destination: String("destination")},
 			&TemplateConfig{Destination: String("destination")},
-		},
-		{
-			"err_missing_key_overrides",
-			&TemplateConfig{ErrMissingKey: Bool(true)},
-			&TemplateConfig{ErrMissingKey: Bool(false)},
-			&TemplateConfig{ErrMissingKey: Bool(false)},
-		},
-		{
-			"err_missing_key_empty_one",
-			&TemplateConfig{ErrMissingKey: Bool(true)},
-			&TemplateConfig{},
-			&TemplateConfig{ErrMissingKey: Bool(true)},
-		},
-		{
-			"err_missing_key_empty_two",
-			&TemplateConfig{},
-			&TemplateConfig{ErrMissingKey: Bool(true)},
-			&TemplateConfig{ErrMissingKey: Bool(true)},
-		},
-		{
-			"err_missing_key_same",
-			&TemplateConfig{ErrMissingKey: Bool(true)},
-			&TemplateConfig{ErrMissingKey: Bool(true)},
-			&TemplateConfig{ErrMissingKey: Bool(true)},
 		},
 		{
 			"exec_overrides",
@@ -418,9 +369,7 @@ func TestTemplateConfig_Finalize(t *testing.T) {
 				Command:        String(""),
 				CommandTimeout: TimeDuration(DefaultTemplateCommandTimeout),
 				Contents:       String(""),
-				CreateDestDirs: Bool(true),
 				Destination:    String(""),
-				ErrMissingKey:  Bool(false),
 				Exec: &ExecConfig{
 					Command: String(""),
 					Enabled: Bool(false),
@@ -436,7 +385,7 @@ func TestTemplateConfig_Finalize(t *testing.T) {
 					Splay:        TimeDuration(0 * time.Second),
 					Timeout:      TimeDuration(DefaultTemplateCommandTimeout),
 				},
-				Perms:  FileMode(0),
+				Perms:  FileMode(DefaultTemplateFilePerms),
 				Source: String(""),
 				Wait: &WaitConfig{
 					Enabled: Bool(false),
@@ -524,6 +473,12 @@ func TestParseTemplateConfig(t *testing.T) {
 			true,
 		},
 		{
+			"too_many_args",
+			"foo:bar:zip:zap",
+			nil,
+			true,
+		},
+		{
 			"default",
 			"/tmp/a.txt:/tmp/b.txt:command",
 			&TemplateConfig{
@@ -534,38 +489,12 @@ func TestParseTemplateConfig(t *testing.T) {
 			false,
 		},
 		{
-			"single",
-			"/tmp/a.txt",
-			&TemplateConfig{
-				Source: String("/tmp/a.txt"),
-			},
-			false,
-		},
-		{
-			"single_windows_drive",
-			`z:\foo`,
-			&TemplateConfig{
-				Source: String(`z:\foo`),
-			},
-			false,
-		},
-		{
 			"windows_drives",
 			`C:\abc\123:D:\xyz\789:command`,
 			&TemplateConfig{
 				Source:      String(`C:\abc\123`),
 				Destination: String(`D:\xyz\789`),
 				Command:     String(`command`),
-			},
-			false,
-		},
-		{
-			"windows_drives_with_colon",
-			`C:\abc\123:D:\xyz\789:sub:command`,
-			&TemplateConfig{
-				Source:      String(`C:\abc\123`),
-				Destination: String(`D:\xyz\789`),
-				Command:     String(`sub:command`),
 			},
 			false,
 		},

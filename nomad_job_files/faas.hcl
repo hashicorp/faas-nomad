@@ -23,7 +23,7 @@ job "faas-nomadd" {
       driver = "docker"
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:v0.2.23"
+        image = "quay.io/nicholasjackson/faas-nomad:v0.2.24"
 
         args = [
           "-nomad_region", "${NOMAD_REGION}",
@@ -76,7 +76,7 @@ EOH
       }
 
       config {
-        image = "functions/gateway:0.7.0"
+        image = "functions/gateway:0.7.5"
 
         port_map {
           http = 8080

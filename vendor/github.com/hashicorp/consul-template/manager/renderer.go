@@ -11,48 +11,18 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	// DefaultFilePerms are the default file permissions for files rendered onto
-	// disk when a specific file permission has not already been specified.
-	DefaultFilePerms = 0644
-)
-
-var (
-	// ErrNoParentDir is the error returned with the parent directory is missing
-	// and the user disabled it.
-	ErrNoParentDir = errors.New("parent directory is missing")
-
-	// ErrMissingDest is the error returned with the destination is empty.
-	ErrMissingDest = errors.New("missing destination")
-)
-
-// RenderInput is used as input to the render function.
 type RenderInput struct {
-	Backup         bool
-	Contents       []byte
-	CreateDestDirs bool
-	Dry            bool
-	DryStream      io.Writer
-	Path           string
-	Perms          os.FileMode
+	Backup    bool
+	Contents  []byte
+	Dry       bool
+	DryStream io.Writer
+	Path      string
+	Perms     os.FileMode
 }
 
-// RenderResult is returned and stored. It contains the status of the render
-// operationg.
 type RenderResult struct {
-	// DidRender indicates if the template rendered to disk. This will be false in
-	// the event of an error, but it will also be false in dry mode or when the
-	// template on disk matches the new result.
-	DidRender bool
-
-	// WouldRender indicates if the template would have rendered to disk. This
-	// will return false in the event of an error, but will return true in dry
-	// mode or when the template on disk matches the new result.
+	DidRender   bool
 	WouldRender bool
-
-	// Contents are the actual contents of the resulting template from the render
-	// operation.
-	Contents []byte
 }
 
 // Render atomically renders a file contents to disk, returning a result of
@@ -67,14 +37,13 @@ func Render(i *RenderInput) (*RenderResult, error) {
 		return &RenderResult{
 			DidRender:   false,
 			WouldRender: true,
-			Contents:    existing,
 		}, nil
 	}
 
 	if i.Dry {
 		fmt.Fprintf(i.DryStream, "> %s\n%s", i.Path, i.Contents)
 	} else {
-		if err := AtomicWrite(i.Path, i.CreateDestDirs, i.Contents, i.Perms, i.Backup); err != nil {
+		if err := AtomicWrite(i.Path, i.Contents, i.Perms, i.Backup); err != nil {
 			return nil, errors.Wrap(err, "failed writing file")
 		}
 	}
@@ -82,7 +51,6 @@ func Render(i *RenderInput) (*RenderResult, error) {
 	return &RenderResult{
 		DidRender:   true,
 		WouldRender: true,
-		Contents:    i.Contents,
 	}, nil
 }
 
@@ -101,19 +69,15 @@ func Render(i *RenderInput) (*RenderResult, error) {
 //
 // If no errors occur, the Tempfile is "renamed" (moved) to the destination
 // path.
-func AtomicWrite(path string, createDestDirs bool, contents []byte, perms os.FileMode, backup bool) error {
+func AtomicWrite(path string, contents []byte, perms os.FileMode, backup bool) error {
 	if path == "" {
-		return ErrMissingDest
+		return fmt.Errorf("missing destination")
 	}
 
 	parent := filepath.Dir(path)
 	if _, err := os.Stat(parent); os.IsNotExist(err) {
-		if createDestDirs {
-			if err := os.MkdirAll(parent, 0755); err != nil {
-				return err
-			}
-		} else {
-			return ErrNoParentDir
+		if err := os.MkdirAll(parent, 0755); err != nil {
+			return err
 		}
 	}
 
@@ -133,22 +97,6 @@ func AtomicWrite(path string, createDestDirs bool, contents []byte, perms os.Fil
 
 	if err := f.Close(); err != nil {
 		return err
-	}
-
-	// If the user did not explicitly set permissions, attempt to lookup the
-	// current permissions on the file. If the file does not exist, fall back to
-	// the default. Otherwise, inherit the current permissions.
-	if perms == 0 {
-		currentInfo, err := os.Stat(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				perms = DefaultFilePerms
-			} else {
-				return err
-			}
-		} else {
-			perms = currentInfo.Mode()
-		}
 	}
 
 	if err := os.Chmod(f.Name(), perms); err != nil {
@@ -194,10 +142,5 @@ func copyFile(src, dst string) error {
 		d.Close()
 		return err
 	}
-	if err := d.Close(); err != nil {
-		return err
-	}
-
-	// io.Copy can restrict file permissions based on umask.
-	return os.Chmod(dst, stat.Mode())
+	return d.Close()
 }
