@@ -250,8 +250,8 @@ $ echo "Nic" | faas-cli --gateway http://192.168.1.113:8080/ invoke gofunction
 That is all there is to it, checkout the OpenFaaS community page for some inspiration and other demos.
 [faas/community.md at master · openfaas/faas · GitHub](https://github.com/openfaas/faas/blob/master/community.md)
 
-### Datacenters
-By default the Nomad provider will use a default datacenter for a deployed function of `dc1`, this can be overridden by setting the label `datacenters`, which takes a comma separated list of datacenters to deploy the funtion into.
+### Datacenters and Constraints
+By default the Nomad provider will use a default datacenter for a deployed function of `dc1`, this can be overridden by setting the label `datacenters`, which takes a comma separated list of datacenters to deploy the funtion into.  Contstraints for limiting CPU and memory can also be set `memory` is an integer representing Megabytes, `cpu` is an integer representing MHz of CPU where 1024 equals one core.
 
 i.e.
 ```bash
@@ -271,6 +271,38 @@ functions:
     labels:
       datacentres: "dc1"
 ```
+
+### Async functions
+OpenFaaS has the capability to immediately return when you call a function and add the work to a nats streaming queue.  To enable this feature in addition to the OpenFaaS gateway and Nomad provider you must run a nats streaming server.  
+To run the server please use the `nats.hcl` job file.
+
+```bash
+$ nomad run ./nomad_job_files/nats.hcl
+```
+
+You can then invoke a function using the `async-function` API, the call will be immediately retuned and OpenFaaS will queue your work for later execution.
+
+```
+curl -d '{...}' http://gateway:8080/async-function/{function_name}
+```
+
+### Configuration and Function timeouts
+By Default a function is allowed to run for 30s before it is terminated, should you require longer running functions timeout is configurable by setting the flag `-function_timeout` on the Nomad provider e.g:
+
+```hcl
+ args = [
+   "-nomad_region", "${NOMAD_REGION}",
+   "-nomad_addr", "${NOMAD_IP_http}:4646",
+   "-consul_addr", "${NOMAD_IP_http}:8500",
+   "-statsd_addr", "${NOMAD_ADDR_statsd_statsd}",
+   "-node_addr", "${NOMAD_IP_http}",
+   "-logger_format", "json",
+   "-logger_output", "/logs/nomadd.log"
+   "-function_timeout", "5m"
+]
+```
+
+This would set the timeout to 5m for a function.
 
 ### Contributing
 The application including docker containers is built using goreleaser [https://goreleaser.com](https://goreleaser.com).  

@@ -2,12 +2,12 @@ package consul
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/hashicorp/consul-template/dependency"
 	"github.com/hashicorp/consul-template/watch"
 	"github.com/hashicorp/consul/api"
+	hclog "github.com/hashicorp/go-hclog"
 
 	cache "github.com/patrickmn/go-cache"
 )
@@ -62,6 +62,7 @@ type Resolver struct {
 	watcher         Watcher
 	cache           *cache.Cache
 	getServiceQuery func(service string) (CatalogServiceQuery, error)
+	logger          hclog.Logger
 }
 
 type cacheItem struct {
@@ -70,7 +71,7 @@ type cacheItem struct {
 }
 
 // NewResolver creates a new Resolver
-func NewResolver(address string) *Resolver {
+func NewResolver(address string, logger hclog.Logger) *Resolver {
 	clientSet := dependency.NewClientSet()
 	clientSet.CreateConsulClient(&dependency.CreateConsulClientInput{
 		Address: address,
@@ -88,6 +89,7 @@ func NewResolver(address string) *Resolver {
 		watcher:         &WrappedWatcher{watch},
 		cache:           pc,
 		getServiceQuery: createServiceQueryImpl,
+		logger:          logger,
 	}
 
 	go cr.watch()
@@ -104,11 +106,11 @@ func createServiceQueryImpl(function string) (CatalogServiceQuery, error) {
 func (sr *Resolver) Resolve(function string) ([]string, error) {
 	//check the cache
 	if val, ok := sr.cache.Get(getCacheKey(function)); ok {
-		log.Println("Got Address from cache")
+		sr.logger.Info("Got Address from cache", "address", fmt.Sprintf("%#v", val))
 		return val.(*cacheItem).addresses, nil
 	}
 
-	log.Println("Getting Address from consul")
+	sr.logger.Info("Getting Address from consul", "function", function)
 	q, err := sr.getServiceQuery(function)
 	if err != nil {
 		return nil, err
@@ -145,7 +147,7 @@ func (sr *Resolver) watch() {
 }
 
 func (sr *Resolver) updateCatalog(dep dependency.Dependency, cs []*dependency.CatalogService) []string {
-	log.Println("Service catalog updated", cs, dep.String())
+	sr.logger.Info("Service catalog updated", "dependency", dep.String())
 	addresses := make([]string, 0)
 
 	if len(cs) < 1 {

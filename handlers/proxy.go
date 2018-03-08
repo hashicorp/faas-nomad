@@ -17,19 +17,28 @@ import (
 var retryDelay = 2 * time.Second
 
 // MakeProxy creates a proxy for HTTP web requests which can be routed to a function.
-func MakeProxy(client ProxyClient, resolver consul.ServiceResolver, logger hclog.Logger, stats *statsd.Client) http.HandlerFunc {
+func MakeProxy(config ProxyConfig) http.HandlerFunc {
 	c := cache.New(5*time.Minute, 10*time.Minute)
 	p := &Proxy{
 		lbCache:  c,
-		client:   client,
-		resolver: resolver,
-		stats:    stats,
-		logger:   logger.Named("proxy_client"),
+		client:   config.Client,
+		resolver: config.Resolver,
+		stats:    config.StatsD,
+		logger:   config.Logger.Named("proxy_client"),
+		timeout:  config.Timeout,
 	}
 
 	return func(rw http.ResponseWriter, r *http.Request) {
 		p.ServeHTTP(rw, r)
 	}
+}
+
+type ProxyConfig struct {
+	Client   ProxyClient
+	Resolver consul.ServiceResolver
+	Logger   hclog.Logger
+	StatsD   *statsd.Client
+	Timeout  time.Duration
 }
 
 // Proxy is a http.Handler which implements the ability to call a downstream function
@@ -39,6 +48,7 @@ type Proxy struct {
 	resolver consul.ServiceResolver
 	stats    *statsd.Client
 	logger   hclog.Logger
+	timeout  time.Duration
 }
 
 func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
@@ -124,19 +134,19 @@ func (p *Proxy) getLoadbalancer(service string, endpoints []string) ultraclient.
 		return l
 	}
 
-	lb := createLoadbalancer(urls, p.stats, service)
+	lb := createLoadbalancer(urls, p.stats, service, p.timeout)
 	p.lbCache.Set(service, lb, cache.DefaultExpiration)
 
 	return lb
 }
 
-func createLoadbalancer(endpoints []url.URL, statsD *statsd.Client, service string) ultraclient.Client {
+func createLoadbalancer(endpoints []url.URL, statsD *statsd.Client, service string, timeout time.Duration) ultraclient.Client {
 	lb := ultraclient.RoundRobinStrategy{}
 	bs := ultraclient.ExponentialBackoff{}
 	sd := ultraclient.NewDogStatsDWithClient(statsD)
 
 	config := ultraclient.Config{
-		Timeout:                30 * time.Second,
+		Timeout:                timeout,
 		MaxConcurrentRequests:  1500,
 		ErrorPercentThreshold:  25,
 		DefaultVolumeThreshold: 10,

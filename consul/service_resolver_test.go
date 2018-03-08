@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul-template/dependency"
+	hclog "github.com/hashicorp/go-hclog"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -36,6 +37,7 @@ func setup(t *testing.T, queryError error) (*Resolver, *MockWatcher, *cache.Cach
 				return serviceQuery, queryError
 			},
 			clientSet: &dependency.ClientSet{},
+			logger:    hclog.Default(),
 		},
 		watcher,
 		pc,

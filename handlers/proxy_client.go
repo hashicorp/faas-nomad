@@ -7,10 +7,10 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
+	hclog "github.com/hashicorp/go-hclog"
 )
 
 // ProxyClient defines the interface for a client which calls faas functions
@@ -22,15 +22,16 @@ type ProxyClient interface {
 // HTTPProxyClient allows the calling of functions
 type HTTPProxyClient struct {
 	proxyClient *http.Client
+	logger      hclog.Logger
 }
 
 // MakeProxyClient creates a new HTTPProxyClient
-func MakeProxyClient() *HTTPProxyClient {
+func MakeProxyClient(timeout time.Duration, l hclog.Logger) *HTTPProxyClient {
 	proxyClient := &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
+				Timeout:   timeout,
 				KeepAlive: 0,
 			}).DialContext,
 			MaxIdleConns:          200,
@@ -42,6 +43,7 @@ func MakeProxyClient() *HTTPProxyClient {
 
 	return &HTTPProxyClient{
 		proxyClient: proxyClient,
+		logger:      l,
 	}
 }
 
@@ -54,14 +56,13 @@ func (pc *HTTPProxyClient) GetFunctionName(r *http.Request) string {
 // CallAndReturnResponse calls the function and resturns the response
 func (pc *HTTPProxyClient) CallAndReturnResponse(address string, body []byte, headers http.Header) (
 	[]byte, http.Header, error) {
-	stamp := strconv.FormatInt(time.Now().Unix(), 10)
 
 	defer func(when time.Time) {
 		seconds := time.Since(when).Seconds()
-		log.Printf("[%s] took %f seconds\n", stamp, seconds)
+		pc.logger.Info("Execution time", "address", address, "duration(s)", seconds)
 	}(time.Now())
 
-	log.Println("Trying to call:", address)
+	pc.logger.Info("Trying to call:", "address", address)
 	request, _ := http.NewRequest("POST", address, bytes.NewReader(body))
 
 	copyHeaders(&request.Header, &headers)
@@ -76,13 +77,13 @@ func (pc *HTTPProxyClient) CallAndReturnResponse(address string, body []byte, he
 
 	respBody, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		log.Printf("Error reading body: %v\n", err)
+		pc.logger.Error("Error reading body", "error", err)
 
 		return nil, nil, err
 	}
 	response.Body.Close()
 
-	log.Println("Finished")
+	pc.logger.Info("Finished")
 
 	return respBody, response.Header, nil
 }
