@@ -50,7 +50,6 @@ func MakeReplicationWriter(client nomad.Job, logger hclog.Logger, stats metrics.
 		job, err := getJob(client, r)
 		if job == nil || err != nil {
 			rw.WriteHeader(http.StatusNotFound)
-			fmt.Fprint(rw, err)
 
 			log.Error("Error getting job", "error", err)
 			stats.Incr("replicationwriter.error.notfound", nil, 1)
@@ -61,7 +60,6 @@ func MakeReplicationWriter(client nomad.Job, logger hclog.Logger, stats metrics.
 		err = json.NewDecoder(r.Body).Decode(&req)
 		if err != nil || req.ServiceName == "" {
 			rw.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(rw, err)
 
 			log.Error("Bad request", "error", err)
 			stats.Incr("replicationwriter.error.badrequest", nil, 1)
@@ -77,7 +75,6 @@ func MakeReplicationWriter(client nomad.Job, logger hclog.Logger, stats metrics.
 		_, _, err = client.Register(job, nil)
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(rw, err)
 
 			log.Error("Error updating job", "error", err)
 			stats.Incr("replicationwriter.error.internalerror", nil, 1)
