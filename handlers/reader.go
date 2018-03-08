@@ -43,10 +43,7 @@ func MakeReader(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) htt
 			return
 		}
 
-		functionBytes, _ := json.Marshal(functions)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
-		w.Write(functionBytes)
+		writeFunctionResponse(w, functions)
 
 		log.Info("List functions success")
 		stats.Incr("reader.success", nil, 1)
@@ -79,6 +76,12 @@ func sanitiseJobName(job *api.Job) string {
 	return strings.Replace(job.TaskGroups[0].Tasks[0].Name, nomad.JobPrefix, "", -1)
 }
 
+func writeFunctionResponse(w http.ResponseWriter, fs []requests.Function) {
+	functionBytes, _ := json.Marshal(fs)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(functionBytes)
+}
 func writeError(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusInternalServerError)
 	w.Write([]byte(err.Error()))

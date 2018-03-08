@@ -17,20 +17,28 @@ import (
 var retryDelay = 2 * time.Second
 
 // MakeProxy creates a proxy for HTTP web requests which can be routed to a function.
-func MakeProxy(client ProxyClient, resolver consul.ServiceResolver, logger hclog.Logger, stats *statsd.Client, timeout time.Duration) http.HandlerFunc {
+func MakeProxy(config ProxyConfig) http.HandlerFunc {
 	c := cache.New(5*time.Minute, 10*time.Minute)
 	p := &Proxy{
 		lbCache:  c,
-		client:   client,
-		resolver: resolver,
-		stats:    stats,
-		logger:   logger.Named("proxy_client"),
-		timeout:  timeout,
+		client:   config.Client,
+		resolver: config.Resolver,
+		stats:    config.StatsD,
+		logger:   config.Logger.Named("proxy_client"),
+		timeout:  config.Timeout,
 	}
 
 	return func(rw http.ResponseWriter, r *http.Request) {
 		p.ServeHTTP(rw, r)
 	}
+}
+
+type ProxyConfig struct {
+	Client   ProxyClient
+	Resolver consul.ServiceResolver
+	Logger   hclog.Logger
+	StatsD   *statsd.Client
+	Timeout  time.Duration
 }
 
 // Proxy is a http.Handler which implements the ability to call a downstream function

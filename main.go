@@ -123,15 +123,7 @@ func main() {
 	logger.Info("Started version: " + version)
 	stats.Incr("started", nil, 1)
 
-	handlers := &types.FaaSHandlers{
-		FunctionReader: handlers.MakeReader(nomadClient.Jobs(), logger, stats),
-		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
-		DeleteHandler:  handlers.MakeDelete(consulResolver, nomadClient.Jobs(), logger, stats),
-		ReplicaReader:  makeReplicationReader(nomadClient.Jobs(), logger, stats),
-		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), logger, stats),
-		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats, *functionTimeout),
-		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
-	}
+	handlers := createFaaSHandlers(nomadClient, consulResolver, stats, logger)
 
 	config := &types.FaaSConfig{}
 	config.ReadTimeout = *functionTimeout
@@ -140,6 +132,19 @@ func main() {
 
 	logger.Info("Started Nomad provider", "port", *config.TCPPort)
 	bootstrap.Serve(handlers, config)
+}
+
+func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver, stats *statsd.Client, logger hclog.Logger) *types.FaaSHandlers {
+
+	return &types.FaaSHandlers{
+		FunctionReader: handlers.MakeReader(nomadClient.Jobs(), logger, stats),
+		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
+		DeleteHandler:  handlers.MakeDelete(consulResolver, nomadClient.Jobs(), logger, stats),
+		ReplicaReader:  makeReplicationReader(nomadClient.Jobs(), logger, stats),
+		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), logger, stats),
+		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats, *functionTimeout),
+		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
+	}
 }
 
 func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
@@ -200,7 +205,15 @@ func makeFunctionProxyHandler(r consul.ServiceResolver, logger hclog.Logger, s *
 		func(r *http.Request) map[string]string {
 			return mux.Vars(r)
 		},
-		handlers.MakeProxy(handlers.MakeProxyClient(timeout, logger), r, logger, s, timeout),
+		handlers.MakeProxy(
+			handlers.ProxyConfig{
+				Client:   handlers.MakeProxyClient(timeout, logger),
+				Resolver: r,
+				Logger:   logger,
+				StatsD:   s,
+				Timeout:  timeout,
+			},
+		),
 	)
 }
 
