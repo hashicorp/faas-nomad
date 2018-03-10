@@ -16,5 +16,8 @@ cover:
 build:
 	go build -o faas-nomad .
 
+run:
+	go run main.go -port 8081
+
 build_all:
-	goreleaser -snapshot -rm-dist -skip-validate
+	goreleaser -snapshot -rm-dist

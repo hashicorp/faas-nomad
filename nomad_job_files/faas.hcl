@@ -22,15 +22,16 @@ job "faas-nomadd" {
     task "nomadd" {
       driver = "docker"
 
-      env {
-        NOMAD_REGION = "${NOMAD_REGION}"
-        NOMAD_ADDR   = "${NOMAD_IP_http}:4646"
-        CONSUL_ADDR  = "${NOMAD_IP_http}:8500"
-        STATSD_ADDR  = "${NOMAD_ADDR_statsd_statsd}"
-      }
-
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:v0.2.22"
+        image = "quay.io/nicholasjackson/faas-nomad:v0.2.23"
+
+        args = [
+          "-nomad_region", "${NOMAD_REGION}",
+          "-nomad_addr", "${NOMAD_IP_http}:4646",
+          "-consul_addr", "${NOMAD_IP_http}:8500",
+          "-statsd_addr", "${NOMAD_ADDR_statsd_statsd}",
+          "-node_addr", "${NOMAD_IP_http}"
+        ]
 
         port_map {
           http = 8080
@@ -64,16 +65,14 @@ job "faas-nomadd" {
         destination   = "secrets/gateway.env"
 
         data = <<EOH
-          functions_provider_url="http://{{ env "NOMAD_IP_http" }}:8081/"
-          {{ range service "prometheus" }}
-          faas_prometheus_host="{{ .Address }}"
-          faas_prometheus_port="{{ .Port }}"{{ end }}
-          {{ range service "nats" }}
-          faas_nats_address="{{ .Address }}"{{ end }}
-          faas_nats_port=4222
-          read_timeout="20s"
-          write_timeout="20s"
-          EOH
+functions_provider_url="http://{{ env "NOMAD_IP_http" }}:8081/"
+{{ range service "prometheus" }}
+faas_prometheus_host="{{ .Address }}"
+faas_prometheus_port="{{ .Port }}"{{ end }}
+{{ range service "nats" }}
+faas_nats_address: "{{ .Address }}"{{ end }}
+faas_nats_port: 4222
+EOH
       }
 
       config {
@@ -167,7 +166,6 @@ job "faas-nomadd" {
         args = [
           "-store", "file", "-dir", "/tmp/nats",
           "-m", "8222",
-          "--cluster_id", "faas-cluster"
         ]
 
         port_map {
