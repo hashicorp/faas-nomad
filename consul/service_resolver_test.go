@@ -27,7 +27,7 @@ func setup(t *testing.T, queryError error) (*Resolver, *MockWatcher, *cache.Cach
 	watcher := &MockWatcher{data: make(chan []*dependency.CatalogService)}
 	watcher.On("Add", mock.Anything).Return(true, nil)
 	watcher.On("Remove", mock.Anything).Return(true)
-	watcher.On("ItterateDataCh", mock.Anything).Return(serviceQuery)
+	watcher.On("IterateDataCh", mock.Anything).Return(serviceQuery)
 
 	pc := cache.New(5*time.Minute, 10*time.Minute)
 	return &Resolver{
