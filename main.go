@@ -42,69 +42,69 @@ var (
 // parseDeprecatedEnvironment is used to merge the previous environment variable configuration to the new flag style
 // this will be removed in the next release
 func parseDeprecatedEnvironment() {
-	checkDepricatedStatsD()
-	checkDepricatedNomadHTTP()
-	checkDepricatedNomadAddr()
-	checkDepricatedConsulAddr()
-	checkDepricatedNomadRegion()
-	checkDepricatedLoggerLevel()
-	checkDepricatedLoggerFormat()
-	checkDepricatedLoggerOutput()
+	checkDeprecatedStatsD()
+	checkDeprecatedNomadHTTP()
+	checkDeprecatedNomadAddr()
+	checkDeprecatedConsulAddr()
+	checkDeprecatedNomadRegion()
+	checkDeprecatedLoggerLevel()
+	checkDeprecatedLoggerFormat()
+	checkDeprecatedLoggerOutput()
 }
 
-func checkDepricatedStatsD() {
+func checkDeprecatedStatsD() {
 	if env := os.Getenv("STATSD_ADDR"); env != "" {
 		*statsdServer = env
-		log.Println("The environment variable STATSD_ADDR is depricated please use the command line flag stasd_server")
+		log.Println("The environment variable STATSD_ADDR is deprecated please use the command line flag stasd_server")
 	}
 }
 
-func checkDepricatedNomadHTTP() {
+func checkDeprecatedNomadHTTP() {
 	if env := os.Getenv("NOMAD_ADDR_http"); env != "" {
 		*nodeURI = env
-		log.Println("The environment variable NOMAD_ADDR_http is depricated please use the command line flag node_uri")
+		log.Println("The environment variable NOMAD_ADDR_http is deprecated please use the command line flag node_uri")
 	}
 }
 
-func checkDepricatedNomadAddr() {
+func checkDeprecatedNomadAddr() {
 	if env := os.Getenv("NOMAD_ADDR"); env != "" {
 		*nomadAddr = env
-		log.Println("The environment variable NOMAD_ADDR is depricated please use the command line flag nomad_addr")
+		log.Println("The environment variable NOMAD_ADDR is deprecated please use the command line flag nomad_addr")
 	}
 }
 
-func checkDepricatedConsulAddr() {
+func checkDeprecatedConsulAddr() {
 	if env := os.Getenv("CONSUL_ADDR"); env != "" {
 		*consulAddr = env
-		log.Println("The environment variable CONSUL_ADDR is depricated please use the command line flag consul_addr")
+		log.Println("The environment variable CONSUL_ADDR is deprecated please use the command line flag consul_addr")
 	}
 }
 
-func checkDepricatedNomadRegion() {
+func checkDeprecatedNomadRegion() {
 	if env := os.Getenv("NOMAD_REGION"); env != "" {
 		*nomadRegion = env
-		log.Println("The environment variable NOMAD_REGION is depricated please use the command line flag nomad_region")
+		log.Println("The environment variable NOMAD_REGION is deprecated please use the command line flag nomad_region")
 	}
 }
 
-func checkDepricatedLoggerLevel() {
+func checkDeprecatedLoggerLevel() {
 	if env := os.Getenv("logger_level"); env != "" {
 		*loggerLevel = env
-		log.Println("The environment variable logger_level is depricated please use the command line flag logger_level")
+		log.Println("The environment variable logger_level is deprecated please use the command line flag logger_level")
 	}
 }
 
-func checkDepricatedLoggerFormat() {
+func checkDeprecatedLoggerFormat() {
 	if env := os.Getenv("logger_format"); env != "" {
 		*loggerFormat = env
-		log.Println("The environment variable logger_format is depricated please use the command line flag logger_format")
+		log.Println("The environment variable logger_format is deprecated please use the command line flag logger_format")
 	}
 }
 
-func checkDepricatedLoggerOutput() {
+func checkDeprecatedLoggerOutput() {
 	if env := os.Getenv("logger_output"); env != "" {
 		*loggerOutput = env
-		log.Println("The environment variable logger_output is depricated please use the command line flag logger_output")
+		log.Println("The environment variable logger_output is deprecated please use the command line flag logger_output")
 	}
 }
 
