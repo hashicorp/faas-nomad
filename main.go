@@ -28,7 +28,7 @@ var (
 	nodeURI      = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
 	nomadAddr    = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
 	consulAddr   = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
-	nomadRegion  = flag.String("nomad_region", "global", "Default region to schedlue functions in")
+	nomadRegion  = flag.String("nomad_region", "global", "Default region to schedule functions in")
 )
 
 var functionTimeout = flag.Duration("function_timeout", 30*time.Second, "Timeout for function execution")
