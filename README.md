@@ -269,7 +269,7 @@ functions:
       memory: 512
       cpu: 1000
     labels:
-      datacentres: "dc1"
+      datacenters: "dc1"
 ```
 
 ### Async functions
