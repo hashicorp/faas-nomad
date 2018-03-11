@@ -39,7 +39,7 @@ var (
 	loggerOutput = flag.String("logger_output", "", "Filepath to write log file, if ommited stdOut is used")
 )
 
-// parseDeprecatedEnvironment is used to merge the previous environment variable configutaion to the new flag style
+// parseDeprecatedEnvironment is used to merge the previous environment variable configuration to the new flag style
 // this will be removed in the next release
 func parseDeprecatedEnvironment() {
 	checkDepricatedStatsD()
