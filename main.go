@@ -36,7 +36,7 @@ var functionTimeout = flag.Duration("function_timeout", 30*time.Second, "Timeout
 var (
 	loggerFormat = flag.String("logger_format", "text", "Format for log output text | json")
 	loggerLevel  = flag.String("logger_level", "INFO", "Log output level INFO | ERROR | DEBUG | TRACE")
-	loggerOutput = flag.String("logger_output", "", "Filepath to write log file, if ommited stdOut is used")
+	loggerOutput = flag.String("logger_output", "", "Filepath to write log file, if omitted stdOut is used")
 )
 
 // parseDeprecatedEnvironment is used to merge the previous environment variable configuration to the new flag style
