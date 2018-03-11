@@ -251,7 +251,7 @@ That is all there is to it, checkout the OpenFaaS community page for some inspir
 [faas/community.md at master · openfaas/faas · GitHub](https://github.com/openfaas/faas/blob/master/community.md)
 
 ### Datacenters and Constraints
-By default the Nomad provider will use a default datacenter for a deployed function of `dc1`, this can be overridden by setting the label `datacenters`, which takes a comma separated list of datacenters to deploy the funtion into.  Contstraints for limiting CPU and memory can also be set `memory` is an integer representing Megabytes, `cpu` is an integer representing MHz of CPU where 1024 equals one core.
+By default the Nomad provider will use a default datacenter for a deployed function of `dc1`, this can be overridden by setting the label `datacenters`, which takes a comma separated list of datacenters to deploy the funtion into.  Constraints for limiting CPU and memory can also be set `memory` is an integer representing Megabytes, `cpu` is an integer representing MHz of CPU where 1024 equals one core.
 
 i.e.
 ```bash
