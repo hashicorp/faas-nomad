@@ -44,7 +44,7 @@ func setup(t *testing.T, queryError error) (*Resolver, *MockWatcher, *cache.Cach
 		serviceQuery
 }
 
-func TestResolveWithCachReturnsURLS(t *testing.T) {
+func TestResolveWithCacheReturnsURLS(t *testing.T) {
 	address := "http://mytest.com"
 	r, _, c, sq := setup(t, nil)
 	c.Add(sq.String(), &cacheItem{addresses: []string{address}}, cache.DefaultExpiration)
