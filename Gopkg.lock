@@ -10,7 +10,11 @@
 [[projects]]
   branch = "master"
   name = "github.com/afex/hystrix-go"
-  packages = ["hystrix","hystrix/metric_collector","hystrix/rolling"]
+  packages = [
+    "hystrix",
+    "hystrix/metric_collector",
+    "hystrix/rolling"
+  ]
   revision = "f118cd938f786d24f46cc307981d8f63b7951020"
 
 [[projects]]
@@ -40,7 +44,13 @@
 [[projects]]
   branch = "master"
   name = "github.com/golang/protobuf"
-  packages = ["proto","ptypes","ptypes/any","ptypes/duration","ptypes/timestamp"]
+  packages = [
+    "proto",
+    "ptypes",
+    "ptypes/any",
+    "ptypes/duration",
+    "ptypes/timestamp"
+  ]
   revision = "1e59b77b52bf8e4b449a57e6f79f21226d571845"
 
 [[projects]]
@@ -75,7 +85,10 @@
 
 [[projects]]
   name = "github.com/hashicorp/consul-template"
-  packages = ["dependency","watch"]
+  packages = [
+    "dependency",
+    "watch"
+  ]
   revision = "111a80441153783544817b7c6a9c08633308b9a8"
   version = "v0.19.4"
 
@@ -118,12 +131,27 @@
 [[projects]]
   branch = "master"
   name = "github.com/hashicorp/hcl"
-  packages = [".","hcl/ast","hcl/parser","hcl/scanner","hcl/strconv","hcl/token","json/parser","json/scanner","json/token"]
+  packages = [
+    ".",
+    "hcl/ast",
+    "hcl/parser",
+    "hcl/scanner",
+    "hcl/strconv",
+    "hcl/token",
+    "json/parser",
+    "json/scanner",
+    "json/token"
+  ]
   revision = "23c074d0eceb2b8a5bfdbb271ab780cde70f05a8"
 
 [[projects]]
   name = "github.com/hashicorp/nomad"
-  packages = ["api","api/contexts","helper","helper/uuid"]
+  packages = [
+    "api",
+    "api/contexts",
+    "helper",
+    "helper/uuid"
+  ]
   revision = "2f245ac7fc9b916eb4af8a62a471dcd0b468a8c8"
   version = "v0.7.1"
 
@@ -135,7 +163,12 @@
 
 [[projects]]
   name = "github.com/hashicorp/vault"
-  packages = ["api","helper/compressutil","helper/jsonutil","helper/parseutil"]
+  packages = [
+    "api",
+    "helper/compressutil",
+    "helper/jsonutil",
+    "helper/parseutil"
+  ]
   revision = "6b29fb2b7f70ed538ee2b3c057335d706b6d4e36"
   version = "v0.8.3"
 
@@ -165,7 +198,10 @@
 
 [[projects]]
   name = "github.com/nicholasjackson/bench"
-  packages = ["plugin/proto","plugin/shared"]
+  packages = [
+    "plugin/proto",
+    "plugin/shared"
+  ]
   revision = "fa881d88ed7cba18a0c1b19295112ab88062ddee"
   version = "1.0.0"
 
@@ -189,9 +225,12 @@
 
 [[projects]]
   name = "github.com/openfaas/faas-provider"
-  packages = [".","types"]
-  revision = "b9f261986a88ce62bbca20af2ff2dcf1d46a8df8"
-  version = "0.4"
+  packages = [
+    ".",
+    "types"
+  ]
+  revision = "ffce01238ccf01b0f4e573fb65b92b285a547a4b"
+  version = "0.6"
 
 [[projects]]
   name = "github.com/patrickmn/go-cache"
@@ -225,20 +264,46 @@
 
 [[projects]]
   name = "github.com/stretchr/testify"
-  packages = ["assert","mock"]
+  packages = [
+    "assert",
+    "mock"
+  ]
   revision = "b91bfb9ebec76498946beb6af7c0230c7cc7ba6c"
   version = "v1.2.0"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
-  packages = ["context","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
+  packages = [
+    "context",
+    "http2",
+    "http2/hpack",
+    "idna",
+    "internal/timeseries",
+    "lex/httplex",
+    "trace"
+  ]
   revision = "5ccada7d0a7ba9aeb5d3aca8d3501b4c2a509fec"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/text"
-  packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
+  packages = [
+    "collate",
+    "collate/build",
+    "internal/colltab",
+    "internal/gen",
+    "internal/tag",
+    "internal/triegen",
+    "internal/ucd",
+    "language",
+    "secure/bidirule",
+    "transform",
+    "unicode/bidi",
+    "unicode/cldr",
+    "unicode/norm",
+    "unicode/rangetable"
+  ]
   revision = "e19ae1496984b1c655b8044a65c0300a3c878dd3"
 
 [[projects]]
@@ -249,13 +314,38 @@
 
 [[projects]]
   name = "google.golang.org/grpc"
-  packages = [".","balancer","balancer/base","balancer/roundrobin","codes","connectivity","credentials","encoding","grpclb/grpc_lb_v1/messages","grpclog","health","health/grpc_health_v1","internal","keepalive","metadata","naming","peer","resolver","resolver/dns","resolver/passthrough","stats","status","tap","transport"]
+  packages = [
+    ".",
+    "balancer",
+    "balancer/base",
+    "balancer/roundrobin",
+    "codes",
+    "connectivity",
+    "credentials",
+    "encoding",
+    "grpclb/grpc_lb_v1/messages",
+    "grpclog",
+    "health",
+    "health/grpc_health_v1",
+    "internal",
+    "keepalive",
+    "metadata",
+    "naming",
+    "peer",
+    "resolver",
+    "resolver/dns",
+    "resolver/passthrough",
+    "stats",
+    "status",
+    "tap",
+    "transport"
+  ]
   revision = "6b51017f791ae1cfbec89c52efdf444b13b550ef"
   version = "v1.9.2"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "4ba22f25828656c86c2ab24489a25e732a8b1d10534adca0f4f0b032978a989e"
+  inputs-digest = "a5b7a075c122eff2bd6145d6b2712409e919e3faaf010650867f62a4056592e2"
   solver-name = "gps-cdcl"
   solver-version = 1
