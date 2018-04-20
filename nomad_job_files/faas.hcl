@@ -166,6 +166,7 @@ EOH
         args = [
           "-store", "file", "-dir", "/tmp/nats",
           "-m", "8222",
+          "-cid","faas-cluster",
         ]
 
         port_map {
