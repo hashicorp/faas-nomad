@@ -48,8 +48,16 @@ func TestReplicationRReturnsFunctionWhenFound(t *testing.T) {
 	jobName := nomad.JobPrefix + functionName
 
 	h, rr, r := setupReplicationReader(functionName)
-	mockJob.On("Info", jobName, mock.Anything).
-		Return(&api.Job{ID: &jobName}, nil, nil)
+	mockJob.On("Info", jobName, mock.Anything).Return(
+		&api.Job{
+			ID: &jobName,
+			TaskGroups: []*api.TaskGroup{&api.TaskGroup{
+				Count: &count,
+			}},
+		},
+		nil,
+		nil,
+	)
 
 	mockJob.On("Allocations", jobName, true, mock.Anything).Return(
 		[]*api.AllocationListStub{
@@ -78,10 +86,20 @@ func TestReplicationRReturnsFunctionWhenFound(t *testing.T) {
 func TestReplicationRReturnsCorrectAllocationCount(t *testing.T) {
 	functionName := "tester"
 	jobName := nomad.JobPrefix + functionName
+	count := 2
 
 	h, rr, r := setupReplicationReader(functionName)
-	mockJob.On("Info", jobName, mock.Anything).
-		Return(&api.Job{ID: &jobName}, nil, nil)
+	mockJob.On("Info", jobName, mock.Anything).Return(
+		&api.Job{
+			ID: &jobName,
+			TaskGroups: []*api.TaskGroup{&api.TaskGroup{
+				Count: &count,
+			}},
+		},
+		nil,
+		nil,
+	)
+
 	mockJob.On("Allocations", jobName, true, mock.Anything).Return(
 		[]*api.AllocationListStub{
 			{
@@ -108,4 +126,5 @@ func TestReplicationRReturnsCorrectAllocationCount(t *testing.T) {
 	}
 
 	assert.Equal(t, uint64(1), f.AvailableReplicas)
+	assert.Equal(t, uint64(2), f.Replicas)
 }

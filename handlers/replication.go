@@ -44,6 +44,7 @@ func MakeReplicationReader(client nomad.Job, logger hclog.Logger, stats metrics.
 
 		resp := requests.Function{}
 		resp.AvailableReplicas = allocs
+		resp.Replicas = uint64(*job.TaskGroups[0].Count)
 		resp.Name = strings.Replace(*job.ID, nomad.JobPrefix, "", -1)
 
 		rw.Header().Set("Content-Type", "application/json")
