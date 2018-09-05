@@ -53,7 +53,7 @@ func (pc *HTTPProxyClient) GetFunctionName(r *http.Request) string {
 	return vars["name"]
 }
 
-// CallAndReturnResponse calls the function and resturns the response
+// CallAndReturnResponse calls the function and returns the response
 func (pc *HTTPProxyClient) CallAndReturnResponse(address string, body []byte, headers http.Header) (
 	[]byte, http.Header, error) {
 

@@ -22,7 +22,7 @@ var (
 	restartAttempts     = 25
 	logFiles            = 5
 	logSize             = 2
-	ephermerialDiskSize = 20
+	ephemeralDiskSize = 20
 
 	// Constraints
 	constraintCPUArch = "amd64"
@@ -109,7 +109,7 @@ func createTaskGroup(r requests.CreateFunctionRequest) []*api.TaskGroup {
 				Attempts: &restartAttempts,
 			},
 			EphemeralDisk: &api.EphemeralDisk{
-				SizeMB: &ephermerialDiskSize,
+				SizeMB: &ephemeralDiskSize,
 			},
 			Tasks: []*api.Task{task},
 		},
