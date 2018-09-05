@@ -1,6 +1,6 @@
 builds:
   - binary: faas-nomad
-    ldflags: -s -w -X main.version=dev
+    #ldflags: -s -w -X main.version=dev
     goos:
       - windows
       - linux
@@ -24,6 +24,7 @@ dockers:
       - "latest"
       - "{{ .Tag }}"
       - "{{.Version}}"
+      - "{{.Commit}}"
   - 
     binary: faas-nomad
     image: quay.io/nicholasjackson/faas-nomad
@@ -34,3 +35,4 @@ dockers:
     tag_templates: 
       - "arm7-{{ .Tag }}"
       - "arm7-{{.Version}}"
+      - "arm7-{{.Commit}}"

@@ -20,4 +20,7 @@ run:
 	go run main.go -port 8081
 
 build_all:
-	goreleaser -snapshot -rm-dist
+	goreleaser --snapshot --rm-dist
+
+certify_test:
+	gateway_url=http://gateway.service.consul:8080/ go test -parallel=1 -v ${GOPATH}/src/github.com/openfaas/certify-incubator/tests/*.go
