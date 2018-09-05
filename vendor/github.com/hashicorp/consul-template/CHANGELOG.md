@@ -1,87 +1,5 @@
-# Consul Template CHANGELOG
-
-## v0.19.4 (October 30, 2017)
-
-BREAKING CHANGES:
-
-  * The version of Consul Template is now taken into account when using
-    de-duplication mode. Without bundling the version, it's challenging to
-    upgrade existing clusters or run multiple versions of Consul Template on the
-    same cluster and template simultaneously. [GH-1025]
-
-BUG FIXES:
-
-  * Remove references to unsupported `dump_signal` configuration
-
-  * Update vendor libraries to support Consul 1.0.0 changes for better test
-    stability
-
-  * Renew unwrapped Vault token (previously Consul Template) would try to renew
-    the wrapped token, which would not work.
-
-  * Do not sort results when `~near` queries are used [GH-1027]
-
-  * Handle integer overflow in exponential backoff calculations
-    [GH-1031, GH-1028]
-
-  * Properly preserve existing file permissions [GH-1037]
-
-IMPROVEMENTS:
-
-  * Compile with Go 1.9.2
-
-  * The Vault grace period in the config is now set to 15 seconds as the
-    default. This matches Vault's default configuration for consistency.
-
-  * Add `indent` function for indenting blocks of text in templates
-
-  * Allow additional colons in the template command on the CLI [GH-1026]
-
-  * Add Vault Transit example for key exfiltration [Gh-1014]
-
-  * Add a new option for disabling recursive directory creation per template
-    [GH-1033]
-
-  * Allow dots in node names [GH-977]
-
-## v0.19.3 (September 11, 2017)
-
-BUG FIXES:
-
-  * Fix a bug that would cause once mode to not exit when the file pre-existed
-    on disk with the correct contents. [GH-1000]
-
-## v0.19.2 (September 1, 2017)
-
-BUG FIXES:
-
-  * Fix a critical bug that would cause a hot loop for some TTL durations.
-      [GH-1004]
-
-## v0.19.1 (August 25, 2017)
-
-IMPROVEMENTS:
-
-  * The runner's render event now includes the last-rendered template contents.
-      This is useful when embedding Consul Template as a library. [GH-974-975]
-
-  * Use the new Golang API renewer [GH-978]
-
-  * Compile and build with Go 1.9
-
-BUG FIXES:
-
-  * Add per-template option `error_on_missing_key`. This causes the template to
-      error when the user attempts to access a key in a map or field in a struct
-      that does not exist. Previous behavior was to print `<no value>`, which
-      might not be the desired behavior. This is opt-in behavior on a
-      per-template basis. There is no global option. A future version of
-      Consul Template will switch the default behavior to this safer format, but
-      that change will be clearly called out as a breaking change in the future.
-      Users should set `error_on_missing_key = false` in their configuration
-      files if they are relying on the current `<no value>` behavior.
-      [GH-973, GH-972]
-  * Ensure all templates are rendered before spawning commands [GH-991, GH-995]
+Consul Template Changelog
+=========================
 
 ## v0.19.0 (June 29, 2017)
 
@@ -106,7 +24,7 @@ IMPROVEMENTS:
 BUG FIXES:
 
   * Use the logger as soon as its available for output [GH-947]
-  * Update Consul API library to fix a bug where custom CA configuration was
+  * Update Consul API library to fix a bug where custom CA configuration aws
       ignored [GH-965]
 
 

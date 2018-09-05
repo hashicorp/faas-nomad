@@ -12,4 +12,5 @@ type Job interface {
 	Info(jobID string, q *api.QueryOptions) (*api.Job, *api.QueryMeta, error)
 	List(q *api.QueryOptions) ([]*api.JobListStub, *api.QueryMeta, error)
 	Deregister(jobID string, purge bool, q *api.WriteOptions) (string, *api.WriteMeta, error)
+	Allocations(jobID string, allAllocs bool, q *api.QueryOptions) ([]*api.AllocationListStub, *api.QueryMeta, error)
 }

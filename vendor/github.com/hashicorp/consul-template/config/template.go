@@ -10,6 +10,11 @@ import (
 )
 
 const (
+	// DefaultTemplateFilePerms are the default file permissions for templates
+	// rendered onto disk when a specific file permission has not already been
+	// specified.
+	DefaultTemplateFilePerms = 0644
+
 	// DefaultTemplateCommandTimeout is the amount of time to wait for a command
 	// to return.
 	DefaultTemplateCommandTimeout = 30 * time.Second
@@ -19,6 +24,10 @@ var (
 	// ErrTemplateStringEmpty is the error returned with the template contents
 	// are empty.
 	ErrTemplateStringEmpty = errors.New("template: cannot be empty")
+
+	// ErrTemplateInvalidFormat is the error returned with the template is not
+	// a valid format.
+	ErrTemplateInvalidFormat = errors.New("template: invalid format")
 
 	// configTemplateRe is the pattern to split the config template syntax.
 	configTemplateRe = regexp.MustCompile("([a-zA-Z]:)?([^:]+)")
@@ -43,17 +52,9 @@ type TemplateConfig struct {
 	// must be specified, but not both.
 	Contents *string `mapstructure:"contents"`
 
-	// CreateDestDirs tells Consul Template to create the parent directories of
-	// the destination path if they do not exist. The default value is true.
-	CreateDestDirs *bool `mapstructure:"create_dest_dirs"`
-
 	// Destination is the location on disk where the template should be rendered.
 	// This is required unless running in debug/dry mode.
 	Destination *string `mapstructure:"destination"`
-
-	// ErrMissingKey is used to control how the template behaves when attempting
-	// to index a struct or map key that does not exist.
-	ErrMissingKey *bool `mapstructure:"error_on_missing_key"`
 
 	// Exec is the configuration for the command to run when the template renders
 	// successfully.
@@ -102,11 +103,7 @@ func (c *TemplateConfig) Copy() *TemplateConfig {
 
 	o.Contents = c.Contents
 
-	o.CreateDestDirs = c.CreateDestDirs
-
 	o.Destination = c.Destination
-
-	o.ErrMissingKey = c.ErrMissingKey
 
 	if c.Exec != nil {
 		o.Exec = c.Exec.Copy()
@@ -160,16 +157,8 @@ func (c *TemplateConfig) Merge(o *TemplateConfig) *TemplateConfig {
 		r.Contents = o.Contents
 	}
 
-	if o.CreateDestDirs != nil {
-		r.CreateDestDirs = o.CreateDestDirs
-	}
-
 	if o.Destination != nil {
 		r.Destination = o.Destination
-	}
-
-	if o.ErrMissingKey != nil {
-		r.ErrMissingKey = o.ErrMissingKey
 	}
 
 	if o.Exec != nil {
@@ -218,16 +207,8 @@ func (c *TemplateConfig) Finalize() {
 		c.Contents = String("")
 	}
 
-	if c.CreateDestDirs == nil {
-		c.CreateDestDirs = Bool(true)
-	}
-
 	if c.Destination == nil {
 		c.Destination = String("")
-	}
-
-	if c.ErrMissingKey == nil {
-		c.ErrMissingKey = Bool(false)
 	}
 
 	if c.Exec == nil {
@@ -244,7 +225,7 @@ func (c *TemplateConfig) Finalize() {
 	c.Exec.Finalize()
 
 	if c.Perms == nil {
-		c.Perms = FileMode(0)
+		c.Perms = FileMode(DefaultTemplateFilePerms)
 	}
 
 	if c.Source == nil {
@@ -276,9 +257,7 @@ func (c *TemplateConfig) GoString() string {
 		"Command:%s, "+
 		"CommandTimeout:%s, "+
 		"Contents:%s, "+
-		"CreateDestDirs:%s, "+
 		"Destination:%s, "+
-		"ErrMissingKey:%s, "+
 		"Exec:%#v, "+
 		"Perms:%s, "+
 		"Source:%s, "+
@@ -290,9 +269,7 @@ func (c *TemplateConfig) GoString() string {
 		StringGoString(c.Command),
 		TimeDurationGoString(c.CommandTimeout),
 		StringGoString(c.Contents),
-		BoolGoString(c.CreateDestDirs),
 		StringGoString(c.Destination),
-		BoolGoString(c.ErrMissingKey),
 		c.Exec,
 		FileModeGoString(c.Perms),
 		StringGoString(c.Source),
@@ -406,8 +383,7 @@ func ParseTemplateConfig(s string) (*TemplateConfig, error) {
 	case 3:
 		source, destination, command = parts[0], parts[1], parts[2]
 	default:
-		source, destination = parts[0], parts[1]
-		command = strings.Join(parts[2:], ":")
+		return nil, ErrTemplateInvalidFormat
 	}
 
 	var sourcePtr, destinationPtr, commandPtr *string

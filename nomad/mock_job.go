@@ -73,3 +73,19 @@ func (m *MockJob) Deregister(jobID string, purge bool, q *api.WriteOptions) (
 
 	return "", nil, args.Error(2)
 }
+
+func (m *MockJob) Allocations(jobID string, allAllocs bool, q *api.QueryOptions) ([]*api.AllocationListStub, *api.QueryMeta, error) {
+	args := m.Called(jobID, allAllocs, q)
+
+	var allocs []*api.AllocationListStub
+	if a := args.Get(0); a != nil {
+		allocs = a.([]*api.AllocationListStub)
+	}
+
+	var meta *api.QueryMeta
+	if r := args.Get(1); r != nil {
+		meta = r.(*api.QueryMeta)
+	}
+
+	return allocs, meta, args.Error(2)
+}
