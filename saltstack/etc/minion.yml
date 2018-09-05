@@ -1,0 +1,17 @@
+file_client: local
+
+file_roots:
+  base:
+    - /vagrant/saltstack/salt
+  dev:
+    - /vagrant/saltstack/salt
+    - /vagrant/saltstack/formulas/nomad-formula
+    - /vagrant/saltstack/formulas/consul-formula
+    - /vagrant/saltstack/formulas/docker-formula
+    - /vagrant/saltstack/formulas/vault-formula
+
+pillar_roots:
+  base:
+    - /vagrant/saltstack/pillar
+  dev:
+    - /vagrant/saltstack/pillar
