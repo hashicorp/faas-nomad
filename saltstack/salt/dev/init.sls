@@ -1,4 +1,4 @@
-{% set host_address = '192.168.50.2' %}
+{% set host_address = '192.168.50.1' %}
 
 include:
   - base

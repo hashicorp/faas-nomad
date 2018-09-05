@@ -1,4 +1,4 @@
-{% set host_address = '192.168.50.2' %}
+{% set interface_address = '192.168.50.2' %}
 
 include:
   - base
@@ -6,7 +6,7 @@ nomad:
   config:
     datacenter: dc1
     advertise:
-      http: {{ host_address }}
+      http: {{ interface_address }}
     server:
       enabled: true
       bootstrap_expect: 1
@@ -33,7 +33,7 @@ nomad:
 consul:
   config:
     server: True
-    advertise_addr: {{ host_address }}
+    advertise_addr: {{ interface_address }}
     addresses:
       http: 0.0.0.0
       dns: 0.0.0.0
