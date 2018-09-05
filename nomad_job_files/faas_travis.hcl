@@ -22,13 +22,6 @@ job "faas-nomadd" {
     task "nomadd" {
       driver = "docker"
 
-      env {
-        NOMAD_REGION = "${NOMAD_REGION}"
-        NOMAD_ADDR   = "${NOMAD_IP_http}:4646"
-        CONSUL_ADDR  = "${NOMAD_IP_http}:8500"
-        STATSD_ADDR  = "${NOMAD_ADDR_statsd_statsd}"
-      }
-
       config {
         image = "localhost:5000/faas-nomad:latest"
 
@@ -80,7 +73,7 @@ EOH
       }
 
       config {
-        image = "functions/gateway:0.7.0"
+        image = "functions/gateway:0.7.5"
 
         port_map {
           http = 8080

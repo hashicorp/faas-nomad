@@ -1,4 +1,4 @@
-FROM golang:1.8.5 as build
+FROM golang:1.9.4 as build
 WORKDIR /go/src/github.com/openfaas/faas/gateway
 
 RUN curl -sL https://github.com/alexellis/license-check/releases/download/0.1/license-check > /usr/bin/license-check && chmod +x /usr/bin/license-check
@@ -22,14 +22,21 @@ RUN license-check -path ./ --verbose=false \
     && CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o gateway .
 
 FROM alpine:3.6
-WORKDIR /root/
+
+RUN addgroup -S app \
+    && adduser -S -g app app
+
+WORKDIR /home/app
 
 EXPOSE 8080
 ENV http_proxy      ""
 ENV https_proxy     ""
 
 COPY --from=build /go/src/github.com/openfaas/faas/gateway/gateway    .
-
 COPY assets     assets
+
+RUN chown -R app:app ./
+
+USER app
 
 CMD ["./gateway"]

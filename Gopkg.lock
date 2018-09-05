@@ -4,20 +4,20 @@
 [[projects]]
   name = "github.com/DataDog/datadog-go"
   packages = ["statsd"]
-  revision = "0ddda6bee21174ef6c4873647cb0d6ec9cba996f"
-  version = "1.1.0"
+  revision = "9487d3a9d3be5bf3cf60b86ae810b97926964515"
+  version = "2.0.0"
 
 [[projects]]
   branch = "master"
   name = "github.com/afex/hystrix-go"
   packages = ["hystrix","hystrix/metric_collector","hystrix/rolling"]
-  revision = "f118cd938f786d24f46cc307981d8f63b7951020"
+  revision = "27fae8d30f1a3cbcab6618d2ee55a4cb43064376"
 
 [[projects]]
   name = "github.com/alexellis/faas"
   packages = ["gateway/requests"]
-  revision = "262b0afda7a0161d3ee4b3dafdcc085128b215df"
-  version = "0.6.16"
+  revision = "76526b0be3eb2fb71f2fcb115870e7623bc54969"
+  version = "0.7.4"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -38,10 +38,10 @@
   version = "v1.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/golang/protobuf"
   packages = ["proto","ptypes","ptypes/any","ptypes/duration","ptypes/timestamp"]
-  revision = "1e59b77b52bf8e4b449a57e6f79f21226d571845"
+  revision = "925541529c1fa6821df4e44ce2723319eb2be768"
+  version = "v1.0.0"
 
 [[projects]]
   branch = "master"
@@ -68,16 +68,16 @@
   version = "v1.6.1"
 
 [[projects]]
-  branch = "master"
   name = "github.com/hashicorp/consul"
   packages = ["api"]
-  revision = "20c6a5f76b446a93c430e3aaae6be1b16cebdfde"
+  revision = "9a494b5fb9c86180a5702e29c485df1507a47198"
+  version = "v1.0.6"
 
 [[projects]]
   name = "github.com/hashicorp/consul-template"
   packages = ["dependency","watch"]
-  revision = "111a80441153783544817b7c6a9c08633308b9a8"
-  version = "v0.19.4"
+  revision = "cfe084f488f915b3e41b00824a3e07d79e3677aa"
+  version = "v0.19.0"
 
 [[projects]]
   branch = "master"
@@ -95,7 +95,7 @@
   branch = "master"
   name = "github.com/hashicorp/go-hclog"
   packages = ["."]
-  revision = "ca137eb4b4389c9bc6f1a6d887f056bf16c00510"
+  revision = "5bcb0f17e36442247290887cc914a6e507afa5c4"
 
 [[projects]]
   branch = "master"
@@ -107,7 +107,7 @@
   branch = "master"
   name = "github.com/hashicorp/go-plugin"
   packages = ["."]
-  revision = "1fc09c47b843b73705f51ffb0520e3ac1bfecf99"
+  revision = "956b76edd382134e7e88a07f2d210bafcc730cce"
 
 [[projects]]
   branch = "master"
@@ -135,9 +135,9 @@
 
 [[projects]]
   name = "github.com/hashicorp/vault"
-  packages = ["api","helper/compressutil","helper/jsonutil","helper/parseutil"]
-  revision = "6b29fb2b7f70ed538ee2b3c057335d706b6d4e36"
-  version = "v0.8.3"
+  packages = ["api","helper/compressutil","helper/jsonutil","helper/parseutil","helper/strutil"]
+  revision = "36edb4d42380d89a897e7f633046423240b710d9"
+  version = "v0.9.5"
 
 [[projects]]
   branch = "master"
@@ -161,7 +161,7 @@
   branch = "master"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
-  revision = "b4575eea38cca1123ec2dc90c26529b5c5acfcff"
+  revision = "00c29f56e2386353d58c599509e8dc3801b0d716"
 
 [[projects]]
   name = "github.com/nicholasjackson/bench"
@@ -184,14 +184,14 @@
 [[projects]]
   name = "github.com/openfaas/faas"
   packages = ["gateway/requests"]
-  revision = "262b0afda7a0161d3ee4b3dafdcc085128b215df"
-  version = "0.6.16"
+  revision = "76526b0be3eb2fb71f2fcb115870e7623bc54969"
+  version = "0.7.4"
 
 [[projects]]
   name = "github.com/openfaas/faas-provider"
   packages = [".","types"]
-  revision = "b9f261986a88ce62bbca20af2ff2dcf1d46a8df8"
-  version = "0.4"
+  revision = "c92df42e53902c7bc550436fd0ecc5790fdb11a4"
+  version = "0.5"
 
 [[projects]]
   name = "github.com/patrickmn/go-cache"
@@ -212,10 +212,16 @@
   version = "v1.0.0"
 
 [[projects]]
+  name = "github.com/ryanuber/go-glob"
+  packages = ["."]
+  revision = "572520ed46dbddaed19ea3d9541bdd0494163693"
+  version = "v0.1"
+
+[[projects]]
   branch = "master"
   name = "github.com/sethgrid/pester"
   packages = ["."]
-  revision = "760f8913c0483b776294e1bee43f1d687527127b"
+  revision = "ed9870dad3170c0b25ab9b11830cc57c3a7798fb"
 
 [[projects]]
   name = "github.com/stretchr/objx"
@@ -226,36 +232,36 @@
 [[projects]]
   name = "github.com/stretchr/testify"
   packages = ["assert","mock"]
-  revision = "b91bfb9ebec76498946beb6af7c0230c7cc7ba6c"
-  version = "v1.2.0"
+  revision = "12b6f73e6084dad08a7c6e575284b177ecafbc71"
+  version = "v1.2.1"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "5ccada7d0a7ba9aeb5d3aca8d3501b4c2a509fec"
+  revision = "07e8617a6db2368fa55d4616f371ee1b1403c817"
 
 [[projects]]
-  branch = "master"
   name = "golang.org/x/text"
   packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
-  revision = "e19ae1496984b1c655b8044a65c0300a3c878dd3"
+  revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
+  version = "v0.3.0"
 
 [[projects]]
   branch = "master"
   name = "google.golang.org/genproto"
   packages = ["googleapis/rpc/status"]
-  revision = "a8101f21cf983e773d0c1133ebc5424792003214"
+  revision = "df60624c1e9b9d2973e889c7a1cff73155da81c4"
 
 [[projects]]
   name = "google.golang.org/grpc"
-  packages = [".","balancer","balancer/base","balancer/roundrobin","codes","connectivity","credentials","encoding","grpclb/grpc_lb_v1/messages","grpclog","health","health/grpc_health_v1","internal","keepalive","metadata","naming","peer","resolver","resolver/dns","resolver/passthrough","stats","status","tap","transport"]
-  revision = "6b51017f791ae1cfbec89c52efdf444b13b550ef"
-  version = "v1.9.2"
+  packages = [".","balancer","balancer/base","balancer/roundrobin","codes","connectivity","credentials","encoding","encoding/proto","grpclb/grpc_lb_v1/messages","grpclog","health","health/grpc_health_v1","internal","keepalive","metadata","naming","peer","resolver","resolver/dns","resolver/passthrough","stats","status","tap","transport"]
+  revision = "8e4536a86ab602859c20df5ebfd0bd4228d08655"
+  version = "v1.10.0"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "4ba22f25828656c86c2ab24489a25e732a8b1d10534adca0f4f0b032978a989e"
+  inputs-digest = "f6d0ae42fc335170295060862f4ecf7837b72e7bddc499a1d1a0f047233fbf08"
   solver-name = "gps-cdcl"
   solver-version = 1

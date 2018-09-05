@@ -8,7 +8,7 @@ These instructions are for a development environment. If you plan to expose Open
 
 ## Initialize Swarm Mode
 
-You can create a single-host Docker Swarm on your laptop with a single command. You don't need any additional software to Docker 17.05 or greater. You can also run these commands on a Linux VM or cloud host.
+You can create a single-host Docker Swarm on your laptop with a single command. You don't need any additional software to Docker 17.06 or greater. You can also run these commands on a Linux VM or cloud host.
 
 This is how you initialize your master node:
 
@@ -35,7 +35,7 @@ Clone OpenFaaS and then checkout the latest stable release:
 ```
 $ git clone https://github.com/openfaas/faas && \
   cd faas && \
-  git checkout 0.6.5 && \
+  git checkout 0.7.1 && \
   ./deploy_stack.sh
 ```
 
@@ -54,3 +54,10 @@ If you're running on Linux you may find that `localhost` times out. In this case
 You can now grab a coffee and start learning how to create your first function with the CLI:
 
 [Morning coffee with the OpenFaaS CLI](https://blog.alexellis.io/quickstart-openfaas-cli/)
+
+## Troubleshooting
+
+If you are running into any issues please check out the troubleshooting guide and search the documentation / past issues before raising na issue.
+
+* [Troubleshooting guide](https://github.com/openfaas/faas/blob/master/guide/troubleshooting.md)
+

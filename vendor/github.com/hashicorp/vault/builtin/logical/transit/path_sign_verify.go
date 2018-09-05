@@ -1,6 +1,7 @@
 package transit
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
@@ -56,6 +57,11 @@ including ed25519.`,
 				Description: `The version of the key to use for signing.
 Must be 0 (for latest) or a value greater than or equal
 to the min_encryption_version configured on the key.`,
+			},
+
+			"prehashed": &framework.FieldSchema{
+				Type:        framework.TypeBool,
+				Description: `Set to 'true' when the input is already hashed. If the key type is 'rsa-2048' or 'rsa-4096', then the algorithm used to hash the input should be indicated by the 'algorithm' parameter.`,
 			},
 		},
 
@@ -115,6 +121,11 @@ derivation is enabled; currently only available with ed25519 keys.`,
 
 Defaults to "sha2-256". Not valid for all key types.`,
 			},
+
+			"prehashed": &framework.FieldSchema{
+				Type:        framework.TypeBool,
+				Description: `Set to 'true' when the input is already hashed. If the key type is 'rsa-2048' or 'rsa-4096', then the algorithm used to hash the input should be indicated by the 'algorithm' parameter.`,
+			},
 		},
 
 		Callbacks: map[logical.Operation]framework.OperationFunc{
@@ -126,8 +137,7 @@ Defaults to "sha2-256". Not valid for all key types.`,
 	}
 }
 
-func (b *backend) pathSignWrite(
-	req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
+func (b *backend) pathSignWrite(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
 	name := d.Get("name").(string)
 	ver := d.Get("key_version").(int)
 	inputB64 := d.Get("input").(string)
@@ -135,6 +145,7 @@ func (b *backend) pathSignWrite(
 	if algorithm == "" {
 		algorithm = d.Get("algorithm").(string)
 	}
+	prehashed := d.Get("prehashed").(bool)
 
 	input, err := base64.StdEncoding.DecodeString(inputB64)
 	if err != nil {
@@ -142,7 +153,7 @@ func (b *backend) pathSignWrite(
 	}
 
 	// Get the policy
-	p, lock, err := b.lm.GetPolicyShared(req.Storage, name)
+	p, lock, err := b.lm.GetPolicyShared(ctx, req.Storage, name)
 	if lock != nil {
 		defer lock.RUnlock()
 	}
@@ -166,7 +177,7 @@ func (b *backend) pathSignWrite(
 		}
 	}
 
-	if p.Type.HashSignatureInput() {
+	if p.Type.HashSignatureInput() && !prehashed {
 		var hf hash.Hash
 		switch algorithm {
 		case "sha2-224":
@@ -184,7 +195,7 @@ func (b *backend) pathSignWrite(
 		input = hf.Sum(nil)
 	}
 
-	sig, err := p.Sign(ver, context, input)
+	sig, err := p.Sign(ver, context, input, algorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -206,8 +217,7 @@ func (b *backend) pathSignWrite(
 	return resp, nil
 }
 
-func (b *backend) pathVerifyWrite(
-	req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
+func (b *backend) pathVerifyWrite(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
 
 	sig := d.Get("signature").(string)
 	hmac := d.Get("hmac").(string)
@@ -219,7 +229,7 @@ func (b *backend) pathVerifyWrite(
 		return logical.ErrorResponse("neither a 'signature' nor an 'hmac' were given to verify"), logical.ErrInvalidRequest
 
 	case hmac != "":
-		return b.pathHMACVerify(req, d, hmac)
+		return b.pathHMACVerify(ctx, req, d, hmac)
 	}
 
 	name := d.Get("name").(string)
@@ -228,6 +238,7 @@ func (b *backend) pathVerifyWrite(
 	if algorithm == "" {
 		algorithm = d.Get("algorithm").(string)
 	}
+	prehashed := d.Get("prehashed").(bool)
 
 	input, err := base64.StdEncoding.DecodeString(inputB64)
 	if err != nil {
@@ -235,7 +246,7 @@ func (b *backend) pathVerifyWrite(
 	}
 
 	// Get the policy
-	p, lock, err := b.lm.GetPolicyShared(req.Storage, name)
+	p, lock, err := b.lm.GetPolicyShared(ctx, req.Storage, name)
 	if lock != nil {
 		defer lock.RUnlock()
 	}
@@ -259,7 +270,7 @@ func (b *backend) pathVerifyWrite(
 		}
 	}
 
-	if p.Type.HashSignatureInput() {
+	if p.Type.HashSignatureInput() && !prehashed {
 		var hf hash.Hash
 		switch algorithm {
 		case "sha2-224":
@@ -277,7 +288,7 @@ func (b *backend) pathVerifyWrite(
 		input = hf.Sum(nil)
 	}
 
-	valid, err := p.VerifySignature(context, input, sig)
+	valid, err := p.VerifySignature(context, input, sig, algorithm)
 	if err != nil {
 		switch err.(type) {
 		case errutil.UserError:

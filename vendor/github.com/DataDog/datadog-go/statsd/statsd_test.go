@@ -3,10 +3,15 @@
 package statsd
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +35,7 @@ var dogstatsdTests = []struct {
 	{"", nil, "Count", "test.count", int64(1), []string{"tagA"}, 1.0, "test.count:1|c|#tagA"},
 	{"", nil, "Count", "test.count", int64(-1), []string{"tagA"}, 1.0, "test.count:-1|c|#tagA"},
 	{"", nil, "Histogram", "test.histogram", 2.3, []string{"tagA"}, 1.0, "test.histogram:2.300000|h|#tagA"},
+	{"", nil, "Distribution", "test.distribution", 2.3, []string{"tagA"}, 1.0, "test.distribution:2.300000|d|#tagA"},
 	{"", nil, "Set", "test.set", "uuid", []string{"tagA"}, 1.0, "test.set:uuid|s|#tagA"},
 	{"flubber.", nil, "Set", "test.set", "uuid", []string{"tagA"}, 1.0, "flubber.test.set:uuid|s|#tagA"},
 	{"", []string{"tagC"}, "Set", "test.set", "uuid", []string{"tagA"}, 1.0, "test.set:uuid|s|#tagC,tagA"},
@@ -45,7 +51,7 @@ func assertNotPanics(t *testing.T, f func()) {
 	f()
 }
 
-func TestClient(t *testing.T) {
+func TestClientUDP(t *testing.T) {
 	addr := "localhost:1201"
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
@@ -59,6 +65,84 @@ func TestClient(t *testing.T) {
 	defer server.Close()
 
 	client, err := New(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientTest(t, server, client)
+}
+
+type statsdWriterWrapper struct {
+	io.WriteCloser
+}
+
+func (statsdWriterWrapper) SetWriteTimeout(time.Duration) error {
+	return nil
+}
+
+func TestClientWithConn(t *testing.T) {
+	server, conn, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client, err := NewWithWriter(statsdWriterWrapper{conn})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientTest(t, server, client)
+}
+
+func clientTest(t *testing.T, server io.Reader, client *Client) {
+	for _, tt := range dogstatsdTests {
+		client.Namespace = tt.GlobalNamespace
+		client.Tags = tt.GlobalTags
+		method := reflect.ValueOf(client).MethodByName(tt.Method)
+		e := method.Call([]reflect.Value{
+			reflect.ValueOf(tt.Metric),
+			reflect.ValueOf(tt.Value),
+			reflect.ValueOf(tt.Tags),
+			reflect.ValueOf(tt.Rate)})[0]
+		errInter := e.Interface()
+		if errInter != nil {
+			t.Fatal(errInter.(error))
+		}
+
+		bytes := make([]byte, 1024)
+		n, err := server.Read(bytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		message := bytes[:n]
+		if string(message) != tt.Expected {
+			t.Errorf("Expected: %s. Actual: %s", tt.Expected, string(message))
+		}
+	}
+}
+
+func TestClientUDS(t *testing.T) {
+	dir, err := ioutil.TempDir("", "socket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir) // clean up
+
+	addr := filepath.Join(dir, "dsd.socket")
+
+	udsAddr, err := net.ResolveUnixAddr("unixgram", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server, err := net.ListenUnixgram("unixgram", udsAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+
+	addrParts := []string{UnixAddressPrefix, addr}
+	client, err := New(strings.Join(addrParts, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,6 +173,24 @@ func TestClient(t *testing.T) {
 	}
 }
 
+func TestClientUDSClose(t *testing.T) {
+	dir, err := ioutil.TempDir("", "socket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir) // clean up
+
+	addr := filepath.Join(dir, "dsd.socket")
+
+	addrParts := []string{UnixAddressPrefix, addr}
+	client, err := New(strings.Join(addrParts, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertNotPanics(t, func() { client.Close() })
+}
+
 func TestBufferedClient(t *testing.T) {
 	addr := "localhost:1201"
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
@@ -102,16 +204,10 @@ func TestBufferedClient(t *testing.T) {
 	}
 	defer server.Close()
 
-	conn, err := net.DialUDP("udp", nil, udpAddr)
+	bufferLength := 9
+	client, err := NewBuffered(addr, bufferLength)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	bufferLength := 8
-	client := &Client{
-		conn:         conn,
-		commands:     make([]string, 0, bufferLength),
-		bufferLength: bufferLength,
 	}
 
 	client.Namespace = "foo."
@@ -124,15 +220,18 @@ func TestBufferedClient(t *testing.T) {
 	client.Count("cc", 1, nil, 1)
 	client.Gauge("gg", 10, nil, 1)
 	client.Histogram("hh", 1, nil, 1)
+	client.Distribution("dd", 1, nil, 1)
 	client.Timing("tt", dur, nil, 1)
 	client.Set("ss", "ss", nil, 1)
 
-	if len(client.commands) != 7 {
-		t.Errorf("Expected client to have buffered 7 commands, but found %d\n", len(client.commands))
+	if len(client.commands) != (bufferLength - 1) {
+		t.Errorf("Expected client to have buffered %d commands, but found %d\n", (bufferLength - 1), len(client.commands))
 	}
 
 	client.Set("ss", "xx", nil, 1)
-	err = client.flush()
+	client.Lock()
+	err = client.flushLocked()
+	client.Unlock()
 	if err != nil {
 		t.Errorf("Error sending: %s", err)
 	}
@@ -155,6 +254,7 @@ func TestBufferedClient(t *testing.T) {
 		`foo.cc:1|c|#dd:2`,
 		`foo.gg:10.000000|g|#dd:2`,
 		`foo.hh:1.000000|h|#dd:2`,
+		`foo.dd:1.000000|d|#dd:2`,
 		`foo.tt:0.123000|ms|#dd:2`,
 		`foo.ss:ss|s|#dd:2`,
 		`foo.ss:xx|s|#dd:2`,
@@ -173,7 +273,9 @@ func TestBufferedClient(t *testing.T) {
 		t.Errorf("Expected to find %d commands, but found %d\n", 2, len(client.commands))
 	}
 
-	err = client.flush()
+	client.Lock()
+	err = client.flushLocked()
+	client.Unlock()
 
 	if err != nil {
 		t.Errorf("Error sending: %s", err)
@@ -206,6 +308,83 @@ func TestBufferedClient(t *testing.T) {
 		}
 	}
 
+}
+
+func TestBufferedClientBackground(t *testing.T) {
+	addr := "localhost:1201"
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+
+	bufferLength := 5
+	client, err := NewBuffered(addr, bufferLength)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	client.Namespace = "foo."
+	client.Tags = []string{"dd:2"}
+
+	client.Count("cc", 1, nil, 1)
+	client.Gauge("gg", 10, nil, 1)
+	client.Histogram("hh", 1, nil, 1)
+	client.Distribution("dd", 1, nil, 1)
+	client.Set("ss", "ss", nil, 1)
+	client.Set("ss", "xx", nil, 1)
+
+	time.Sleep(client.flushTime * 2)
+	client.Lock()
+	if len(client.commands) != 0 {
+		t.Errorf("Watch goroutine should have flushed commands, but found %d\n", len(client.commands))
+	}
+	client.Unlock()
+}
+
+func TestBufferedClientFlush(t *testing.T) {
+	addr := "localhost:1201"
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+
+	bufferLength := 5
+	client, err := NewBuffered(addr, bufferLength)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	client.Namespace = "foo."
+	client.Tags = []string{"dd:2"}
+
+	client.Count("cc", 1, nil, 1)
+	client.Gauge("gg", 10, nil, 1)
+	client.Histogram("hh", 1, nil, 1)
+	client.Distribution("dd", 1, nil, 1)
+	client.Set("ss", "ss", nil, 1)
+	client.Set("ss", "xx", nil, 1)
+
+	client.Flush()
+
+	client.Lock()
+	if len(client.commands) != 0 {
+		t.Errorf("Flush should have flushed commands, but found %d\n", len(client.commands))
+	}
+	client.Unlock()
 }
 
 func TestJoinMaxSize(t *testing.T) {
@@ -338,7 +517,7 @@ func TestJoinMaxSize(t *testing.T) {
 	}
 }
 
-func TestSendMsg(t *testing.T) {
+func TestSendMsgUDP(t *testing.T) {
 	addr := "localhost:1201"
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
@@ -351,15 +530,9 @@ func TestSendMsg(t *testing.T) {
 	}
 	defer server.Close()
 
-	conn, err := net.DialUDP("udp", nil, udpAddr)
+	client, err := New(addr)
 	if err != nil {
 		t.Fatal(err)
-	}
-	defer conn.Close()
-
-	client := &Client{
-		conn:         conn,
-		bufferLength: 0,
 	}
 
 	err = client.sendMsg(strings.Repeat("x", MaxUDPPayloadSize+1))
@@ -367,9 +540,9 @@ func TestSendMsg(t *testing.T) {
 		t.Error("Expected error to be returned if message size is bigger than MaxUDPPayloadSize")
 	}
 
-	longMsg := strings.Repeat("x", MaxUDPPayloadSize)
+	message := "test message"
 
-	err = client.sendMsg(longMsg)
+	err = client.sendMsg(message)
 	if err != nil {
 		t.Errorf("Expected no error to be returned if message size is smaller or equal to MaxUDPPayloadSize, got: %s", err.Error())
 	}
@@ -381,18 +554,17 @@ func TestSendMsg(t *testing.T) {
 		t.Fatalf("Expected no error to be returned reading the buffer, got: %s", err.Error())
 	}
 
-	if n != MaxUDPPayloadSize {
+	if n != len(message) {
 		t.Fatalf("Failed to read full message from buffer. Got size `%d` expected `%d`", n, MaxUDPPayloadSize)
 	}
 
-	if string(buffer[:n]) != longMsg {
+	if string(buffer[:n]) != message {
 		t.Fatalf("The received message did not match what we expect.")
 	}
 
-	client = &Client{
-		conn:         conn,
-		commands:     make([]string, 0, 1),
-		bufferLength: 1,
+	client, err = NewBuffered(addr, 1)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	err = client.sendMsg(strings.Repeat("x", MaxUDPPayloadSize+1))
@@ -400,13 +572,13 @@ func TestSendMsg(t *testing.T) {
 		t.Error("Expected error to be returned if message size is bigger than MaxUDPPayloadSize")
 	}
 
-	err = client.sendMsg(longMsg)
+	err = client.sendMsg(message)
 	if err != nil {
 		t.Errorf("Expected no error to be returned if message size is smaller or equal to MaxUDPPayloadSize, got: %s", err.Error())
 	}
 
 	client.Lock()
-	err = client.flush()
+	err = client.flushLocked()
 	client.Unlock()
 
 	if err != nil {
@@ -420,12 +592,107 @@ func TestSendMsg(t *testing.T) {
 		t.Fatalf("Expected no error to be returned reading the buffer, got: %s", err.Error())
 	}
 
-	if n != MaxUDPPayloadSize {
+	if n != len(message) {
 		t.Fatalf("Failed to read full message from buffer. Got size `%d` expected `%d`", n, MaxUDPPayloadSize)
 	}
 
-	if string(buffer[:n]) != longMsg {
+	if string(buffer[:n]) != message {
 		t.Fatalf("The received message did not match what we expect.")
+	}
+}
+
+func TestSendUDSErrors(t *testing.T) {
+	dir, err := ioutil.TempDir("", "socket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir) // clean up
+
+	message := "test message"
+
+	addr := filepath.Join(dir, "dsd.socket")
+	udsAddr, err := net.ResolveUnixAddr("unixgram", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addrParts := []string{UnixAddressPrefix, addr}
+	client, err := New(strings.Join(addrParts, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Server not listening yet
+	err = client.sendMsg(message)
+	if err == nil || !strings.HasSuffix(err.Error(), "no such file or directory") {
+		t.Errorf("Expected error \"no such file or directory\", got: %s", err.Error())
+	}
+
+	// Start server and send packet
+	server, err := net.ListenUnixgram("unixgram", udsAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.sendMsg(message)
+	if err != nil {
+		t.Errorf("Expected no error to be returned when server is listening, got: %s", err.Error())
+	}
+	bytes := make([]byte, 1024)
+	n, err := server.Read(bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(bytes[:n]) != message {
+		t.Errorf("Expected: %s. Actual: %s", string(message), string(bytes))
+	}
+
+	// close server and send packet
+	server.Close()
+	os.Remove(addr)
+	err = client.sendMsg(message)
+	if err == nil {
+		t.Error("Expected an error, got nil")
+	}
+
+	// Restart server and send packet
+	server, err = net.ListenUnixgram("unixgram", udsAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	defer server.Close()
+	err = client.sendMsg(message)
+	if err != nil {
+		t.Errorf("Expected no error to be returned when server is listening, got: %s", err.Error())
+	}
+
+	bytes = make([]byte, 1024)
+	n, err = server.Read(bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(bytes[:n]) != message {
+		t.Errorf("Expected: %s. Actual: %s", string(message), string(bytes))
+	}
+}
+
+func TestSendUDSIgnoreErrors(t *testing.T) {
+	client, err := New("unix:///invalid")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Default mode throws error
+	err = client.sendMsg("message")
+	if err == nil || !strings.HasSuffix(err.Error(), "no such file or directory") {
+		t.Errorf("Expected error \"connect: no such file or directory\", got: %s", err.Error())
+	}
+
+	// Skip errors
+	client.SkipErrors = true
+	err = client.sendMsg("message")
+	if err != nil {
+		t.Errorf("Expected no error to be returned when in skip errors mode, got: %s", err.Error())
 	}
 }
 
@@ -434,9 +701,12 @@ func TestNilSafe(t *testing.T) {
 	assertNotPanics(t, func() { c.Close() })
 	assertNotPanics(t, func() { c.Count("", 0, nil, 1) })
 	assertNotPanics(t, func() { c.Histogram("", 0, nil, 1) })
+	assertNotPanics(t, func() { c.Distribution("", 0, nil, 1) })
 	assertNotPanics(t, func() { c.Gauge("", 0, nil, 1) })
 	assertNotPanics(t, func() { c.Set("", "", nil, 1) })
-	assertNotPanics(t, func() { c.send("", "", nil, 1) })
+	assertNotPanics(t, func() {
+		c.send("", "", []byte(""), nil, 1)
+	})
 	assertNotPanics(t, func() { c.SimpleEvent("", "") })
 }
 
@@ -574,25 +844,68 @@ func TestServiceChecks(t *testing.T) {
 	}
 }
 
-// These benchmarks show that using a buffer instead of sprintf-ing together
-// a bunch of intermediate strings is 4-5x faster
+func TestFlushOnClose(t *testing.T) {
+	client, err := NewBuffered("localhost:1201", 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// stop the flushing mechanism so we can test the buffer without interferences
+	client.stop <- struct{}{}
 
-func BenchmarkFormatNew(b *testing.B) {
+	message := "test message"
+
+	err = client.sendMsg(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(client.commands) != 1 {
+		t.Errorf("Commands buffer should contain 1 item, got %d", len(client.commands))
+	}
+
+	err = client.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(client.commands) != 0 {
+		t.Errorf("Commands buffer should be empty, got %d", len(client.commands))
+	}
+}
+
+// These benchmarks show that using different format options:
+// v1: sprintf-ing together a bunch of intermediate strings is 4-5x faster
+// v2: some use of buffer
+// v3: removing sprintf from stat generation and pushing stat building into format
+func BenchmarkFormatV3(b *testing.B) {
 	b.StopTimer()
 	c := &Client{}
 	c.Namespace = "foo.bar."
 	c.Tags = []string{"app:foo", "host:bar"}
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		c.format("system.cpu.idle", "10", []string{"foo"}, 1)
-		c.format("system.cpu.load", "0.1", nil, 0.9)
+		c.format("system.cpu.idle", 10, gaugeSuffix, []string{"foo"}, 1)
+		c.format("system.cpu.load", 0.1, gaugeSuffix, nil, 0.9)
 	}
 }
 
-// Old formatting function, added to client for tests
-func (c *Client) formatOld(name, value string, tags []string, rate float64) string {
+func BenchmarkFormatV1(b *testing.B) {
+	b.StopTimer()
+	c := &Client{}
+	c.Namespace = "foo.bar."
+	c.Tags = []string{"app:foo", "host:bar"}
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		c.formatV1("system.cpu.idle", 10, []string{"foo"}, 1)
+		c.formatV1("system.cpu.load", 0.1, nil, 0.9)
+	}
+}
+
+// V1 formatting function, added to client for tests
+func (c *Client) formatV1(name string, value float64, tags []string, rate float64) string {
+	valueAsString := fmt.Sprintf("%f|g", value)
 	if rate < 1 {
-		value = fmt.Sprintf("%s|@%f", value, rate)
+		valueAsString = fmt.Sprintf("%s|@%f", valueAsString, rate)
 	}
 	if c.Namespace != "" {
 		name = fmt.Sprintf("%s%s", c.Namespace, name)
@@ -600,21 +913,40 @@ func (c *Client) formatOld(name, value string, tags []string, rate float64) stri
 
 	tags = append(c.Tags, tags...)
 	if len(tags) > 0 {
-		value = fmt.Sprintf("%s|#%s", value, strings.Join(tags, ","))
+		valueAsString = fmt.Sprintf("%s|#%s", valueAsString, strings.Join(tags, ","))
 	}
 
-	return fmt.Sprintf("%s:%s", name, value)
+	return fmt.Sprintf("%s:%s", name, valueAsString)
 
 }
 
-func BenchmarkFormatOld(b *testing.B) {
+func BenchmarkFormatV2(b *testing.B) {
 	b.StopTimer()
 	c := &Client{}
 	c.Namespace = "foo.bar."
 	c.Tags = []string{"app:foo", "host:bar"}
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		c.formatOld("system.cpu.idle", "10", []string{"foo"}, 1)
-		c.formatOld("system.cpu.load", "0.1", nil, 0.9)
+		c.formatV2("system.cpu.idle", 10, []string{"foo"}, 1)
+		c.formatV2("system.cpu.load", 0.1, nil, 0.9)
 	}
+}
+
+// V2 formatting function, added to client for tests
+func (c *Client) formatV2(name string, value float64, tags []string, rate float64) string {
+	var buf bytes.Buffer
+	if c.Namespace != "" {
+		buf.WriteString(c.Namespace)
+	}
+	buf.WriteString(name)
+	buf.WriteString(":")
+	buf.WriteString(fmt.Sprintf("%f|g", value))
+	if rate < 1 {
+		buf.WriteString(`|@`)
+		buf.WriteString(strconv.FormatFloat(rate, 'f', -1, 64))
+	}
+
+	writeTagString(&buf, c.Tags, tags)
+
+	return buf.String()
 }
