@@ -37,12 +37,20 @@ Nomad tokens.
   This value can also be provided on individual calls with the NOMAD_TOKEN 
   environment variable.
 
+- `max_token_name_length` `(int: <optional>)` – Specifies the maximum length to
+  use for the name of the Nomad token generated with [Generate
+  Credential](#generate-credential). If omitted, `0` is used and ignored,
+  defaulting to the max value allowed by the Nomad version. For Nomad versions
+  0.8.3 and earlier, the default is `64`. For Nomad version 0.8.4 and later, the default is
+  `256`.
+
 ### Sample Payload
 
 ```json
 {
   "address": "http://127.0.0.1:4646",
-  "token": "adha..."
+  "token": "adha...",
+  "max_token_name_length": 256
 }
 ```
 
@@ -53,7 +61,7 @@ $ curl \
     --request POST \
     --header "X-Vault-Token: ..." \
     --data @payload.json \
-    https://vault.rocks/v1/nomad/config/access
+    http://127.0.0.1:8200/v1/nomad/config/access
 ```
 
 ## Read Access Configuration
@@ -69,7 +77,7 @@ This endpoint queries for information about the Nomad connection.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/nomad/config/access
+    http://127.0.0.1:8200/v1/nomad/config/access
 ```
 
 ### Sample Response
@@ -114,7 +122,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/nomad/config/lease
+    http://127.0.0.1:8200/v1/nomad/config/lease
 ```
 
 ## Read Lease Configuration
@@ -130,7 +138,7 @@ This endpoint queries for information about the Lease TTL for the specified moun
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/nomad/config/lease
+    http://127.0.0.1:8200/v1/nomad/config/lease
 ```
 
 ### Sample Response
@@ -156,7 +164,7 @@ This endpoint deletes the lease configuration.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/nomad/config/lease
+    http://127.0.0.1:8200/v1/nomad/config/lease
 ```
 
 ## Create/Update Role
@@ -172,10 +180,6 @@ updated attributes.
 
 - `name` `(string: <required>)` – Specifies the name of an existing role against
   which to create this Nomad tokens. This is part of the request URL.
-
-- `lease` `(string: "")` – Specifies the lease for this role. This is provided
-  as a string duration with a time suffix like `"30s"` or `"1h"` or as total 
-  seconds. If not provided, the default Vault lease is used.
 
 - `policies` `(string: "")` – Comma separated list of Nomad policies the token is going to be created against. These need to be created beforehand in Nomad.
 
@@ -202,7 +206,7 @@ $ curl \
     --request POST \
     --header "X-Vault-Token: ..." \
     --data @payload.json \
-    https://vault.rocks/v1/nomad/role/monitoring
+    http://127.0.0.1:8200/v1/nomad/role/monitoring
 ```
 
 ## Read Role
@@ -224,7 +228,7 @@ If no role exists with that name, a 404 is returned.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/nomad/role/monitoring
+    http://127.0.0.1:8200/v1/nomad/role/monitoring
 ```
 
 ### Sample Response
@@ -256,7 +260,7 @@ This endpoint lists all existing roles in the backend.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/nomad/role
+    http://127.0.0.1:8200/v1/nomad/role
 ```
 
 ### Sample Response
@@ -291,7 +295,7 @@ not exist, this endpoint will still return a successful response.
 $ curl \
     --request DELETE \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/nomad/role/example-role
+    http://127.0.0.1:8200/v1/nomad/role/example-role
 ```
 
 ## Generate Credential
@@ -313,7 +317,7 @@ definition.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/nomad/creds/example
+    http://127.0.0.1:8200/v1/nomad/creds/example
 ```
 
 ### Sample Response

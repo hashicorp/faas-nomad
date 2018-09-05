@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/openfaas/faas/gateway/handlers"
 
-	internalHandlers "github.com/openfaas/faas/gateway/handlers"
 	"github.com/openfaas/faas/gateway/metrics"
 	"github.com/openfaas/faas/gateway/plugin"
 	"github.com/openfaas/faas/gateway/types"
@@ -28,65 +28,133 @@ func main() {
 	log.Printf("HTTP Write Timeout: %s", config.WriteTimeout)
 
 	if !config.UseExternalProvider() {
-		log.Fatalln("As of this version of OpenFaaS, you must use external provider even for Docker Swarm.")
+		log.Fatalln("You must provide an external provider via 'functions_provider_url' env-var.")
 	}
 
 	log.Printf("Binding to external function provider: %s", config.FunctionsProviderURL)
 
-	metricsOptions := metrics.BuildMetricsOptions()
-	metrics.RegisterMetrics(metricsOptions)
+	var credentials *types.BasicAuthCredentials
+
+	if config.UseBasicAuth {
+		var readErr error
+		reader := types.ReadBasicAuthFromDisk{
+			SecretMountPath: config.SecretMountPath,
+		}
+		credentials, readErr = reader.Read()
+
+		if readErr != nil {
+			log.Panicf(readErr.Error())
+		}
+	}
 
 	var faasHandlers types.HandlerSet
 
 	servicePollInterval := time.Second * 5
 
-	reverseProxy := types.NewHTTPClientReverseProxy(config.FunctionsProviderURL, config.ReadTimeout)
+	metricsOptions := metrics.BuildMetricsOptions()
+	exporter := metrics.NewExporter(metricsOptions)
+	exporter.StartServiceWatcher(*config.FunctionsProviderURL, metricsOptions, "func", servicePollInterval)
+	metrics.RegisterExporter(exporter)
 
-	faasHandlers.Proxy = internalHandlers.MakeForwardingProxyHandler(reverseProxy, &metricsOptions)
-	faasHandlers.RoutelessProxy = internalHandlers.MakeForwardingProxyHandler(reverseProxy, &metricsOptions)
-	faasHandlers.ListFunctions = internalHandlers.MakeForwardingProxyHandler(reverseProxy, &metricsOptions)
-	faasHandlers.DeployFunction = internalHandlers.MakeForwardingProxyHandler(reverseProxy, &metricsOptions)
-	faasHandlers.DeleteFunction = internalHandlers.MakeForwardingProxyHandler(reverseProxy, &metricsOptions)
-	faasHandlers.UpdateFunction = internalHandlers.MakeForwardingProxyHandler(reverseProxy, &metricsOptions)
+	reverseProxy := types.NewHTTPClientReverseProxy(config.FunctionsProviderURL, config.UpstreamTimeout)
 
-	queryFunction := internalHandlers.MakeForwardingProxyHandler(reverseProxy, &metricsOptions)
+	loggingNotifier := handlers.LoggingNotifier{}
+	prometheusNotifier := handlers.PrometheusFunctionNotifier{
+		Metrics: &metricsOptions,
+	}
+	functionNotifiers := []handlers.HTTPNotifier{loggingNotifier, prometheusNotifier}
+	forwardingNotifiers := []handlers.HTTPNotifier{loggingNotifier}
+
+	urlResolver := handlers.SingleHostBaseURLResolver{BaseURL: config.FunctionsProviderURL.String()}
+	var functionURLResolver handlers.BaseURLResolver
+
+	if config.DirectFunctions {
+		functionURLResolver = handlers.FunctionAsHostBaseURLResolver{FunctionSuffix: config.DirectFunctionsSuffix}
+	} else {
+		functionURLResolver = urlResolver
+	}
+
+	nilURLTransformer := handlers.TransparentURLPathTransformer{}
+	functionURLTransformer := handlers.FunctionPrefixTrimmingURLPathTransformer{}
+
+	faasHandlers.Proxy = handlers.MakeForwardingProxyHandler(reverseProxy, functionNotifiers, functionURLResolver, functionURLTransformer)
+
+	faasHandlers.RoutelessProxy = handlers.MakeForwardingProxyHandler(reverseProxy, forwardingNotifiers, urlResolver, nilURLTransformer)
+	faasHandlers.ListFunctions = handlers.MakeForwardingProxyHandler(reverseProxy, forwardingNotifiers, urlResolver, nilURLTransformer)
+	faasHandlers.DeployFunction = handlers.MakeForwardingProxyHandler(reverseProxy, forwardingNotifiers, urlResolver, nilURLTransformer)
+	faasHandlers.DeleteFunction = handlers.MakeForwardingProxyHandler(reverseProxy, forwardingNotifiers, urlResolver, nilURLTransformer)
+	faasHandlers.UpdateFunction = handlers.MakeForwardingProxyHandler(reverseProxy, forwardingNotifiers, urlResolver, nilURLTransformer)
+	queryFunction := handlers.MakeForwardingProxyHandler(reverseProxy, forwardingNotifiers, urlResolver, nilURLTransformer)
 
 	alertHandler := plugin.NewExternalServiceQuery(*config.FunctionsProviderURL)
-	faasHandlers.Alert = internalHandlers.MakeAlertHandler(alertHandler)
-
-	metrics.AttachExternalWatcher(*config.FunctionsProviderURL, metricsOptions, "func", servicePollInterval)
+	faasHandlers.Alert = handlers.MakeAlertHandler(alertHandler)
 
 	if config.UseNATS() {
 		log.Println("Async enabled: Using NATS Streaming.")
-		natsQueue, queueErr := natsHandler.CreateNatsQueue(*config.NATSAddress, *config.NATSPort)
+		natsQueue, queueErr := natsHandler.CreateNatsQueue(*config.NATSAddress, *config.NATSPort, natsHandler.DefaultNatsConfig{})
 		if queueErr != nil {
 			log.Fatalln(queueErr)
 		}
 
-		faasHandlers.QueuedProxy = internalHandlers.MakeQueuedProxy(metricsOptions, true, natsQueue)
-		faasHandlers.AsyncReport = internalHandlers.MakeAsyncReport(metricsOptions)
+		faasHandlers.QueuedProxy = handlers.MakeCallIDMiddleware(handlers.MakeQueuedProxy(metricsOptions, true, natsQueue, functionURLTransformer))
+		faasHandlers.AsyncReport = handlers.MakeAsyncReport(metricsOptions)
 	}
 
 	prometheusQuery := metrics.NewPrometheusQuery(config.PrometheusHost, config.PrometheusPort, &http.Client{})
-	listFunctions := metrics.AddMetricsHandler(faasHandlers.ListFunctions, prometheusQuery)
-	faasHandlers.Proxy = internalHandlers.MakeCallIDMiddleware(faasHandlers.Proxy)
-	r := mux.NewRouter()
+	faasHandlers.ListFunctions = metrics.AddMetricsHandler(faasHandlers.ListFunctions, prometheusQuery)
+	faasHandlers.Proxy = handlers.MakeCallIDMiddleware(faasHandlers.Proxy)
 
+	faasHandlers.ScaleFunction = handlers.MakeForwardingProxyHandler(reverseProxy, forwardingNotifiers, urlResolver, nilURLTransformer)
+
+	if credentials != nil {
+		faasHandlers.UpdateFunction =
+			handlers.DecorateWithBasicAuth(faasHandlers.UpdateFunction, credentials)
+		faasHandlers.DeleteFunction =
+			handlers.DecorateWithBasicAuth(faasHandlers.DeleteFunction, credentials)
+		faasHandlers.DeployFunction =
+			handlers.DecorateWithBasicAuth(faasHandlers.DeployFunction, credentials)
+		faasHandlers.ListFunctions =
+			handlers.DecorateWithBasicAuth(faasHandlers.ListFunctions, credentials)
+		faasHandlers.ScaleFunction =
+			handlers.DecorateWithBasicAuth(faasHandlers.ScaleFunction, credentials)
+	}
+
+	r := mux.NewRouter()
+	// max wait time to start a function = maxPollCount * functionPollInterval
+
+	functionProxy := faasHandlers.Proxy
+
+	if config.ScaleFromZero {
+		scalingConfig := handlers.ScalingConfig{
+			MaxPollCount:         uint(1000),
+			FunctionPollInterval: time.Millisecond * 10,
+			CacheExpiry:          time.Second * 5, // freshness of replica values before going stale
+			ServiceQuery:         alertHandler,
+		}
+
+		functionProxy = handlers.MakeScalingHandler(faasHandlers.Proxy, queryFunction, scalingConfig)
+	}
 	// r.StrictSlash(false)	// This didn't work, so register routes twice.
-	r.HandleFunc("/function/{name:[-a-zA-Z_0-9]+}", faasHandlers.Proxy)
-	r.HandleFunc("/function/{name:[-a-zA-Z_0-9]+}/", faasHandlers.Proxy)
+	r.HandleFunc("/function/{name:[-a-zA-Z_0-9]+}", functionProxy)
+	r.HandleFunc("/function/{name:[-a-zA-Z_0-9]+}/", functionProxy)
+	r.HandleFunc("/function/{name:[-a-zA-Z_0-9]+}/{params:.*}", functionProxy)
+
+	r.HandleFunc("/system/info", handlers.MakeInfoHandler(handlers.MakeForwardingProxyHandler(
+		reverseProxy, forwardingNotifiers, urlResolver, nilURLTransformer))).Methods(http.MethodGet)
 
 	r.HandleFunc("/system/alert", faasHandlers.Alert)
 
-	r.HandleFunc("/system/function/{name:[-a-zA-Z_0-9]+}", queryFunction).Methods("GET")
-	r.HandleFunc("/system/functions", listFunctions).Methods("GET")
-	r.HandleFunc("/system/functions", faasHandlers.DeployFunction).Methods("POST")
-	r.HandleFunc("/system/functions", faasHandlers.DeleteFunction).Methods("DELETE")
-	r.HandleFunc("/system/functions", faasHandlers.UpdateFunction).Methods("PUT")
+	r.HandleFunc("/system/function/{name:[-a-zA-Z_0-9]+}", queryFunction).Methods(http.MethodGet)
+	r.HandleFunc("/system/functions", faasHandlers.ListFunctions).Methods(http.MethodGet)
+	r.HandleFunc("/system/functions", faasHandlers.DeployFunction).Methods(http.MethodPost)
+	r.HandleFunc("/system/functions", faasHandlers.DeleteFunction).Methods(http.MethodDelete)
+	r.HandleFunc("/system/functions", faasHandlers.UpdateFunction).Methods(http.MethodPut)
+	r.HandleFunc("/system/scale-function/{name:[-a-zA-Z_0-9]+}", faasHandlers.ScaleFunction).Methods(http.MethodPost)
 
 	if faasHandlers.QueuedProxy != nil {
-		r.HandleFunc("/async-function/{name:[-a-zA-Z_0-9]+}/", faasHandlers.QueuedProxy).Methods("POST")
-		r.HandleFunc("/async-function/{name:[-a-zA-Z_0-9]+}", faasHandlers.QueuedProxy).Methods("POST")
+		r.HandleFunc("/async-function/{name:[-a-zA-Z_0-9]+}/", faasHandlers.QueuedProxy).Methods(http.MethodPost)
+		r.HandleFunc("/async-function/{name:[-a-zA-Z_0-9]+}", faasHandlers.QueuedProxy).Methods(http.MethodPost)
+		r.HandleFunc("/async-function/{name:[-a-zA-Z_0-9]+}/{params:.*}", faasHandlers.QueuedProxy).Methods(http.MethodPost)
 
 		r.HandleFunc("/system/async-report", faasHandlers.AsyncReport)
 	}
@@ -95,15 +163,20 @@ func main() {
 
 	// This URL allows access from the UI to the OpenFaaS store
 	allowedCORSHost := "raw.githubusercontent.com"
-	fsCORS := internalHandlers.DecorateWithCORS(fs, allowedCORSHost)
+	fsCORS := handlers.DecorateWithCORS(fs, allowedCORSHost)
 
-	r.PathPrefix("/ui/").Handler(http.StripPrefix("/ui", fsCORS)).Methods("GET")
-
-	r.HandleFunc("/", faasHandlers.RoutelessProxy).Methods("POST")
+	uiHandler := http.StripPrefix("/ui", fsCORS)
+	if credentials != nil {
+		r.PathPrefix("/ui/").Handler(handlers.DecorateWithBasicAuth(uiHandler.ServeHTTP, credentials)).Methods(http.MethodGet)
+	} else {
+		r.PathPrefix("/ui/").Handler(uiHandler).Methods(http.MethodGet)
+	}
 
 	metricsHandler := metrics.PrometheusHandler()
 	r.Handle("/metrics", metricsHandler)
-	r.Handle("/", http.RedirectHandler("/ui/", http.StatusMovedPermanently)).Methods("GET")
+	r.HandleFunc("/healthz", handlers.MakeForwardingProxyHandler(reverseProxy, forwardingNotifiers, urlResolver, nilURLTransformer)).Methods(http.MethodGet)
+
+	r.Handle("/", http.RedirectHandler("/ui/", http.StatusMovedPermanently)).Methods(http.MethodGet)
 
 	tcpPort := 8080
 

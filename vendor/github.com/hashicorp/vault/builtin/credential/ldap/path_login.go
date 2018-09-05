@@ -107,14 +107,11 @@ func (b *backend) pathLoginRenew(ctx context.Context, req *logical.Request, d *f
 		return resp, err
 	}
 
-	if !policyutil.EquivalentPolicies(loginPolicies, req.Auth.Policies) {
+	if !policyutil.EquivalentPolicies(loginPolicies, req.Auth.TokenPolicies) {
 		return nil, fmt.Errorf("policies have changed, not renewing")
 	}
 
-	resp, err = framework.LeaseExtend(0, 0, b.System())(ctx, req, d)
-	if err != nil {
-		return nil, err
-	}
+	resp.Auth = req.Auth
 
 	// Remove old aliases
 	resp.Auth.GroupAliases = nil

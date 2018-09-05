@@ -17,7 +17,7 @@ expires or is revoked, all the secrets in its cubbyhole are revoked as well.
 
 It is not possible to reach into another token's cubbyhole even as the root
 user. This is the key difference between the cubbyhole and the key/value secret
-backend. The secrets in the key/value backends are accessible to any token for as
+engine. The secrets in the key/value secret engine are accessible to any token for as
 long as its policy allows it.
 
 
@@ -25,6 +25,11 @@ long as its policy allows it.
 
 - [Cubbyhole](/docs/secrets/cubbyhole/index.html)
 - [Response Wrapping](/docs/concepts/response-wrapping.html)
+
+~> **NOTE:** An [interactive
+tutorial](https://www.katacoda.com/hashicorp/scenarios/vault-cubbyhole) is
+also available if you do not have a Vault environment to perform the steps
+described in this guide.
 
 ## Estimated Time to Complete
 
@@ -53,10 +58,11 @@ How can you securely distribute the initial token to the trusted entity?
 ## Solution
 
 Use Vault's **cubbyhole response wrapping** where the initial token is stored in
-the cubbyhole backend. The wrapped secret can be unwrapped using the single-use
-wrapping token. Even the user or the system created the initial token won't see
-the original value. The wrapping token is short-lived and can be revoked just
-like any other tokens so that the risk of unauthorized access can be minimized.
+the cubbyhole secret engine. The wrapped secret can be unwrapped using the
+single-use wrapping token. Even the user or the system created the initial token
+won't see the original value. The wrapping token is short-lived and can be
+revoked just like any other tokens so that the risk of unauthorized access can
+be minimized.
 
 ## Prerequisites
 
@@ -87,11 +93,14 @@ path "sys/policy/*" {
   capabilities = [ "create", "read", "update", "delete", "list" ]
 }
 
-# Manage secret/dev secret backend - for Verification test
+# Manage secret/dev secret engine - for Verification test
 path "secret/dev" {
   capabilities = [ "create", "read", "update", "delete", "list" ]
 }
 ```
+
+If you are not familiar with policies, complete the
+[policies](/guides/identity/policies.html) guide.
 
 ## Steps
 
@@ -190,7 +199,7 @@ $ curl --header "X-Vault-Token: <TOKEN>" \
 ```
 
 Where `<TOKEN>` is your valid token, and `<PAYLOAD>` includes policy name and
-stringfied policy.
+stringified policy.
 
 **Example:**
 
@@ -203,7 +212,7 @@ $ cat payload.json
 
 # API call to create a policy named, "apps"
 $ curl --header "X-Vault-Token: ..." --request PUT --data @payload.json \
-       https://vault.rocks/v1/sys/policy/apps
+       http://127.0.0.1:8200/v1/sys/policy/apps
 ```
 
 Response wrapping is per-request and is triggered by providing to Vault the
@@ -231,7 +240,7 @@ $ curl --header "X-Vault-Wrap-TTL: 120" \
        --header "X-Vault-Token: ..." \
        --request POST \
        --data '{"policies":["apps"]}' \
-       https://vault.rocks/v1/auth/token/create | jq
+       http://127.0.0.1:8200/v1/auth/token/create | jq
 {
   "request_id": "",
   "lease_id": "",
@@ -351,7 +360,7 @@ First, create a token with `default` policy:
 # Create a new token default policy
 $ curl --header "X-Vault-Token: ..." --request POST \
      --data '{"policies": "default"}' \
-     https://vault.rocks/v1/auth/token/create | jq
+     http://127.0.0.1:8200/v1/auth/token/create | jq
 {
   ...
   "auth": {
@@ -367,7 +376,7 @@ $ curl --header "X-Vault-Token: ..." --request POST \
 # Verify that you can NOT read secret/dev using default token
 $ curl --header "X-Vault-Token: 5fe14760-b0fd-22dc-403c-14a05003b67f" \
        --request GET \
-       https://vault.rocks/v1/secret/dev | jq
+       http://127.0.0.1:8200/v1/secret/dev | jq
 {
  "errors": [
    "permission denied"
@@ -388,7 +397,7 @@ $ curl --header "X-Vault-Token: <WRAPPING_TOKEN>" \
 ```shell
 $ curl --header "X-Vault-Token: e095129f-123a-4fef-c007-1f6a487cfa78" \
        --request POST \
-       https://vault.rocks/v1/sys/wrapping/unwrap | jq
+       http://127.0.0.1:8200/v1/sys/wrapping/unwrap | jq
 {
   "request_id": "d704435d-c1cf-b8a3-52f6-ec50bc8246c4",
   "lease_id": "",
@@ -417,7 +426,7 @@ token.
 ```plaintext
 $ curl --header "X-Vault-Token: af5f7682-aa55-fa37-5039-ee116df56600" \
        --request GET \
-       https://vault.rocks/v1/secret/dev | jq
+       http://127.0.0.1:8200/v1/secret/dev | jq
 {
   "errors": []
 }
@@ -427,13 +436,14 @@ Since there is no data in `secret/dev`, it returns an empty array.
 
 ## Additional Discussion
 
-The `cubbyhole` secret backend provides your own private secret storage space
+The `cubbyhole` secret engine provides your own private secret storage space
 where no one else can read (including `root`). This comes handy when you want to
 store a password tied to your username that should not be shared with anyone.
 
-The cubbyhole backend is mounted at the **`cubbyhole/`** prefix by default. The
-secrets you store in the `cubbyhole/` path are tied to your token and all tokens
-are permitted to read and write to the `cubbyhole` backend by the [`default`](/docs/concepts/policies.html#default-policy) policy.
+The cubbyhole secret engine is mounted at the **`cubbyhole/`** prefix by
+default. The secrets you store in the `cubbyhole/` path are tied to your token
+and all tokens are permitted to read and write to the `cubbyhole` secret engine
+by the [`default`](/docs/concepts/policies.html#default-policy) policy.
 
 ```shell
 ...
@@ -444,13 +454,13 @@ path "cubbyhole/*" {
 ...
 ```
 
-To test the cubbyhole secret backend, perform the following steps. (NOTE: Keep
+To test the cubbyhole secret engine, perform the following steps. (NOTE: Keep
 using the `apps` token from [Step 2](#step2) to ensure that you are logged in with
 non-root token.)
 
 #### CLI command
 
-Commands to write and read secrets to the `cubbyhole` backend:
+Commands to write and read secrets to the `cubbyhole` secret engine:
 
 ```shell
 # Write key-value pair(s) in your cubbyhole
@@ -487,7 +497,7 @@ No value found at cubbyhole/private/access-token
 
 #### API call using cURL
 
-The API to work with the `cubbyhole` backend is very similar to `secret` backend:
+The API to work with the `cubbyhole` secret engine is very similar to `secret` secret engine:
 
 ```shell
 $ curl --header "X-Vault-Token: <TOKEN>" \
@@ -504,11 +514,11 @@ Write secrets under `cubbyhole/private/` path, and read it back.
 # Write "token" to cubbyhole/private/access-token path
 $ curl --header "X-Vault-Token: e095129f-123a-4fef-c007-1f6a487cfa78" --request POST \
        --data '{"token": "123456789abcdefg87654321"}' \
-       https://vault.rocks/v1/cubbyhole/private/access-token
+       http://127.0.0.1:8200/v1/cubbyhole/private/access-token
 
 # Read value from cubbyhole/private/access-token path
 $ curl --header "X-Vault-Token: e095129f-123a-4fef-c007-1f6a487cfa78" --request GET \
-       https://vault.rocks/v1/cubbyhole/private/access-token  | jq
+       http://127.0.0.1:8200/v1/cubbyhole/private/access-token  | jq
 {
  "request_id": "b2ff9f04-7a72-7eb0-672f-225b5eb652df",
  "lease_id": "",
@@ -528,13 +538,13 @@ secret.
 
 ```shell
 $ curl --header "X-Vault-Token: root" --request GET \
-       https://vault.rocks/v1/cubbyhole/private/access-token  | jq
+       http://127.0.0.1:8200/v1/cubbyhole/private/access-token  | jq
 {
  "errors": []
 }
 ```
 
-Also, refer to [Cubbyhole Secret Backend HTTP API](/api/secret/cubbyhole/index.html).
+Also, refer to [Cubbyhole Secret Engine (API)](/api/secret/cubbyhole/index.html).
 
 
 ## Next steps

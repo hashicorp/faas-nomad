@@ -28,7 +28,7 @@ before_install:
   - sudo chmod +x /usr/local/bin/consul
   - sudo chmod +x /usr/local/bin/nomad
   - make deps
-  - git clone -b availableReplicas https://github.com/nicholasjackson/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
+  - git clone -b system_info https://github.com/nicholasjackson/certify-incubator.git $GOPATH/src/github.com/openfaas/certify-incubator
   - docker run -d -p 5000:5000 --restart=always --name registry registry:2
   - go get github.com/wadey/gocovmerge
 

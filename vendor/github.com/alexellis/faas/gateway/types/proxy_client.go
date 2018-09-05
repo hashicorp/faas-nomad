@@ -1,4 +1,4 @@
-// Copyright (c) OpenFaaS Project 2018. All rights reserved.
+// Copyright (c) OpenFaaS Author(s) 2018. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 package types
@@ -14,6 +14,7 @@ import (
 func NewHTTPClientReverseProxy(baseURL *url.URL, timeout time.Duration) *HTTPClientReverseProxy {
 	h := HTTPClientReverseProxy{
 		BaseURL: baseURL,
+		Timeout: timeout,
 	}
 
 	h.Client = &http.Client{
@@ -26,6 +27,7 @@ func NewHTTPClientReverseProxy(baseURL *url.URL, timeout time.Duration) *HTTPCli
 			IdleConnTimeout:       120 * time.Millisecond,
 			ExpectContinueTimeout: 1500 * time.Millisecond,
 		},
+		Timeout: timeout,
 	}
 	return &h
 }
@@ -34,4 +36,5 @@ func NewHTTPClientReverseProxy(baseURL *url.URL, timeout time.Duration) *HTTPCli
 type HTTPClientReverseProxy struct {
 	BaseURL *url.URL
 	Client  *http.Client
+	Timeout time.Duration
 }

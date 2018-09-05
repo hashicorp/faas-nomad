@@ -26,8 +26,11 @@ type StatsdCollector struct {
 	timeoutsPrefix          string
 	fallbackSuccessesPrefix string
 	fallbackFailuresPrefix  string
+	canceledPrefix          string
+	deadlinePrefix          string
 	totalDurationPrefix     string
 	runDurationPrefix       string
+	concurrencyInUsePrefix  string
 	sampleRate              float32
 }
 
@@ -103,8 +106,11 @@ func (s *StatsdCollectorClient) NewStatsdCollector(name string) metricCollector.
 		timeoutsPrefix:          name + ".timeouts",
 		fallbackSuccessesPrefix: name + ".fallbackSuccesses",
 		fallbackFailuresPrefix:  name + ".fallbackFailures",
+		canceledPrefix:          name + ".contextCanceled",
+		deadlinePrefix:          name + ".contextDeadlineExceeded",
 		totalDurationPrefix:     name + ".totalDuration",
 		runDurationPrefix:       name + ".runDuration",
+		concurrencyInUsePrefix:  name + ".concurrencyInUse",
 		sampleRate:              s.sampleRate,
 	}
 }
@@ -117,6 +123,9 @@ func (g *StatsdCollector) setGauge(prefix string, value int64) {
 }
 
 func (g *StatsdCollector) incrementCounterMetric(prefix string, i float64) {
+	if i == 0 {
+		return
+	}
 	err := g.client.Inc(prefix, int64(i), g.sampleRate)
 	if err != nil {
 		log.Printf("Error sending statsd metrics %s", prefix)
@@ -125,6 +134,13 @@ func (g *StatsdCollector) incrementCounterMetric(prefix string, i float64) {
 
 func (g *StatsdCollector) updateTimerMetric(prefix string, dur time.Duration) {
 	err := g.client.TimingDuration(prefix, dur, g.sampleRate)
+	if err != nil {
+		log.Printf("Error sending statsd metrics %s", prefix)
+	}
+}
+
+func (g *StatsdCollector) updateTimingMetric(prefix string, i int64) {
+	err := g.client.Timing(prefix, i, g.sampleRate)
 	if err != nil {
 		log.Printf("Error sending statsd metrics %s", prefix)
 	}
@@ -146,8 +162,11 @@ func (g *StatsdCollector) Update(r metricCollector.MetricResult) {
 	g.incrementCounterMetric(g.timeoutsPrefix, r.Timeouts)
 	g.incrementCounterMetric(g.fallbackSuccessesPrefix, r.FallbackSuccesses)
 	g.incrementCounterMetric(g.fallbackFailuresPrefix, r.FallbackFailures)
+	g.incrementCounterMetric(g.canceledPrefix, r.ContextCanceled)
+	g.incrementCounterMetric(g.deadlinePrefix, r.ContextDeadlineExceeded)
 	g.updateTimerMetric(g.totalDurationPrefix, r.TotalDuration)
 	g.updateTimerMetric(g.runDurationPrefix, r.RunDuration)
+	g.updateTimingMetric(g.concurrencyInUsePrefix, int64(100*r.ConcurrencyInUse))
 }
 
 // Reset is a noop operation in this collector.

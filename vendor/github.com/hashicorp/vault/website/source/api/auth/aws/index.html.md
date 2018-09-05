@@ -81,7 +81,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/aws/config/client
+    http://127.0.0.1:8200/v1/auth/aws/config/client
 ```
 
 ## Read Config
@@ -97,7 +97,7 @@ Returns the previously configured AWS access credentials.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/aws/config/client
+    http://127.0.0.1:8200/v1/auth/aws/config/client
 ```
 
 ### Sample Response
@@ -105,7 +105,6 @@ $ curl \
 ```json
 {
   "data": {
-    "secret_key": "vCtSM8ZUEQ3mOFVlYPBQkf2sO6F/W7a5TVzrl3Oj",
     "access_key": "VKIAJBRHKH6EVTTNXDHA",
     "endpoint": "",
     "iam_endpoint": "",
@@ -129,7 +128,7 @@ Deletes the previously configured AWS access credentials.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/aws/config/client
+    http://127.0.0.1:8200/v1/auth/aws/config/client
 ```
 
 ## Create Certificate Configuration
@@ -170,7 +169,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/aws/config/certificate/test-cert
+    http://127.0.0.1:8200/v1/auth/aws/config/certificate/test-cert
 ```
 
 ## Read Certificate Configuration
@@ -190,7 +189,7 @@ Returns the previously configured AWS public key.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/aws/config/certificate/test-cert
+    http://127.0.0.1:8200/v1/auth/aws/config/certificate/test-cert
 ```
 
 ### Sample Response
@@ -218,7 +217,7 @@ Removes the previously configured AWS public key.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/aws/config/certificate/test-cert
+    http://127.0.0.1:8200/v1/auth/aws/config/certificate/test-cert
 ```
 
 ## List Certificate Configurations
@@ -235,7 +234,7 @@ Lists all the AWS public certificates that are registered with the method.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/auth/aws/config/certificates
+    http://127.0.0.1:8200/v1/auth/aws/config/certificates
 ```
 
 ### Sample Response
@@ -285,7 +284,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/aws/config/sts/111122223333
+    http://127.0.0.1:8200/v1/auth/aws/config/sts/111122223333
 ```
 
 ## Read STS Role
@@ -307,7 +306,7 @@ Returns the previously configured STS role.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/aws/config/sts/111122223333
+    http://127.0.0.1:8200/v1/auth/aws/config/sts/111122223333
 ```
 
 ### Sample Response
@@ -334,7 +333,7 @@ Lists all the AWS Account IDs for which an STS role is registered.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/auth/aws/config/sts
+    http://127.0.0.1:8200/v1/auth/aws/config/sts
 ```
 
 ### Sample Response
@@ -364,7 +363,7 @@ Deletes a previously configured AWS account/STS role association.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/aws/config/sts
+    http://127.0.0.1:8200/v1/auth/aws/config/sts
 ```
 
 ## Configure Identity Whitelist Tidy Operation
@@ -398,7 +397,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/aws/config/tidy/identity-whitelist
+    http://127.0.0.1:8200/v1/auth/aws/config/tidy/identity-whitelist
 ```
 
 ## Read Identity Whitelist Tidy Settings
@@ -414,7 +413,7 @@ Returns the previously configured periodic whitelist tidying settings.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/aws/config/tidy/identity-whitelist
+    http://127.0.0.1:8200/v1/auth/aws/config/tidy/identity-whitelist
 ```
 
 ### Sample Response
@@ -442,7 +441,7 @@ Deletes the previously configured periodic whitelist tidying settings.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/aws/config/tidy/identity-whitelist
+    http://127.0.0.1:8200/v1/auth/aws/config/tidy/identity-whitelist
 ```
 
 ## Configure Role Tag Blacklist Tidy Operation
@@ -476,10 +475,10 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/aws/config/tidy/roletag-blacklist
+    http://127.0.0.1:8200/v1/auth/aws/config/tidy/roletag-blacklist
 ```
 
-## Read Role Tag Blackist Tidy Settings
+## Read Role Tag Blacklist Tidy Settings
 
 Returns the previously configured periodic blacklist tidying settings.
 
@@ -492,7 +491,7 @@ Returns the previously configured periodic blacklist tidying settings.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/aws/config/tidy/roletag-blacklist
+    http://127.0.0.1:8200/v1/auth/aws/config/tidy/roletag-blacklist
 ```
 
 ### Sample Response
@@ -506,7 +505,7 @@ $ curl \
 }
 ```
 
-## Delete Role Tag Blackist Tidy Settings
+## Delete Role Tag Blacklist Tidy Settings
 
 Deletes the previously configured periodic blacklist tidying settings.
 
@@ -520,20 +519,22 @@ Deletes the previously configured periodic blacklist tidying settings.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/aws/config/tidy/roletag-blacklist
+    http://127.0.0.1:8200/v1/auth/aws/config/tidy/roletag-blacklist
 ```
 
 ## Create Role
 
 Registers a role in the method. Only those instances or principals which
 are using the role registered using this endpoint, will be able to perform
-the login operation. Contraints can be specified on the role, that are
+the login operation. Constraints can be specified on the role, that are
 applied on the instances or principals attempting to login. At least one
-constraint should be specified on the role. The available constraints you
+constraint must be specified on the role. The available constraints you
 can choose are dependent on the `auth_type` of the role and, if the
 `auth_type` is `iam`, then whether inferencing is enabled. A role will not
 let you configure a constraint if it is not checked by the `auth_type` and
-inferencing configuration of that role.
+inferencing configuration of that role. For the constraints which accept a list
+of values, the authenticating instance/principal must match any one value in the
+list in order to satisfy that constraint.
 
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
@@ -547,53 +548,68 @@ inferencing configuration of that role.
   "iam" (except for legacy `aws-ec2` auth types, for which it will default to
   "ec2"). Only those bindings applicable to the auth type chosen will be allowed
   to be configured on the role.
-- `bound_ami_id` `(string: "")` - If set, defines a constraint on the EC2
-  instances that they should be using the AMI ID specified by this parameter.
+- `bound_ami_id` `(list: [])` - If set, defines a constraint on the EC2
+  instances that they should be using one of the AMI ID specified by this parameter.
   This constraint is checked during ec2 auth as well as the iam auth method only
-  when inferring an EC2 instance.
-- `bound_account_id` `(string: "")` - If set, defines a constraint on the EC2
-  instances that the account ID in its identity document to match the one
+  when inferring an EC2 instance. This is a comma-separated string or JSON
+  array.
+- `bound_account_id` `(list: [])` - If set, defines a constraint on the EC2
+  instances that the account ID in its identity document to match one of the ones
   specified by this parameter. This constraint is checked during ec2 auth as
-  well as the iam auth method only when inferring an EC2 instance.
-- `bound_region` `(string: "")` - If set, defines a constraint on the EC2
-  instances that the region in its identity document must match the one
-  specified by this parameter. This constraint is only checked by the ec2 auth
+  well as the iam auth method only when inferring an EC2 instance. This is a
+  comma-separated string or JSON array.
+- `bound_region` `(list: [])` - If set, defines a constraint on the EC2
+  instances that the region in its identity document must match one of the
+  regions specified by this parameter. This constraint is only checked by the ec2 auth
   method as well as the iam auth method only when inferring an ec2 instance.
-- `bound_vpc_id` `(string: "")` - If set, defines a constraint on the EC2
-  instance to be associated with the VPC ID that matches the value specified by
+  This is a comma-separated string or JSON array.
+- `bound_vpc_id` `(list: [])` - If set, defines a constraint on the EC2
+  instance to be associated with a VPC ID that matches one of the values specified by
   this parameter. This constraint is only checked by the ec2 auth method as well
-  as the iam auth method only when inferring an ec2 instance.
-- `bound_subnet_id` `(string: "")` - If set, defines a constraint on the EC2
-  instance to be associated with the subnet ID that matches the value specified
+  as the iam auth method only when inferring an ec2 instance. This is a
+  comma-separated string or JSON array.
+- `bound_subnet_id` `(list: [])` - If set, defines a constraint on the EC2
+  instance to be associated with a subnet ID that matches one of the values specified
   by this parameter. This constraint is only checked by the ec2 auth method as
-  well as the iam auth method only when inferring an ec2 instance.
-- `bound_iam_role_arn` `(string: "")` - If set, defines a constraint on the
-  authenticating EC2 instance that it must match the IAM role ARN specified by
-  this parameter.  The value is refix-matched (as though it were a glob ending
-  in `*`).  The configured IAM user or EC2 instance role must be allowed to
+  well as the iam auth method only when inferring an ec2 instance. This is a
+  comma-separated string or a JSON array.
+- `bound_iam_role_arn` `(list: [])` - If set, defines a constraint on the
+  authenticating EC2 instance that it must match one of the IAM role ARNs specified by
+  this parameter.  Wildcards are supported at the end of the ARN to allow for
+  prefix matching. The configured IAM user or EC2 instance role must be allowed to
   execute the `iam:GetInstanceProfile` action if this is specified. This
   constraint is checked by the ec2 auth method as well as the iam auth method
-  only when inferring an EC2 instance.
-- `bound_iam_instance_profile_arn` `(string: "")` - If set, defines a constraint
-  on the EC2 instances to be associated with an IAM instance profile ARN which
-  has a prefix that matches the value specified by this parameter. The value is
-  prefix-matched (as though it were a glob ending in `*`). This constraint is
+  only when inferring an EC2 instance. This is a comma-separated string or a
+  JSON array.
+- `bound_iam_instance_profile_arn` `(list: [])` - If set, defines a constraint
+  on the EC2 instances to be associated with an IAM instance profile ARN.
+  Wildcards are supported at the end of the ARN to allow for prefix matching.
+  This constraint is
   checked by the ec2 auth method as well as the iam auth method only when
-  inferring an ec2 instance.
+  inferring an ec2 instance. This is a comma-separated string or a JSON array.
+- `bound_ec2_instance_id` `(list: [])` - If set, defines a constraint on the
+  EC2 instances to have one of these instance IDs. This constraint is checked by
+  the ec2 auth method as well as the iam auth method only when inferring an ec2
+  instance. This is a comma-separated string or a JSON array.
 - `role_tag` `(string: "")` - If set, enables the role tags for this role. The
   value set for this field should be the 'key' of the tag on the EC2 instance.
   The 'value' of the tag should be generated using `role/<role>/tag` endpoint.
   Defaults to an empty string, meaning that role tags are disabled. This
-  constraint is valid only with the ec2 auth method and is not allowed when an
-  auth_type is iam.
-- `bound_iam_principal_arn` `(string: "")` - Defines the IAM principal that must
-  be authenticated using the iam auth method. It should look like
-  "arn:aws:iam::123456789012:user/MyUserName" or
+  constraint is valid only with the ec2 auth method and is not allowed when
+  `auth_type` is iam.
+- `bound_iam_principal_arn` `(list: [])` - Defines the list of IAM principals
+  that are permitted to login to the role using the iam auth method. Individual
+  values should look like "arn:aws:iam::123456789012:user/MyUserName" or
   "arn:aws:iam::123456789012:role/MyRoleName". Wildcards are supported at the
   end of the ARN, e.g., "arn:aws:iam::123456789012:\*" will match any IAM
-  principal in the AWS account 123456789012. This constraint is only checked by
+  principal in the AWS account 123456789012. When `resolve_aws_unique_ids` is
+  `false` and you are binding to IAM roles (as opposed to users) and you are not
+  using a wildcard at the end, then you must specify the ARN by omitting any
+  path component; see the documentation for `resolve_aws_unique_ids` below.
+  This constraint is only checked by
   the iam auth method. Wildcards are supported at the end of the ARN, e.g.,
   "arn:aws:iam::123456789012:role/\*" will match all roles in the AWS account.
+  This is a comma-separated string or JSON array.
 - `inferred_entity_type` `(string: "")` -  When set, instructs Vault to turn on
   inferencing. The only current valid value is "ec2\_instance" instructing Vault
   to infer that the role comes from an EC2 instance in an IAM instance profile.
@@ -603,7 +619,7 @@ inferencing configuration of that role.
 - `inferred_aws_region` `(string: "")` - When role inferencing is activated, the
   region to search for the inferred entities (e.g., EC2 instances). Required if
   role inferencing is activated. This only applies to the iam auth method.
-- `resolve_aws_unique_ids` `(bool: false)` - When set, resolves the
+- `resolve_aws_unique_ids` `(bool: true)` - When set, resolves the
   `bound_iam_principal_arn` to the
   [AWS Unique ID](http://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-unique-ids)
   for the bound principal ARN. This field is ignored when
@@ -631,11 +647,13 @@ inferencing configuration of that role.
   Vault still has the necessary IAM permissions to resolve the unique ID, Vault
   will update the unique ID. (If it does not have the necessary permissions to
   resolve the unique ID, then it will fail to update.) If this option is set to
-  false, then you MUST leave out the path component in bound_iam_principal_arn
-  for **roles** only, but not IAM users. That is, if your IAM role ARN is of the
-  form `arn:aws:iam::123456789012:role/some/path/to/MyRoleName`, you **must**
-  specify a bound_iam_principal_arn of
-  `arn:aws:iam::123456789012:role/MyRoleName` for authentication to work.
+  false, then you MUST leave out the path component in `bound_iam_principal_arn`
+  for **roles** that do not specify a wildcard at the end, but not IAM users or
+  role bindings that have a wildcard. That is, if your IAM role ARN is of the
+  form `arn:aws:iam::123456789012:role/some/path/to/MyRoleName`, and
+  `resolve_aws_unique_ids` is `false`, you **must** specify a
+  `bound_iam_principal_arn` of `arn:aws:iam::123456789012:role/MyRoleName` for
+  authentication to work.
 - `ttl` `(string: "")` - The TTL period of tokens issued using this role,
   provided as "1h", where hour is the largest suffix.
 - `max_ttl` `(string: "")` - The maximum allowed lifetime of tokens issued using
@@ -643,8 +661,7 @@ inferencing configuration of that role.
 - `period` `(string: "")` - If set, indicates that the token generated using
   this role should never expire. The token should be renewed within the duration
   specified by this value. At each renewal, the token's TTL will be set to the
-  value of this parameter.  The maximum allowed lifetime of tokens issued using
-  this role.
+  value of this parameter.
 - `policies` `(array: [])` - Policies to be set on tokens issued using this
   role.
 - `allow_instance_migration` `(bool: false)` - If set, allows migration of the
@@ -657,7 +674,7 @@ inferencing configuration of that role.
 - `disallow_reauthentication` `(bool: false)` - If set, only allows a single
   token to be granted per instance ID. In order to perform a fresh login, the
   entry in whitelist for the instance ID needs to be cleared using
-  'auth/aws/identity-whitelist/<instance_id>' endpoint. Defaults to 'false'.
+  `auth/aws/identity-whitelist/<instance_id>` endpoint. Defaults to 'false'.
   This only applies to authentications via the ec2 auth method. This is mutually
   exclusive with `allow_instance_migration`.
 
@@ -665,7 +682,8 @@ inferencing configuration of that role.
 
 ```json
 {
-  "bound_ami_id": "ami-fce36987",
+  "bound_ami_id": ["ami-fce36987"],
+  "bound_ec2_instance_id": ["i-12345678901234567"],
   "role_tag": "",
   "policies": [
     "default",
@@ -685,7 +703,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/aws/role/dev-role
+    http://127.0.0.1:8200/v1/auth/aws/role/dev-role
 ```
 
 ## Read Role
@@ -705,7 +723,7 @@ Returns the previously registered role configuration.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/aws/role/dev-role
+    http://127.0.0.1:8200/v1/auth/aws/role/dev-role
 ```
 
 ### Sample Response
@@ -713,7 +731,7 @@ $ curl \
 ```json
 {
   "data": {
-    "bound_ami_id": "ami-fce36987",
+    "bound_ami_id": ["ami-fce36987"],
     "role_tag": "",
     "policies": [
       "default",
@@ -741,7 +759,7 @@ Lists all the roles that are registered with the method.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/auth/aws/roles
+    http://127.0.0.1:8200/v1/auth/aws/roles
 ```
 
 ### Sample Response
@@ -775,7 +793,7 @@ Deletes the previously registered role.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/aws/role/dev-role
+    http://127.0.0.1:8200/v1/auth/aws/role/dev-role
 ```
 
 ## Create Role Tags
@@ -835,7 +853,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/aws/role/dev-api-and-web-role/tag
+    http://127.0.0.1:8200/v1/auth/aws/role/dev-api-and-web-role/tag
 ```
 
 ### Sample Response
@@ -928,7 +946,7 @@ along with its RSA digest can be supplied to this endpoint.
 $ curl \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/aws/login
+    http://127.0.0.1:8200/v1/auth/aws/login
 ```
 
 ### Sample Response
@@ -969,8 +987,8 @@ token.
 
 ### Parameters
 
-- `role_tag` `(string: <required>)` - Role tag to be blacklisted. The tag can be
-  supplied as-is. In order to avoid any encoding problems, it can be base64
+- `role_tag` `(string: <required>)` - Role tag to be blacklisted. This is the `tag_value` returned when the role tag is
+  created. The tag can be supplied as-is. In order to avoid any encoding problems, it can be base64
   encoded.
 
 ### Sample Request
@@ -979,7 +997,7 @@ token.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
-    https://vault.rocks/v1/auth/aws/roletag-blacklist/djE6MDlWcDBxR3V5Qjg9OmE9YW1pLWZjZTNjNjk2OnA9ZGVmYXVsdCxwcm9kOmQ9ZmFsc2U6dD0zMDBoMG0wczp1UExLQ1F4cXNlZlJocnAxcW1WYTF3c1FWVVhYSkc4VVpQLwo=
+    http://127.0.0.1:8200/v1/auth/aws/roletag-blacklist/djE6MDlWcDBxR3V5Qjg9OmE9YW1pLWZjZTNjNjk2OnA9ZGVmYXVsdCxwcm9kOmQ9ZmFsc2U6dD0zMDBoMG0wczp1UExLQ1F4cXNlZlJocnAxcW1WYTF3c1FWVVhYSkc4VVpQLwo=
 ```
 
 ### Read Role Tag Blacklist Information
@@ -1001,7 +1019,7 @@ Returns the blacklist entry of a previously blacklisted role tag.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/aws/roletag-blacklist/djE6MDlWcDBxR3V5Qjg9OmE9YW1pLWZjZTNjNjk2OnA9ZGVmYXVsdCxwcm9kOmQ9ZmFsc2U6dD0zMDBoMG0wczp1UExLQ1F4cXNlZlJocnAxcW1WYTF3c1FWVVhYSkc4VVpQLwo=
+    http://127.0.0.1:8200/v1/auth/aws/roletag-blacklist/djE6MDlWcDBxR3V5Qjg9OmE9YW1pLWZjZTNjNjk2OnA9ZGVmYXVsdCxwcm9kOmQ9ZmFsc2U6dD0zMDBoMG0wczp1UExLQ1F4cXNlZlJocnAxcW1WYTF3c1FWVVhYSkc4VVpQLwo=
 ```
 
 
@@ -1030,7 +1048,7 @@ Lists all the role tags that are blacklisted.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/auth/aws/roletag-blacklist
+    http://127.0.0.1:8200/v1/auth/aws/roletag-blacklist
 ```
 
 ### Sample Response
@@ -1066,7 +1084,7 @@ Deletes a blacklisted role tag.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/aws/roletag-blacklist/djE6MDlWcDBxR3V5Qjg9OmE9YW1pLWZjZTNjNjk2OnA9ZGVmYXVsdCxwcm9kOmQ9ZmFsc2U6dD0zMDBoMG0wczp1UExLQ1F4cXNlZlJocnAxcW1WYTF3c1FWVVhYSkc4VVpQLwo=
+    http://127.0.0.1:8200/v1/auth/aws/roletag-blacklist/djE6MDlWcDBxR3V5Qjg9OmE9YW1pLWZjZTNjNjk2OnA9ZGVmYXVsdCxwcm9kOmQ9ZmFsc2U6dD0zMDBoMG0wczp1UExLQ1F4cXNlZlJocnAxcW1WYTF3c1FWVVhYSkc4VVpQLwo=
 ```
 
 ## Tidy Blacklist Tags
@@ -1090,7 +1108,7 @@ Cleans up the entries in the blacklist based on expiration time on the entry and
 $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
-    https://vault.rocks/v1/auth/aws/tidy/roletag-blacklist
+    http://127.0.0.1:8200/v1/auth/aws/tidy/roletag-blacklist
 ```
 
 ### Read Identity Whitelist Information
@@ -1113,7 +1131,7 @@ successful login.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/aws/identity-whitelist/i-aab47d37
+    http://127.0.0.1:8200/v1/auth/aws/identity-whitelist/i-aab47d37
 ```
 
 
@@ -1145,7 +1163,7 @@ $ curl \
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/auth/aws/roletag-blacklist
+    http://127.0.0.1:8200/v1/auth/aws/roletag-blacklist
 ```
 
 ### Sample Response
@@ -1180,7 +1198,7 @@ Deletes a cache of the successful login from an instance.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/aws/identity-whitelist/i-aab47d37
+    http://127.0.0.1:8200/v1/auth/aws/identity-whitelist/i-aab47d37
 ```
 
 ## Tidy Identity Whitelist Entries
@@ -1204,5 +1222,5 @@ Cleans up the entries in the whitelist based on expiration time and
 $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
-    https://vault.rocks/v1/auth/aws/tidy/identity-whitelist
+    http://127.0.0.1:8200/v1/auth/aws/tidy/identity-whitelist
 ```

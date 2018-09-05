@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/armon/go-metrics"
@@ -19,7 +20,7 @@ type Router struct {
 	root               *radix.Tree
 	mountUUIDCache     *radix.Tree
 	mountAccessorCache *radix.Tree
-	tokenStoreSaltFunc func() (*salt.Salt, error)
+	tokenStoreSaltFunc func(context.Context) (*salt.Salt, error)
 	// storagePrefix maps the prefix used for storage (ala the BarrierView)
 	// to the backend. This is used to map a key back into the backend that owns it.
 	// For example, logical/uuid1/foobar -> secrets/ (kv backend) + foobar
@@ -44,14 +45,16 @@ type routeEntry struct {
 	mountEntry    *MountEntry
 	storageView   logical.Storage
 	storagePrefix string
-	rootPaths     *radix.Tree
-	loginPaths    *radix.Tree
+	rootPaths     atomic.Value
+	loginPaths    atomic.Value
+	l             sync.RWMutex
 }
 
 type validateMountResponse struct {
 	MountType     string `json:"mount_type" structs:"mount_type" mapstructure:"mount_type"`
 	MountAccessor string `json:"mount_accessor" structs:"mount_accessor" mapstructure:"mount_accessor"`
 	MountPath     string `json:"mount_path" structs:"mount_path" mapstructure:"mount_path"`
+	MountLocal    bool   `json:"mount_local" structs:"mount_local" mapstructure:"mount_local"`
 }
 
 // validateMountByAccessor returns the mount type and ID for a given mount
@@ -75,6 +78,7 @@ func (r *Router) validateMountByAccessor(accessor string) *validateMountResponse
 		MountAccessor: mountEntry.Accessor,
 		MountType:     mountEntry.Type,
 		MountPath:     mountPath,
+		MountLocal:    mountEntry.Local,
 	}
 }
 
@@ -91,11 +95,10 @@ func (r *Router) Mount(backend logical.Backend, prefix string, mountEntry *Mount
 
 	// Check if this is a nested mount
 	if existing, _, ok := r.root.LongestPrefix(prefix); ok && existing != "" {
-		return fmt.Errorf("cannot mount under existing mount '%s'", existing)
+		return fmt.Errorf("cannot mount under existing mount %q", existing)
 	}
 
 	// Build the paths
-	var localView logical.Storage = storageView
 	paths := new(logical.Paths)
 	if backend != nil {
 		specialPaths := backend.SpecialPaths()
@@ -110,10 +113,10 @@ func (r *Router) Mount(backend logical.Backend, prefix string, mountEntry *Mount
 		backend:       backend,
 		mountEntry:    mountEntry,
 		storagePrefix: storageView.prefix,
-		storageView:   localView,
-		rootPaths:     pathsToRadix(paths.Root),
-		loginPaths:    pathsToRadix(paths.Unauthenticated),
+		storageView:   storageView,
 	}
+	re.rootPaths.Store(pathsToRadix(paths.Root))
+	re.loginPaths.Store(pathsToRadix(paths.Unauthenticated))
 
 	switch {
 	case prefix == "":
@@ -168,7 +171,7 @@ func (r *Router) Remount(src, dst string) error {
 	// Check for existing mount
 	raw, ok := r.root.Get(src)
 	if !ok {
-		return fmt.Errorf("no mount at '%s'", src)
+		return fmt.Errorf("no mount at %q", src)
 	}
 
 	// Update the mount point
@@ -206,13 +209,14 @@ func (r *Router) MatchingMountByUUID(mountID string) *MountEntry {
 	}
 
 	r.l.RLock()
-	defer r.l.RUnlock()
 
 	_, raw, ok := r.mountUUIDCache.LongestPrefix(mountID)
 	if !ok {
+		r.l.RUnlock()
 		return nil
 	}
 
+	r.l.RUnlock()
 	return raw.(*MountEntry)
 }
 
@@ -223,21 +227,22 @@ func (r *Router) MatchingMountByAccessor(mountAccessor string) *MountEntry {
 	}
 
 	r.l.RLock()
-	defer r.l.RUnlock()
 
 	_, raw, ok := r.mountAccessorCache.LongestPrefix(mountAccessor)
 	if !ok {
+		r.l.RUnlock()
 		return nil
 	}
 
+	r.l.RUnlock()
 	return raw.(*MountEntry)
 }
 
 // MatchingMount returns the mount prefix that would be used for a path
 func (r *Router) MatchingMount(path string) string {
 	r.l.RLock()
-	defer r.l.RUnlock()
-	var mount = r.matchingMountInternal(path)
+	mount := r.matchingMountInternal(path)
+	r.l.RUnlock()
 	return mount
 }
 
@@ -400,6 +405,11 @@ func (r *Router) routeCommon(ctx context.Context, req *logical.Request, existenc
 		strings.Replace(mount, "/", "-", -1)}, time.Now())
 	re := raw.(*routeEntry)
 
+	// Grab a read lock on the route entry, this protects against the backend
+	// being reloaded during a request.
+	re.l.RLock()
+	defer re.l.RUnlock()
+
 	// Filtered mounts will have a nil backend
 	if re.backend == nil {
 		return logical.ErrorResponse(fmt.Sprintf("no handler for route '%s'", req.Path)), false, false, logical.ErrUnsupportedPath
@@ -429,15 +439,6 @@ func (r *Router) routeCommon(ctx context.Context, req *logical.Request, existenc
 
 	originalEntityID := req.EntityID
 
-	// Allow EntityID to passthrough to the system backend. This is required to
-	// allow clients to generate MFA credentials in respective entity objects
-	// in identity store via the system backend.
-	switch {
-	case strings.HasPrefix(originalPath, "sys/"):
-	default:
-		req.EntityID = ""
-	}
-
 	// Hash the request token unless the request is being routed to the token
 	// or system backend.
 	clientToken := req.ClientToken
@@ -447,7 +448,7 @@ func (r *Router) routeCommon(ctx context.Context, req *logical.Request, existenc
 	case strings.HasPrefix(originalPath, "cubbyhole/"):
 		// In order for the token store to revoke later, we need to have the same
 		// salted ID, so we double-salt what's going to the cubbyhole backend
-		salt, err := r.tokenStoreSaltFunc()
+		salt, err := r.tokenStoreSaltFunc(ctx)
 		if err != nil {
 			return nil, false, false, err
 		}
@@ -466,9 +467,15 @@ func (r *Router) routeCommon(ctx context.Context, req *logical.Request, existenc
 	originalClientTokenRemainingUses := req.ClientTokenRemainingUses
 	req.ClientTokenRemainingUses = 0
 
-	// Cache the headers and hide them from backends
+	// Cache the headers
 	headers := req.Headers
-	req.Headers = nil
+
+	// Filter and add passthrough headers to the backend
+	var passthroughRequestHeaders []string
+	if rawVal, ok := re.mountEntry.synthesizedConfigCache.Load("passthrough_request_headers"); ok {
+		passthroughRequestHeaders = rawVal.([]string)
+	}
+	req.Headers = filteredPassthroughHeaders(headers, passthroughRequestHeaders)
 
 	// Cache the wrap info of the request
 	var wrapInfo *logical.RequestWrapInfo
@@ -479,6 +486,9 @@ func (r *Router) routeCommon(ctx context.Context, req *logical.Request, existenc
 			SealWrap: req.WrapInfo.SealWrap,
 		}
 	}
+
+	reqTokenEntry := req.TokenEntry()
+	req.SetTokenEntry(nil)
 
 	// Reset the request before returning
 	defer func() {
@@ -501,6 +511,8 @@ func (r *Router) routeCommon(ctx context.Context, req *logical.Request, existenc
 		req.MountAccessor = re.mountEntry.Accessor
 
 		req.EntityID = originalEntityID
+
+		req.SetTokenEntry(reqTokenEntry)
 	}()
 
 	// Invoke the backend
@@ -548,7 +560,8 @@ func (r *Router) RootPath(path string) bool {
 	remain := strings.TrimPrefix(path, mount)
 
 	// Check the rootPaths of this backend
-	match, raw, ok := re.rootPaths.LongestPrefix(remain)
+	rootPaths := re.rootPaths.Load().(*radix.Tree)
+	match, raw, ok := rootPaths.LongestPrefix(remain)
 	if !ok {
 		return false
 	}
@@ -577,7 +590,8 @@ func (r *Router) LoginPath(path string) bool {
 	remain := strings.TrimPrefix(path, mount)
 
 	// Check the loginPaths of this backend
-	match, raw, ok := re.loginPaths.LongestPrefix(remain)
+	loginPaths := re.loginPaths.Load().(*radix.Tree)
+	match, raw, ok := loginPaths.LongestPrefix(remain)
 	if !ok {
 		return false
 	}
@@ -607,4 +621,35 @@ func pathsToRadix(paths []string) *radix.Tree {
 	}
 
 	return tree
+}
+
+// filteredPassthroughHeaders returns a headers map[string][]string that
+// contains the filtered values contained in passthroughHeaders, as well as the
+// values in whitelistedHeaders. Filtering of passthroughHeaders from the
+// origHeaders is done is a case-insensitive manner.
+func filteredPassthroughHeaders(origHeaders map[string][]string, passthroughHeaders []string) map[string][]string {
+	retHeaders := make(map[string][]string)
+
+	// Short-circuit if there's nothing to filter
+	if len(passthroughHeaders) == 0 {
+		return retHeaders
+	}
+
+	// Create a map that uses lowercased header values as the key and the original
+	// header naming as the value for comparison down below.
+	lowerHeadersRef := make(map[string]string, len(origHeaders))
+	for key := range origHeaders {
+		lowerHeadersRef[strings.ToLower(key)] = key
+	}
+
+	// Case-insensitive compare of passthrough headers against originating
+	// headers. The returned headers will be the same casing as the originating
+	// header name.
+	for _, ph := range passthroughHeaders {
+		if header, ok := lowerHeadersRef[strings.ToLower(ph)]; ok {
+			retHeaders[header] = origHeaders[header]
+		}
+	}
+
+	return retHeaders
 }

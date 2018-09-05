@@ -1,7 +1,9 @@
 package command
 
 import (
+	"flag"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,8 +18,14 @@ var _ cli.CommandAutocomplete = (*AuthTuneCommand)(nil)
 type AuthTuneCommand struct {
 	*BaseCommand
 
-	flagDefaultLeaseTTL time.Duration
-	flagMaxLeaseTTL     time.Duration
+	flagAuditNonHMACRequestKeys  []string
+	flagAuditNonHMACResponseKeys []string
+	flagDefaultLeaseTTL          time.Duration
+	flagDescription              string
+	flagListingVisibility        string
+	flagMaxLeaseTTL              time.Duration
+	flagOptions                  map[string]string
+	flagVersion                  int
 }
 
 func (c *AuthTuneCommand) Synopsis() string {
@@ -46,6 +54,20 @@ func (c *AuthTuneCommand) Flags() *FlagSets {
 
 	f := set.NewFlagSet("Command Options")
 
+	f.StringSliceVar(&StringSliceVar{
+		Name:   flagNameAuditNonHMACRequestKeys,
+		Target: &c.flagAuditNonHMACRequestKeys,
+		Usage: "Comma-separated string or list of keys that will not be HMAC'd by audit" +
+			"devices in the request data object.",
+	})
+
+	f.StringSliceVar(&StringSliceVar{
+		Name:   flagNameAuditNonHMACResponseKeys,
+		Target: &c.flagAuditNonHMACResponseKeys,
+		Usage: "Comma-separated string or list of keys that will not be HMAC'd by audit" +
+			"devices in the response data object.",
+	})
+
 	f.DurationVar(&DurationVar{
 		Name:       "default-lease-ttl",
 		Target:     &c.flagDefaultLeaseTTL,
@@ -57,6 +79,20 @@ func (c *AuthTuneCommand) Flags() *FlagSets {
 			"or a previously configured value for the auth method.",
 	})
 
+	f.StringVar(&StringVar{
+		Name:   flagNameDescription,
+		Target: &c.flagDescription,
+		Usage: "Human-friendly description of the this auth method. This overrides" +
+			"the current stored value, if any.",
+	})
+
+	f.StringVar(&StringVar{
+		Name:   flagNameListingVisibility,
+		Target: &c.flagListingVisibility,
+		Usage: "Determines the visibility of the mount in the UI-specific listing" +
+			"endpoint.",
+	})
+
 	f.DurationVar(&DurationVar{
 		Name:       "max-lease-ttl",
 		Target:     &c.flagMaxLeaseTTL,
@@ -66,6 +102,21 @@ func (c *AuthTuneCommand) Flags() *FlagSets {
 		Usage: "The maximum lease TTL for this auth method. If unspecified, this " +
 			"defaults to the Vault server's globally configured maximum lease TTL, " +
 			"or a previously configured value for the auth method.",
+	})
+
+	f.StringMapVar(&StringMapVar{
+		Name:       "options",
+		Target:     &c.flagOptions,
+		Completion: complete.PredictAnything,
+		Usage: "Key-value pair provided as key=value for the mount options. " +
+			"This can be specified multiple times.",
+	})
+
+	f.IntVar(&IntVar{
+		Name:    "version",
+		Target:  &c.flagVersion,
+		Default: 0,
+		Usage:   "Select the version of the auth method to run. Not supported by all auth methods.",
 	})
 
 	return set
@@ -103,14 +154,43 @@ func (c *AuthTuneCommand) Run(args []string) int {
 		return 2
 	}
 
+	if c.flagVersion > 0 {
+		if c.flagOptions == nil {
+			c.flagOptions = make(map[string]string)
+		}
+		c.flagOptions["version"] = strconv.Itoa(c.flagVersion)
+	}
+
+	mountConfigInput := api.MountConfigInput{
+		DefaultLeaseTTL: ttlToAPI(c.flagDefaultLeaseTTL),
+		MaxLeaseTTL:     ttlToAPI(c.flagMaxLeaseTTL),
+		Options:         c.flagOptions,
+	}
+
+	// Set these values only if they are provided in the CLI
+	f.Visit(func(fl *flag.Flag) {
+		if fl.Name == flagNameAuditNonHMACRequestKeys {
+			mountConfigInput.AuditNonHMACRequestKeys = c.flagAuditNonHMACRequestKeys
+		}
+
+		if fl.Name == flagNameAuditNonHMACResponseKeys {
+			mountConfigInput.AuditNonHMACResponseKeys = c.flagAuditNonHMACResponseKeys
+		}
+
+		if fl.Name == flagNameDescription {
+			mountConfigInput.Description = &c.flagDescription
+		}
+
+		if fl.Name == flagNameListingVisibility {
+			mountConfigInput.ListingVisibility = c.flagListingVisibility
+		}
+	})
+
 	// Append /auth (since that's where auths live) and a trailing slash to
 	// indicate it's a path in output
 	mountPath := ensureTrailingSlash(sanitizePath(args[0]))
 
-	if err := client.Sys().TuneMount("/auth/"+mountPath, api.MountConfigInput{
-		DefaultLeaseTTL: ttlToAPI(c.flagDefaultLeaseTTL),
-		MaxLeaseTTL:     ttlToAPI(c.flagMaxLeaseTTL),
-	}); err != nil {
+	if err := client.Sys().TuneMount("/auth/"+mountPath, mountConfigInput); err != nil {
 		c.UI.Error(fmt.Sprintf("Error tuning auth method %s: %s", mountPath, err))
 		return 2
 	}

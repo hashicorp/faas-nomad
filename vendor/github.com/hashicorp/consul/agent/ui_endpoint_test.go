@@ -155,10 +155,14 @@ func TestSummarizeServices(t *testing.T) {
 			Address: "127.0.0.1",
 			Services: []*structs.NodeService{
 				&structs.NodeService{
+					Kind:    structs.ServiceKindTypical,
 					Service: "api",
+					Tags:    []string{"tag1", "tag2"},
 				},
 				&structs.NodeService{
+					Kind:    structs.ServiceKindConnectProxy,
 					Service: "web",
+					Tags:    []string{},
 				},
 			},
 			Checks: []*structs.HealthCheck{
@@ -181,7 +185,9 @@ func TestSummarizeServices(t *testing.T) {
 			Address: "127.0.0.2",
 			Services: []*structs.NodeService{
 				&structs.NodeService{
+					Kind:    structs.ServiceKindConnectProxy,
 					Service: "web",
+					Tags:    []string{},
 				},
 			},
 			Checks: []*structs.HealthCheck{
@@ -197,6 +203,7 @@ func TestSummarizeServices(t *testing.T) {
 			Services: []*structs.NodeService{
 				&structs.NodeService{
 					Service: "cache",
+					Tags:    []string{},
 				},
 			},
 		},
@@ -208,7 +215,9 @@ func TestSummarizeServices(t *testing.T) {
 	}
 
 	expectAPI := &ServiceSummary{
+		Kind:           structs.ServiceKindTypical,
 		Name:           "api",
+		Tags:           []string{"tag1", "tag2"},
 		Nodes:          []string{"foo"},
 		ChecksPassing:  1,
 		ChecksWarning:  1,
@@ -219,7 +228,9 @@ func TestSummarizeServices(t *testing.T) {
 	}
 
 	expectCache := &ServiceSummary{
+		Kind:           structs.ServiceKindTypical,
 		Name:           "cache",
+		Tags:           []string{},
 		Nodes:          []string{"zip"},
 		ChecksPassing:  0,
 		ChecksWarning:  0,
@@ -230,7 +241,9 @@ func TestSummarizeServices(t *testing.T) {
 	}
 
 	expectWeb := &ServiceSummary{
+		Kind:           structs.ServiceKindConnectProxy,
 		Name:           "web",
+		Tags:           []string{},
 		Nodes:          []string{"bar", "foo"},
 		ChecksPassing:  2,
 		ChecksWarning:  0,

@@ -6,11 +6,11 @@ import (
 	"os"
 	"testing"
 
-	dockertest "gopkg.in/ory-am/dockertest.v3"
+	"github.com/ory/dockertest"
 
-	"github.com/hashicorp/vault/helper/logformat"
+	log "github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/vault/helper/logging"
 	"github.com/hashicorp/vault/physical"
-	log "github.com/mgutz/logxi/v1"
 
 	_ "github.com/lib/pq"
 )
@@ -58,6 +58,7 @@ func prepareCockroachDBTestContainer(t *testing.T) (cleanup func(), retURL, tabl
 		if err != nil {
 			return err
 		}
+		defer db.Close()
 		_, err = db.Exec("CREATE DATABASE database")
 		return err
 	}); err != nil {
@@ -72,7 +73,7 @@ func TestCockroachDBBackend(t *testing.T) {
 	defer cleanup()
 
 	// Run vault tests
-	logger := logformat.NewVaultLogger(log.LevelTrace)
+	logger := logging.NewVaultLogger(log.Debug)
 
 	b, err := NewCockroachDBBackend(map[string]string{
 		"connection_url": connURL,

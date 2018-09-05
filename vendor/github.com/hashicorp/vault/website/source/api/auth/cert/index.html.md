@@ -29,16 +29,38 @@ Sets a CA cert and associated parameters in a role name.
 
 - `name` `(string: <required>)` - The name of the certificate role.
 - `certificate` `(string: <required>)` - The PEM-format CA certificate.
-- `allowed_names` `(string: "")` - Constrain the Common and Alternative Names in
-  the client certificate with a [globbed pattern]
+- `allowed_names` `(string: "")` - DEPRECATED: Please use the individual
+  `allowed_X_sans` parameters instead. Constrain the Common and Alternative
+  Names in the client certificate with a [globbed pattern]
   (https://github.com/ryanuber/go-glob/blob/master/README.md#example). Value is
   a comma-separated list of patterns. Authentication requires at least one Name
   matching at least one pattern. If not set, defaults to allowing all names.
-- `required_extensions` `(string: "" or array:[])` - Require specific Custom
-   Extension OIDs to exist and match the pattern. Value is a comma separated
-   string or array of `oid:value`. Expects the extension value to be some type
-   of ASN1 encoded string. All conditions _must_ be met. Supports globbing on
-   `value`.
+- `allowed_common_names` `(string: "" or array: [])` - Constrain the Common
+  Names in the client certificate with a [globbed pattern]
+  (https://github.com/ryanuber/go-glob/blob/master/README.md#example). Value is
+  a comma-separated list of patterns. Authentication requires at least one Name
+  matching at least one pattern. If not set, defaults to allowing all names.
+- `allowed_dns_sans` `(string: "" or array: [])` - Constrain the Alternative
+  Names in the client certificate with a [globbed pattern]
+  (https://github.com/ryanuber/go-glob/blob/master/README.md#example). Value is
+  a comma-separated list of patterns. Authentication requires at least one DNS
+  matching at least one pattern. If not set, defaults to allowing all dns.
+- `allowed_email_sans` `(string: "" or array: [])` - Constrain the Alternative
+  Names in the client certificate with a [globbed pattern]
+  (https://github.com/ryanuber/go-glob/blob/master/README.md#example). Value is
+  a comma-separated list of patterns. Authentication requires at least one
+  Email matching at least one pattern. If not set, defaults to allowing all
+  emails.
+- `allowed_uri_sans` `(string: "" or array: [])` - Constrain the Alternative
+  Names in the client certificate with a [globbed pattern]
+  (https://github.com/ryanuber/go-glob/blob/master/README.md#example). Value is
+  a comma-separated list of URI patterns. Authentication requires at least one
+  URI matching at least one pattern. If not set, defaults to allowing all URIs.
+- `required_extensions` `(string: "" or array: [])` - Require specific Custom
+  Extension OIDs to exist and match the pattern. Value is a comma separated
+  string or array of `oid:value`. Expects the extension value to be some type
+  of ASN1 encoded string. All conditions _must_ be met. Supports globbing on
+  `value`.
 - `policies` `(string: "")` - A comma-separated list of policies to set on
   tokens issued when authenticating against this CA certificate.
 - `display_name` `(string: "")` - The `display_name` to set on tokens issued
@@ -54,13 +76,17 @@ Sets a CA cert and associated parameters in a role name.
   as it is renewed it never expires unless `max_ttl` is also set, but the TTL
   set on the token at each renewal is fixed to the value specified here. If this
   value is modified, the token will pick up the new value at its next renewal.
+- `bound_cidrs` `(string: "", or list: [])` – If set, restricts usage of the
+  certificates to client IPs falling within the range of the specified
+  CIDR(s).
 
 ### Sample Payload
 
 ```json
 {
   "certificate": "-----BEGIN CERTIFICATE-----\nMIIEtzCCA5+.......ZRtAfQ6r\nwlW975rYa1ZqEdA=\n-----END CERTIFICATE-----",
-  "display_name": "test"
+  "display_name": "test",
+  "bound_cidrs": ["127.0.0.1/32", "128.252.0.0/16"]
 }
 ```
 
@@ -71,7 +97,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json
-    https://vault.rocks/v1/auth/cert/certs/test-ca
+    http://127.0.0.1:8200/v1/auth/cert/certs/test-ca
 ```
 
 ## Read CA Certificate Role
@@ -91,7 +117,7 @@ Gets information associated with the named role.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/cert/certs/test-ca
+    http://127.0.0.1:8200/v1/auth/cert/certs/test-ca
 ```
 
 ### Sample Response
@@ -130,7 +156,7 @@ Lists configured certificate names.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/auth/cert/certs
+    http://127.0.0.1:8200/v1/auth/cert/certs
 
 ### Sample Response
 
@@ -169,7 +195,7 @@ Deletes the named role and CA cert from the method mount.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/cert/certs/cert1
+    http://127.0.0.1:8200/v1/auth/cert/certs/cert1
 ```
 
 ## Create CRL
@@ -201,7 +227,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --date @payload.json \
-    https://vault.rocks/v1/auth/cert/crls/custom-crl
+    http://127.0.0.1:8200/v1/auth/cert/crls/custom-crl
 ```
 
 ## Read CRL
@@ -223,7 +249,7 @@ arbitrary size, these are returned as strings.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/cert/crls/custom-crl
+    http://127.0.0.1:8200/v1/auth/cert/crls/custom-crl
 ```
 
 ### Sample Response
@@ -261,7 +287,7 @@ Deletes the named CRL from the auth method mount.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/cert/crls/cert1
+    http://127.0.0.1:8200/v1/auth/cert/crls/cert1
 ```
 
 ## Configure TLS Certificate Method
@@ -293,7 +319,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --date @payload.json \
-    https://vault.rocks/v1/auth/cert/certs/cert1
+    http://127.0.0.1:8200/v1/auth/cert/certs/cert1
 ```
 
 ## Login with TLS Certificate Method
@@ -329,7 +355,7 @@ https://tools.ietf.org/html/rfc6125#section-2.3)
 $ curl \
     --request POST \
     --date @payload.json \
-    https://vault.rocks/v1/auth/cert/login
+    http://127.0.0.1:8200/v1/auth/cert/login
 ```
 
 ### Sample Response

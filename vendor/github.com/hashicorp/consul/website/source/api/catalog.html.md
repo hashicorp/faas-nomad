@@ -54,7 +54,7 @@ The table below shows this endpoint's support for
 - `Service` `(Service: nil)` - Specifies to register a service. If `ID` is not
   provided, it will be defaulted to the value of the `Service.Service` property.
   Only one service with a given `ID` may be present per node. The service
-  `Tags`, `Address`, and `Port` fields are all optional.
+  `Tags`, `Address`, `Meta`, and `Port` fields are all optional.
 
 - `Check` `(Check: nil)` - Specifies to register a check. The register API
   manipulates the health check entry in the Catalog, but it does not setup the
@@ -105,6 +105,9 @@ and vice versa. A catalog entry can have either, neither, or both.
       "v1"
     ],
     "Address": "127.0.0.1",
+    "Meta": {
+        "redis_version": "4.0"
+    },
     "Port": 8000
   },
   "Check": {
@@ -432,6 +435,9 @@ $ curl \
     "ServiceID": "32a2a47f7992:nodea:5000",
     "ServiceName": "foobar",
     "ServicePort": 5000,
+    "ServiceMeta": {
+        "foobar_meta_value": "baz"
+    },
     "ServiceTags": [
       "tacos"
     ]
@@ -467,9 +473,35 @@ $ curl \
 
 - `ServiceName` is the name of the service
 
+- `ServiceMeta` is a list of user-defined metadata key/value pairs for the service
+
 - `ServicePort` is the port number of the service
 
 - `ServiceTags` is a list of tags for the service
+
+- `ServiceKind` is the kind of service, usually "". See the Agent
+  registration API for more information.
+
+- `ServiceProxyDestination` is the name of the service that is being proxied,
+  for "connect-proxy" type services.
+
+- `ServiceConnect` are the [Connect](/docs/connect/index.html) settings. The
+  value of this struct is equivalent to the `Connect` field for service registration.
+
+## List Nodes for Connect-capable Service
+
+This endpoint returns the nodes providing a
+[Connect-capable](/docs/connect/index.html) service in a given datacenter.
+This will include both proxies and native integrations. A service may
+register both Connect-capable and incapable services at the same time,
+so this endpoint may be used to filter only the Connect-capable endpoints.
+
+| Method | Path                         | Produces                   |
+| ------ | ---------------------------- | -------------------------- |
+| `GET`  | `/catalog/connect/:service`  | `application/json`         |
+
+Parameters and response format are the same as
+[`/catalog/service/:service`](/api/catalog.html#list-nodes-for-service).
 
 ## List Services for Node
 
@@ -529,6 +561,7 @@ $ curl \
       "ID": "consul",
       "Service": "consul",
       "Tags": null,
+      "Meta": {},
       "Port": 8300
     },
     "redis": {
@@ -537,6 +570,9 @@ $ curl \
       "Tags": [
         "v1"
       ],
+      "Meta": {
+        "redis_version": "4.0"
+      },
       "Port": 8000
     }
   }

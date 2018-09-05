@@ -116,10 +116,29 @@ The table below shows this endpoint's support for
     continue to be accepted in future versions of Consul), and `Args` in Consul
     1.0.1 and later.
 
+- `AliasNode` `(string: "")` - Specifies the ID of the node for an alias check.
+  If no service is specified, the check will alias the health of the node.
+  If a service is specified, the check will alias the specified service on
+  this particular node.
+
+- `AliasService` `(string: "")` - Specifies the ID of a service for an
+  alias check. If the service is not registered with the same agent,
+  `AliasNode` must also be specified. Note this is the service _ID_ and
+  not the service _name_ (though they are very often the same).
+
 - `DockerContainerID` `(string: "")` - Specifies that the check is a Docker
   check, and Consul will evaluate the script every `Interval` in the given
   container using the specified `Shell`. Note that `Shell` is currently only
   supported for Docker checks.
+
+- `GRPC` `(string: "")` - Specifies a `gRPC` check's endpoint that supports the standard
+  [gRPC health checking protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md).
+  The state of the check will be updated at the given `Interval` by probing the configured
+  endpoint.
+
+- `GRPCUseTLS` `(bool: false)` - Specifies whether to use TLS for this `gRPC` health check.
+  If TLS is enabled, then by default, a valid TLS certificate is expected. Certificate
+  verification can be turned off by setting `TLSSkipVerify` to `true`.
 
 - `HTTP` `(string: "")` - Specifies an `HTTP` check to perform a `GET` request
   against the value of `HTTP` (expected to be a URL) every `Interval`. If the
@@ -134,6 +153,10 @@ The table below shows this endpoint's support for
 
 - `Header` `(map[string][]string: {})` - Specifies a set of headers that should
   be set for `HTTP` checks. Each header can have multiple values.
+
+- `Timeout` `(duration: 10s)` - Specifies a timeout for outgoing connections in the
+  case of a Script, HTTP, TCP, or gRPC check. Can be specified in the form of "10s"
+  or "5m" (i.e., 10 seconds or 5 minutes, respectively).
 
 - `TLSSkipVerify` `(bool: false)` - Specifies if the certificate for an HTTPS
   check should not be verified.

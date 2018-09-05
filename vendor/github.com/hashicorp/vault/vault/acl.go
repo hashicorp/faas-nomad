@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/vault/helper/identity"
 	"github.com/hashicorp/vault/helper/strutil"
 	"github.com/hashicorp/vault/logical"
+	"github.com/mitchellh/copystructure"
 )
 
 // ACL is used to wrap a set of policies to provide
@@ -33,10 +34,11 @@ type PolicyCheckOpts struct {
 }
 
 type AuthResults struct {
-	ACLResults *ACLResults
-	Allowed    bool
-	RootPrivs  bool
-	Error      *multierror.Error
+	ACLResults  *ACLResults
+	Allowed     bool
+	RootPrivs   bool
+	DeniedError bool
+	Error       *multierror.Error
 }
 
 type ACLResults struct {
@@ -70,8 +72,12 @@ func NewACL(policies []*Policy) (*ACL, error) {
 
 		// Check if this is root
 		if policy.Name == "root" {
+			if len(policies) != 1 {
+				return nil, fmt.Errorf("other policies present along with root")
+			}
 			a.root = true
 		}
+
 		for _, pc := range policy.Paths {
 			// Check which tree to use
 			tree := a.exactRules
@@ -136,7 +142,11 @@ func NewACL(policies []*Policy) (*ACL, error) {
 
 			if len(pc.Permissions.AllowedParameters) > 0 {
 				if existingPerms.AllowedParameters == nil {
-					existingPerms.AllowedParameters = pc.Permissions.AllowedParameters
+					clonedAllowed, err := copystructure.Copy(pc.Permissions.AllowedParameters)
+					if err != nil {
+						return nil, err
+					}
+					existingPerms.AllowedParameters = clonedAllowed.(map[string][]interface{})
 				} else {
 					for key, value := range pc.Permissions.AllowedParameters {
 						pcValue, ok := existingPerms.AllowedParameters[key]
@@ -154,7 +164,11 @@ func NewACL(policies []*Policy) (*ACL, error) {
 
 			if len(pc.Permissions.DeniedParameters) > 0 {
 				if existingPerms.DeniedParameters == nil {
-					existingPerms.DeniedParameters = pc.Permissions.DeniedParameters
+					clonedDenied, err := copystructure.Copy(pc.Permissions.DeniedParameters)
+					if err != nil {
+						return nil, err
+					}
+					existingPerms.DeniedParameters = clonedDenied.(map[string][]interface{})
 				} else {
 					for key, value := range pc.Permissions.DeniedParameters {
 						pcValue, ok := existingPerms.DeniedParameters[key]
@@ -203,6 +217,14 @@ func (a *ACL) Capabilities(path string) (pathCapabilities []string) {
 		perm := raw.(*ACLPermissions)
 		capabilities = perm.CapabilitiesBitmap
 		goto CHECK
+	}
+	if strings.HasSuffix(path, "/") {
+		raw, ok = a.exactRules.Get(strings.TrimSuffix(path, "/"))
+		if ok {
+			perm := raw.(*ACLPermissions)
+			capabilities = perm.CapabilitiesBitmap
+			goto CHECK
+		}
 	}
 
 	// Find a glob rule, default deny if no match
@@ -272,6 +294,14 @@ func (a *ACL) AllowOperation(req *logical.Request) (ret *ACLResults) {
 		capabilities = permissions.CapabilitiesBitmap
 		goto CHECK
 	}
+	if op == logical.ListOperation {
+		raw, ok = a.exactRules.Get(strings.TrimSuffix(path, "/"))
+		if ok {
+			permissions = raw.(*ACLPermissions)
+			capabilities = permissions.CapabilitiesBitmap
+			goto CHECK
+		}
+	}
 
 	// Find a glob rule, default deny if no match
 	_, raw, ok = a.globRules.LongestPrefix(path)
@@ -334,7 +364,7 @@ CHECK:
 
 	// Only check parameter permissions for operations that can modify
 	// parameters.
-	if op == logical.UpdateOperation || op == logical.CreateOperation {
+	if op == logical.ReadOperation || op == logical.UpdateOperation || op == logical.CreateOperation {
 		for _, parameter := range permissions.RequiredParameters {
 			if _, ok := req.Data[strings.ToLower(parameter)]; !ok {
 				return
@@ -357,7 +387,7 @@ CHECK:
 		}
 
 		for parameter, value := range req.Data {
-			// Check if parameter has been explictly denied
+			// Check if parameter has been explicitly denied
 			if valueSlice, ok := permissions.DeniedParameters[strings.ToLower(parameter)]; ok {
 				// If the value exists in denied values slice, deny
 				if valueInParameterList(value, valueSlice) {
@@ -397,7 +427,7 @@ CHECK:
 	ret.Allowed = true
 	return
 }
-func (c *Core) performPolicyChecks(ctx context.Context, acl *ACL, te *TokenEntry, req *logical.Request, inEntity *identity.Entity, opts *PolicyCheckOpts) (ret *AuthResults) {
+func (c *Core) performPolicyChecks(ctx context.Context, acl *ACL, te *logical.TokenEntry, req *logical.Request, inEntity *identity.Entity, opts *PolicyCheckOpts) (ret *AuthResults) {
 	ret = new(AuthResults)
 
 	// First, perform normal ACL checks if requested. The only time no ACL

@@ -53,6 +53,9 @@ $ curl \
     "Service": "redis",
     "Tags": [],
     "Address": "",
+    "Meta": {
+      "redis_version": "4.0"
+    },
     "Port": 8000
   }
 }
@@ -66,6 +69,9 @@ agent.
 The agent is responsible for managing the status of its local services, and for
 sending updates about its local services to the servers to keep the global
 catalog in sync.
+
+For "connect-proxy" kind services, the `service:write` ACL for the
+`ProxyDestination` value is also required to register the service.
 
 | Method | Path                         | Produces                   |
 | ------ | ---------------------------- | -------------------------- |
@@ -96,14 +102,31 @@ The table below shows this endpoint's support for
   provided, the agent's address is used as the address for the service during
   DNS queries.
 
+- `Meta` `(map<string|string>: nil)` - Specifies arbitrary KV metadata
+  linked to the service instance.
+
 - `Port` `(int: 0)` - Specifies the port of the service.
+
+- `Kind` `(string: "")` - The kind of service. Defaults to "" which is a
+  typical Consul service. This value may also be "connect-proxy" for
+  services that are [Connect-capable](/docs/connect/index.html)
+  proxies representing another service.
+
+- `ProxyDestination` `(string: "")` - For "connect-proxy" `Kind` services,
+  this must be set to the name of the service that the proxy represents. This
+  service doesn't need to be registered, but the caller must have an ACL token
+  with permissions for this service.
+
+- `Connect` `(Connect: nil)` - Specifies the configuration for
+  [Connect](/docs/connect/index.html). See the [Connect structure](#connect-structure)
+  section for supported fields.
 
 - `Check` `(Check: nil)` - Specifies a check. Please see the
   [check documentation](/api/agent/check.html) for more information about the
   accepted fields. If you don't provide a name or id for the check then they
   will be generated. To provide a custom id and/or name set the `CheckID`
   and/or `Name` field.
-  
+
 - `Checks` `(array<Check>: nil`) - Specifies a list of checks. Please see the
   [check documentation](/api/agent/check.html) for more information about the
   accepted fields. If you don't provide a name or id for the check then they
@@ -135,6 +158,15 @@ The table below shows this endpoint's support for
     `false`. See [anti-entropy syncs](/docs/internals/anti-entropy.html) for
     more info.
 
+#### Connect Structure
+
+For the `Connect` field, the parameters are:
+
+- `Native` `(bool: false)` - Specifies whether this service supports
+  the [Connect](/docs/connect/index.html) protocol [natively](/docs/connect/native.html).
+  If this is true, then Connect proxies, DNS queries, etc. will be able to
+  service discover this service.
+
 ### Sample Payload
 
 ```json
@@ -147,6 +179,9 @@ The table below shows this endpoint's support for
   ],
   "Address": "127.0.0.1",
   "Port": 8000,
+  "Meta": {
+    "redis_version": "4.0"
+  },
   "EnableTagOverride": false,
   "Check": {
     "DeregisterCriticalServiceAfter": "90m",

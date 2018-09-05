@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/errwrap"
+	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/physical"
-	log "github.com/mgutz/logxi/v1"
 
 	metrics "github.com/armon/go-metrics"
 	"github.com/samuel/go-zookeeper/zk"
@@ -96,7 +97,7 @@ func NewZooKeeperBackend(conf map[string]string, logger log.Logger) (physical.Ba
 		},
 	}
 
-	// Authnetication info
+	// Authentication info
 	var schemaAndUser string
 	var useAddAuth bool
 	schemaAndUser, useAddAuth = conf["auth_info"]
@@ -120,14 +121,14 @@ func NewZooKeeperBackend(conf map[string]string, logger log.Logger) (physical.Ba
 	// We have all of the configuration in hand - let's try and connect to ZK
 	client, _, err := zk.Connect(strings.Split(machines, ","), time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("client setup failed: %v", err)
+		return nil, errwrap.Wrapf("client setup failed: {{err}}", err)
 	}
 
 	// ZK AddAuth API if the user asked for it
 	if useAddAuth {
 		err = client.AddAuth(schema, []byte(owner))
 		if err != nil {
-			return nil, fmt.Errorf("ZooKeeper rejected authentication information provided at auth_info: %v", err)
+			return nil, errwrap.Wrapf("ZooKeeper rejected authentication information provided at auth_info: {{err}}", err)
 		}
 	}
 
@@ -172,7 +173,7 @@ func (c *ZooKeeperBackend) ensurePath(path string, value []byte) error {
 	return nil
 }
 
-// cleanupLogicalPath is used to remove all empty nodes, begining with deepest one,
+// cleanupLogicalPath is used to remove all empty nodes, beginning with deepest one,
 // aborting on first non-empty one, up to top-level node.
 func (c *ZooKeeperBackend) cleanupLogicalPath(path string) error {
 	nodes := strings.Split(path, "/")
@@ -181,23 +182,19 @@ func (c *ZooKeeperBackend) cleanupLogicalPath(path string) error {
 
 		_, stat, err := c.client.Exists(fullPath)
 		if err != nil {
-			return fmt.Errorf("Failed to acquire node data: %s", err)
+			return errwrap.Wrapf("failed to acquire node data: {{err}}", err)
 		}
 
 		if stat.DataLength > 0 && stat.NumChildren > 0 {
-			msgFmt := "Node %s is both of data and leaf type ??"
-			panic(fmt.Sprintf(msgFmt, fullPath))
+			panic(fmt.Sprintf("node %q is both of data and leaf type", fullPath))
 		} else if stat.DataLength > 0 {
-			msgFmt := "Node %s is a data node, this is either a bug or " +
-				"backend data is corrupted"
-			panic(fmt.Sprintf(msgFmt, fullPath))
+			panic(fmt.Sprintf("node %q is a data node, this is either a bug or backend data is corrupted", fullPath))
 		} else if stat.NumChildren > 0 {
 			return nil
 		} else {
 			// Empty node, lets clean it up!
 			if err := c.client.Delete(fullPath, -1); err != nil && err != zk.ErrNoNode {
-				msgFmt := "Removal of node `%s` failed: `%v`"
-				return fmt.Errorf(msgFmt, fullPath, err)
+				return errwrap.Wrapf(fmt.Sprintf("removal of node %q failed: {{err}}", fullPath), err)
 			}
 		}
 	}
@@ -265,7 +262,7 @@ func (c *ZooKeeperBackend) Delete(ctx context.Context, key string) error {
 
 	// Mask if the node does not exist
 	if err != nil && err != zk.ErrNoNode {
-		return fmt.Errorf("Failed to remove %q: %v", fullPath, err)
+		return errwrap.Wrapf(fmt.Sprintf("failed to remove %q: {{err}}", fullPath), err)
 	}
 
 	err = c.cleanupLogicalPath(key)
@@ -307,12 +304,11 @@ func (c *ZooKeeperBackend) List(ctx context.Context, prefix string) ([]string, e
 				// under the lock file; just treat it like the file Vault expects
 				children = append(children, key[1:])
 			} else {
-				msgFmt := "Node %q is both of data and leaf type ??"
-				panic(fmt.Sprintf(msgFmt, childPath))
+				panic(fmt.Sprintf("node %q is both of data and leaf type", childPath))
 			}
 		} else if stat.DataLength == 0 {
 			// No, we cannot differentiate here on number of children as node
-			// can have all it leafs remoed, and it still is a node.
+			// can have all it leafs removed, and it still is a node.
 			children = append(children, key+"/")
 		} else {
 			children = append(children, key[1:])
@@ -325,9 +321,10 @@ func (c *ZooKeeperBackend) List(ctx context.Context, prefix string) ([]string, e
 // LockWith is used for mutual exclusion based on the given key.
 func (c *ZooKeeperBackend) LockWith(key, value string) (physical.Lock, error) {
 	l := &ZooKeeperHALock{
-		in:    c,
-		key:   key,
-		value: value,
+		in:     c,
+		key:    key,
+		value:  value,
+		logger: c.logger,
 	}
 	return l, nil
 }
@@ -340,13 +337,15 @@ func (c *ZooKeeperBackend) HAEnabled() bool {
 
 // ZooKeeperHALock is a ZooKeeper Lock implementation for the HABackend
 type ZooKeeperHALock struct {
-	in    *ZooKeeperBackend
-	key   string
-	value string
+	in     *ZooKeeperBackend
+	key    string
+	value  string
+	logger log.Logger
 
 	held      bool
 	localLock sync.Mutex
 	leaderCh  chan struct{}
+	stopCh    <-chan struct{}
 	zkLock    *zk.Lock
 }
 
@@ -382,12 +381,14 @@ func (i *ZooKeeperHALock) Lock(stopCh <-chan struct{}) (<-chan struct{}, error) 
 	// Watch for Events which could result in loss of our zkLock and close(i.leaderCh)
 	currentVal, _, lockeventCh, err := i.in.client.GetW(lockpath)
 	if err != nil {
-		return nil, fmt.Errorf("unable to watch HA lock: %v", err)
+		return nil, errwrap.Wrapf("unable to watch HA lock: {{err}}", err)
 	}
 	if i.value != string(currentVal) {
 		return nil, fmt.Errorf("lost HA lock immediately before watch")
 	}
 	go i.monitorLock(lockeventCh, i.leaderCh)
+
+	i.stopCh = stopCh
 
 	return i.leaderCh, nil
 }
@@ -445,16 +446,55 @@ func (i *ZooKeeperHALock) monitorLock(lockeventCh <-chan zk.Event, leaderCh chan
 	}
 }
 
-func (i *ZooKeeperHALock) Unlock() error {
+func (i *ZooKeeperHALock) unlockInternal() error {
 	i.localLock.Lock()
 	defer i.localLock.Unlock()
 	if !i.held {
 		return nil
 	}
 
-	i.held = false
-	i.zkLock.Unlock()
-	return nil
+	err := i.zkLock.Unlock()
+
+	if err == nil {
+		i.held = false
+		return nil
+	}
+
+	return err
+}
+
+func (i *ZooKeeperHALock) Unlock() error {
+	var err error
+
+	if err = i.unlockInternal(); err != nil {
+		i.logger.Error("zookeeper: failed to release distributed lock", "error", err)
+
+		go func(i *ZooKeeperHALock) {
+			attempts := 0
+			i.logger.Info("zookeeper: launching automated distributed lock release")
+
+			for {
+				if err := i.unlockInternal(); err == nil {
+					i.logger.Info("zookeeper: distributed lock released")
+					return
+				}
+
+				select {
+				case <-time.After(time.Second):
+					attempts := attempts + 1
+					if attempts >= 10 {
+						i.logger.Error("zookeeper: release lock max attempts reached. Lock may not be released", "error", err)
+						return
+					}
+					continue
+				case <-i.stopCh:
+					return
+				}
+			}
+		}(i)
+	}
+
+	return err
 }
 
 func (i *ZooKeeperHALock) Value() (bool, string, error) {

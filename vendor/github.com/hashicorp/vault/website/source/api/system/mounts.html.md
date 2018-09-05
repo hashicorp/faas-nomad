@@ -23,7 +23,7 @@ This endpoints lists all the mounted secrets engines.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/sys/mounts
+    http://127.0.0.1:8200/v1/sys/mounts
 ```
 
 ### Sample Response
@@ -80,27 +80,47 @@ This endpoint enables a new secrets engine at the given path.
 - `config` `(map<string|string>: nil)` – Specifies configuration options for
   this mount. This is an object with four possible values:
 
-    - `default_lease_ttl` `(string: "")` - the default lease duration, specified
-      as a go string duration like "5s" or "30m".
+  - `default_lease_ttl` `(string: "")` - The default lease duration, specified
+     as a string duration like "5s" or "30m".
 
-    - `max_lease_ttl` `(string: "")` - the maximum lease duration, specified as
-      a go string duration like "5s" or "30m".
+  - `max_lease_ttl` `(string: "")` - The maximum lease duration, specified as a
+     string duration like "5s" or "30m".
 
-    - `force_no_cache` `(bool: false)` - disable caching.
+  - `force_no_cache` `(bool: false)` - Disable caching.
 
-    - `plugin_name` `(string: "")` - the name of the plugin in the plugin
-      catalog to use.
+  - `plugin_name` `(string: "")` - The name of the plugin in the plugin catalog
+     to use.
+
+  - `audit_non_hmac_request_keys` `(array: [])` - Comma-separated list of keys
+     that will not be HMAC'd by audit devices in the request data object.
+
+  - `audit_non_hmac_response_keys` `(array: [])` - Comma-separated list of keys
+     that will not be HMAC'd by audit devices in the response data object.
+
+  - `listing_visibility` `(string: "")` - Speficies whether to show this mount
+    in the UI-specific listing endpoint. Valid values are `"unauth"` or
+    `"hidden"`.  If not set, behaves like `"hidden"`.
+
+  - `passthrough_request_headers` `(array: [])` - Comma-separated list of headers
+     to whitelist and pass from the request to the backend.
 
     These control the default and maximum lease time-to-live, force
     disabling backend caching, and option plugin name for plugin backends
     respectively. The first three options override the global defaults if
     set on a specific mount. The plugin_name can be provided in the config
     map or as a top-level option, with the former taking precedence.
-    
+
     When used with supported seals (`pkcs11`, `awskms`, etc.), `seal_wrap`
     causes key material for supporting mounts to be wrapped by the seal's
     encryption capability. This is currently only supported for `transit` and
     `pki` backends. This is only available in Vault Enterprise.
+
+- `options` `(map<string|string>: nil)` - Specifies mount type specific options
+  that are passed to the backend. 
+  
+    *Key/Value (KV)*  
+    - `version` `(string: "1")` - The version of the KV to mount. Set to "2" for mount
+      KV v2.
 
 - `plugin_name` `(string: "")` – Specifies the name of the plugin to
   use based from the name in the plugin catalog. Applies only to plugin
@@ -133,7 +153,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/sys/mounts/my-mount
+    http://127.0.0.1:8200/v1/sys/mounts/my-mount
 ```
 
 ## Disable Secrets Engine
@@ -150,7 +170,7 @@ This endpoint disables the mount point specified in the URL.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/sys/mounts/my-mount
+    http://127.0.0.1:8200/v1/sys/mounts/my-mount
 ```
 
 ## Read Mount Configuration
@@ -168,7 +188,7 @@ be the system default or a mount-specific value.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/sys/mounts/my-mount/tune
+    http://127.0.0.1:8200/v1/sys/mounts/my-mount/tune
 ```
 
 ### Sample Response
@@ -202,6 +222,21 @@ This endpoint tunes configuration parameters for a given mount point.
 - `description` `(string: "")` – Specifies the description of the mount. This
   overrides the current stored value, if any.
 
+- `audit_non_hmac_request_keys` `(array: [])` - Specifies the comma-separated
+  list of keys that will not be HMAC'd by audit devices in the request data
+  object.
+
+- `audit_non_hmac_response_keys` `(array: [])` - Specifies the comma-separated
+  list of keys that will not be HMAC'd by audit devices in the response data
+  object.
+
+- `listing_visibility` `(string: "")` - Speficies whether to show this mount in
+  the UI-specific listing endpoint. Valid values are `"unauth"` or `"hidden"`.
+  If not set, behaves like `"hidden"`.
+
+- `passthrough_request_headers` `(array: [])` - Comma-separated list of headers
+    to whitelist and pass from the request to the backend.
+
 ### Sample Payload
 
 ```json
@@ -218,5 +253,5 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/sys/mounts/my-mount/tune
+    http://127.0.0.1:8200/v1/sys/mounts/my-mount/tune
 ```

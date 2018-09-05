@@ -1,16 +1,24 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/textproto"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/NYTimes/gziphandler"
+	"github.com/elazarl/go-bindata-assetfs"
 	"github.com/hashicorp/errwrap"
 	cleanhttp "github.com/hashicorp/go-cleanhttp"
+	sockaddr "github.com/hashicorp/go-sockaddr"
 	"github.com/hashicorp/vault/helper/consts"
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/helper/parseutil"
@@ -46,19 +54,25 @@ const (
 	// soft-mandatory Sentinel policies.
 	PolicyOverrideHeaderName = "X-Vault-Policy-Override"
 
-	// MaxRequestSize is the maximum accepted request size. This is to prevent
-	// a denial of service attack where no Content-Length is provided and the server
-	// is fed ever more data until it exhausts memory.
-	MaxRequestSize = 32 * 1024 * 1024
+	// DefaultMaxRequestSize is the default maximum accepted request size. This
+	// is to prevent a denial of service attack where no Content-Length is
+	// provided and the server is fed ever more data until it exhausts memory.
+	// Can be overridden per listener.
+	DefaultMaxRequestSize = 32 * 1024 * 1024
 )
 
 var (
 	ReplicationStaleReadTimeout = 2 * time.Second
+
+	// Set to false by stub_asset if the ui build tag isn't enabled
+	uiBuiltIn = true
 )
 
 // Handler returns an http.Handler for the API. This can be used on
 // its own to mount the Vault API within another web server.
-func Handler(core *vault.Core) http.Handler {
+func Handler(props *vault.HandlerProperties) http.Handler {
+	core := props.Core
+
 	// Create the muxer to handle the actual endpoints
 	mux := http.NewServeMux()
 	mux.Handle("/v1/sys/init", handleSysInit(core))
@@ -72,16 +86,23 @@ func Handler(core *vault.Core) http.Handler {
 	mux.Handle("/v1/sys/generate-root/update", handleRequestForwarding(core, handleSysGenerateRootUpdate(core, vault.GenerateStandardRootTokenStrategy)))
 	mux.Handle("/v1/sys/rekey/init", handleRequestForwarding(core, handleSysRekeyInit(core, false)))
 	mux.Handle("/v1/sys/rekey/update", handleRequestForwarding(core, handleSysRekeyUpdate(core, false)))
+	mux.Handle("/v1/sys/rekey/verify", handleRequestForwarding(core, handleSysRekeyVerify(core, false)))
 	mux.Handle("/v1/sys/rekey-recovery-key/init", handleRequestForwarding(core, handleSysRekeyInit(core, true)))
 	mux.Handle("/v1/sys/rekey-recovery-key/update", handleRequestForwarding(core, handleSysRekeyUpdate(core, true)))
-	mux.Handle("/v1/sys/wrapping/lookup", handleRequestForwarding(core, handleLogical(core, false, wrappingVerificationFunc)))
-	mux.Handle("/v1/sys/wrapping/rewrap", handleRequestForwarding(core, handleLogical(core, false, wrappingVerificationFunc)))
-	mux.Handle("/v1/sys/wrapping/unwrap", handleRequestForwarding(core, handleLogical(core, false, wrappingVerificationFunc)))
-	for _, path := range injectDataIntoTopRoutes {
-		mux.Handle(path, handleRequestForwarding(core, handleLogical(core, true, nil)))
+	mux.Handle("/v1/sys/rekey-recovery-key/verify", handleRequestForwarding(core, handleSysRekeyVerify(core, true)))
+	mux.Handle("/v1/sys/wrapping/lookup", handleRequestForwarding(core, handleLogical(core, wrappingVerificationFunc)))
+	mux.Handle("/v1/sys/wrapping/rewrap", handleRequestForwarding(core, handleLogical(core, wrappingVerificationFunc)))
+	mux.Handle("/v1/sys/wrapping/unwrap", handleRequestForwarding(core, handleLogical(core, wrappingVerificationFunc)))
+	mux.Handle("/v1/sys/", handleRequestForwarding(core, handleLogical(core, nil)))
+	mux.Handle("/v1/", handleRequestForwarding(core, handleLogical(core, nil)))
+	if core.UIEnabled() == true {
+		if uiBuiltIn {
+			mux.Handle("/ui/", http.StripPrefix("/ui/", gziphandler.GzipHandler(handleUIHeaders(core, handleUI(http.FileServer(&UIAssetWrapper{FileSystem: assetFS()}))))))
+		} else {
+			mux.Handle("/ui/", handleUIHeaders(core, handleUIStub()))
+		}
+		mux.Handle("/", handleRootRedirect())
 	}
-	mux.Handle("/v1/sys/", handleRequestForwarding(core, handleLogical(core, false, nil)))
-	mux.Handle("/v1/", handleRequestForwarding(core, handleLogical(core, false, nil)))
 
 	// Wrap the handler in another handler to trigger all help paths.
 	helpWrappedHandler := wrapHelpHandler(mux, core)
@@ -89,11 +110,14 @@ func Handler(core *vault.Core) http.Handler {
 
 	// Wrap the help wrapped handler with another layer with a generic
 	// handler
-	genericWrappedHandler := wrapGenericHandler(corsWrappedHandler)
+	genericWrappedHandler := wrapGenericHandler(corsWrappedHandler, props.MaxRequestSize, props.MaxRequestDuration)
 
 	// Wrap the handler with PrintablePathCheckHandler to check for non-printable
 	// characters in the request path.
-	printablePathCheckHandler := cleanhttp.PrintablePathCheckHandler(genericWrappedHandler, nil)
+	printablePathCheckHandler := genericWrappedHandler
+	if !props.DisablePrintableCheck {
+		printablePathCheckHandler = cleanhttp.PrintablePathCheckHandler(genericWrappedHandler, nil)
+	}
 
 	return printablePathCheckHandler
 }
@@ -101,11 +125,114 @@ func Handler(core *vault.Core) http.Handler {
 // wrapGenericHandler wraps the handler with an extra layer of handler where
 // tasks that should be commonly handled for all the requests and/or responses
 // are performed.
-func wrapGenericHandler(h http.Handler) http.Handler {
+func wrapGenericHandler(h http.Handler, maxRequestSize int64, maxRequestDuration time.Duration) http.Handler {
+	if maxRequestDuration == 0 {
+		maxRequestDuration = vault.DefaultMaxRequestDuration
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Set the Cache-Control header for all the responses returned
 		// by Vault
 		w.Header().Set("Cache-Control", "no-store")
+
+		// Start with the request context
+		ctx := r.Context()
+		var cancelFunc context.CancelFunc
+		// Add our timeout
+		ctx, cancelFunc = context.WithTimeout(ctx, maxRequestDuration)
+		// Add a size limiter if desired
+		if maxRequestSize > 0 {
+			ctx = context.WithValue(ctx, "max_request_size", maxRequestSize)
+		}
+		r = r.WithContext(ctx)
+		h.ServeHTTP(w, r)
+		cancelFunc()
+		return
+	})
+}
+
+func WrapForwardedForHandler(h http.Handler, authorizedAddrs []*sockaddr.SockAddrMarshaler, rejectNotPresent, rejectNonAuthz bool, hopSkips int) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers, headersOK := r.Header[textproto.CanonicalMIMEHeaderKey("X-Forwarded-For")]
+		if !headersOK || len(headers) == 0 {
+			if !rejectNotPresent {
+				h.ServeHTTP(w, r)
+				return
+			}
+			respondError(w, http.StatusBadRequest, fmt.Errorf("missing x-forwarded-for header and configured to reject when not present"))
+			return
+		}
+
+		host, port, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			// If not rejecting treat it like we just don't have a valid
+			// header because we can't do a comparison against an address we
+			// can't understand
+			if !rejectNotPresent {
+				h.ServeHTTP(w, r)
+				return
+			}
+			respondError(w, http.StatusBadRequest, errwrap.Wrapf("error parsing client hostport: {{err}}", err))
+			return
+		}
+
+		addr, err := sockaddr.NewIPAddr(host)
+		if err != nil {
+			// We treat this the same as the case above
+			if !rejectNotPresent {
+				h.ServeHTTP(w, r)
+				return
+			}
+			respondError(w, http.StatusBadRequest, errwrap.Wrapf("error parsing client address: {{err}}", err))
+			return
+		}
+
+		var found bool
+		for _, authz := range authorizedAddrs {
+			if authz.Contains(addr) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			// If we didn't find it and aren't configured to reject, simply
+			// don't trust it
+			if !rejectNonAuthz {
+				h.ServeHTTP(w, r)
+				return
+			}
+			respondError(w, http.StatusBadRequest, fmt.Errorf("client address not authorized for x-forwarded-for and configured to reject connection"))
+			return
+		}
+
+		// At this point we have at least one value and it's authorized
+
+		// Split comma separated ones, which are common. This brings it in line
+		// to the multiple-header case.
+		var acc []string
+		for _, header := range headers {
+			vals := strings.Split(header, ",")
+			for _, v := range vals {
+				acc = append(acc, strings.TrimSpace(v))
+			}
+		}
+
+		indexToUse := len(acc) - 1 - hopSkips
+		if indexToUse < 0 {
+			// This is likely an error in either configuration or other
+			// infrastructure. We could either deny the request, or we
+			// could simply not trust the value. Denying the request is
+			// "safer" since if this logic is configured at all there may
+			// be an assumption it can always be trusted. Given that we can
+			// deny accepting the request at all if it's not from an
+			// authorized address, if we're at this point the address is
+			// authorized (or we've turned off explicit rejection) and we
+			// should assume that what comes in should be properly
+			// formatted.
+			respondError(w, http.StatusBadRequest, fmt.Errorf("malformed x-forwarded-for configuration or request, hops to skip (%d) would skip before earliest chain link (chain length %d)", hopSkips, len(headers)))
+			return
+		}
+
+		r.RemoteAddr = net.JoinHostPort(acc[indexToUse], port)
 		h.ServeHTTP(w, r)
 		return
 	})
@@ -121,7 +248,7 @@ func wrappingVerificationFunc(core *vault.Core, req *logical.Request) error {
 
 	valid, err := core.ValidateWrappingToken(req)
 	if err != nil {
-		return fmt.Errorf("error validating wrapping token: %v", err)
+		return errwrap.Wrapf("error validating wrapping token: {{err}}", err)
 	}
 	if !valid {
 		return fmt.Errorf("wrapping token is not valid or does not exist")
@@ -145,11 +272,93 @@ func stripPrefix(prefix, path string) (string, bool) {
 	return path, true
 }
 
+func handleUIHeaders(core *vault.Core, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		header := w.Header()
+
+		userHeaders, err := core.UIHeaders()
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if userHeaders != nil {
+			for k := range userHeaders {
+				v := userHeaders.Get(k)
+				header.Set(k, v)
+			}
+		}
+		h.ServeHTTP(w, req)
+	})
+}
+
+func handleUI(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+
+		// The fileserver handler strips trailing slashes and does a redirect.
+		// We don't want the redirect to happen so we preemptively trim the slash
+		// here.
+		req.URL.Path = strings.TrimSuffix(req.URL.Path, "/")
+		h.ServeHTTP(w, req)
+		return
+	})
+}
+
+func handleUIStub() http.Handler {
+	stubHTML := `
+	<!DOCTYPE html>
+	<html>
+	<p>Vault UI is not available in this binary. To get Vault UI do one of the following:</p>
+	<ul>
+	<li><a href="https://www.vaultproject.io/downloads.html">Download an official release</a></li>
+	<li>Run <code>make release</code> to create your own release binaries.
+	<li>Run <code>make dev-ui</code> to create a development binary with the UI.
+	</ul>
+	</html>
+	`
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(stubHTML))
+	})
+}
+
+func handleRootRedirect() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, "/ui/", 307)
+		return
+	})
+}
+
+type UIAssetWrapper struct {
+	FileSystem *assetfs.AssetFS
+}
+
+func (fs *UIAssetWrapper) Open(name string) (http.File, error) {
+	file, err := fs.FileSystem.Open(name)
+	if err == nil {
+		return file, nil
+	}
+	// serve index.html instead of 404ing
+	if err == os.ErrNotExist {
+		return fs.FileSystem.Open("index.html")
+	}
+	return nil, err
+}
+
 func parseRequest(r *http.Request, w http.ResponseWriter, out interface{}) error {
 	// Limit the maximum number of bytes to MaxRequestSize to protect
 	// against an indefinite amount of data being read.
-	limit := http.MaxBytesReader(w, r.Body, MaxRequestSize)
-	err := jsonutil.DecodeJSONFromReader(limit, out)
+	reader := r.Body
+	ctx := r.Context()
+	maxRequestSize := ctx.Value("max_request_size")
+	if maxRequestSize != nil {
+		max, ok := maxRequestSize.(int64)
+		if !ok {
+			return errors.New("could not parse max_request_size from request context")
+		}
+		if max > 0 {
+			reader = http.MaxBytesReader(w, r.Body, max)
+		}
+	}
+	err := jsonutil.DecodeJSONFromReader(reader, out)
 	if err != nil && err != io.EOF {
 		return errwrap.Wrapf("failed to parse JSON input: {{err}}", err)
 	}
@@ -167,7 +376,7 @@ func handleRequestForwarding(core *vault.Core, handler http.Handler) http.Handle
 
 		if r.Header.Get(NoRequestForwardingHeaderName) != "" {
 			// Forwarding explicitly disabled, fall back to previous behavior
-			core.Logger().Trace("http/handleRequestForwarding: forwarding disabled by client request")
+			core.Logger().Debug("handleRequestForwarding: forwarding disabled by client request")
 			handler.ServeHTTP(w, r)
 			return
 		}
@@ -202,9 +411,9 @@ func handleRequestForwarding(core *vault.Core, handler http.Handler) http.Handle
 		statusCode, header, retBytes, err := core.ForwardRequest(r)
 		if err != nil {
 			if err == vault.ErrCannotForward {
-				core.Logger().Trace("http/handleRequestForwarding: cannot forward (possibly disabled on active node), falling back")
+				core.Logger().Debug("handleRequestForwarding: cannot forward (possibly disabled on active node), falling back")
 			} else {
-				core.Logger().Error("http/handleRequestForwarding: error forwarding request", "error", err)
+				core.Logger().Error("handleRequestForwarding: error forwarding request", "error", err)
 			}
 
 			// Fall back to redirection
@@ -227,7 +436,7 @@ func handleRequestForwarding(core *vault.Core, handler http.Handler) http.Handle
 // request is a helper to perform a request and properly exit in the
 // case of an error.
 func request(core *vault.Core, w http.ResponseWriter, rawReq *http.Request, r *logical.Request) (*logical.Response, bool) {
-	resp, err := core.HandleRequest(r)
+	resp, err := core.HandleRequest(rawReq.Context(), r)
 	if errwrap.Contains(err, consts.ErrStandby.Error()) {
 		respondStandby(core, w, rawReq.URL)
 		return resp, false
@@ -244,13 +453,20 @@ func respondStandby(core *vault.Core, w http.ResponseWriter, reqURL *url.URL) {
 	// Request the leader address
 	_, redirectAddr, _, err := core.Leader()
 	if err != nil {
+		if err == vault.ErrHANotEnabled {
+			// Standalone node, serve 503
+			err = errors.New("node is not active")
+			respondError(w, http.StatusServiceUnavailable, err)
+			return
+		}
+
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	// If there is no leader, generate a 503 error
 	if redirectAddr == "" {
-		err = fmt.Errorf("no active Vault instance found")
+		err = errors.New("no active Vault instance found")
 		respondError(w, http.StatusServiceUnavailable, err)
 		return
 	}
@@ -296,6 +512,7 @@ func requestAuth(core *vault.Core, r *http.Request, req *logical.Request) *logic
 		if err == nil && te != nil {
 			req.ClientTokenAccessor = te.Accessor
 			req.ClientTokenRemainingUses = te.NumUses
+			req.SetTokenEntry(te)
 		}
 	}
 
@@ -371,28 +588,4 @@ func respondOk(w http.ResponseWriter, body interface{}) {
 
 type ErrorResponse struct {
 	Errors []string `json:"errors"`
-}
-
-var injectDataIntoTopRoutes = []string{
-	"/v1/sys/audit",
-	"/v1/sys/audit/",
-	"/v1/sys/audit-hash/",
-	"/v1/sys/auth",
-	"/v1/sys/auth/",
-	"/v1/sys/config/cors",
-	"/v1/sys/config/auditing/request-headers/",
-	"/v1/sys/config/auditing/request-headers",
-	"/v1/sys/capabilities",
-	"/v1/sys/capabilities-accessor",
-	"/v1/sys/capabilities-self",
-	"/v1/sys/key-status",
-	"/v1/sys/mounts",
-	"/v1/sys/mounts/",
-	"/v1/sys/policy",
-	"/v1/sys/policy/",
-	"/v1/sys/rekey/backup",
-	"/v1/sys/rekey/recovery-key-backup",
-	"/v1/sys/remount",
-	"/v1/sys/rotate",
-	"/v1/sys/wrapping/wrap",
 }

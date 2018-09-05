@@ -1,5 +1,5 @@
 #!/bin/sh
-
+set -e
 export arch=$(uname -m)
 
 if [ "$arch" = "armv7l" ] ; then
@@ -7,14 +7,20 @@ if [ "$arch" = "armv7l" ] ; then
     exit 1
 fi
 
+cd ..
+GIT_COMMIT=$(git rev-list -1 HEAD)
+VERSION=$(git describe --all --exact-match `git rev-parse HEAD` | grep tags | sed 's/tags\///')
+cd watchdog
+
 if [ ! $http_proxy == "" ] 
 then
-    docker build --no-cache --build-arg https_proxy=$https_proxy --build-arg http_proxy=$http_proxy -t functions/watchdog:build .
+    docker build --no-cache --build-arg https_proxy=$https_proxy --build-arg http_proxy=$http_proxy \
+        --build-arg GIT_COMMIT=$GIT_COMMIT --build-arg VERSION=$VERSION -t openfaas/watchdog:build .
 else
-    docker build -t functions/watchdog:build .
+    docker build --no-cache --build-arg VERSION=$VERSION --build-arg GIT_COMMIT=$GIT_COMMIT -t openfaas/watchdog:build .
 fi
 
-docker create --name buildoutput functions/watchdog:build echo
+docker create --name buildoutput openfaas/watchdog:build echo
 
 docker cp buildoutput:/go/src/github.com/openfaas/faas/watchdog/watchdog ./fwatchdog
 docker cp buildoutput:/go/src/github.com/openfaas/faas/watchdog/watchdog-armhf ./fwatchdog-armhf

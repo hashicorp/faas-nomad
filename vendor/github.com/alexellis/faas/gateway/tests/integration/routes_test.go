@@ -49,7 +49,8 @@ func fireRequestWithHeaders(url string, method string, reqBody string, headers m
 
 func TestGet_Rejected(t *testing.T) {
 	var reqBody string
-	_, code, err := fireRequest("http://localhost:8080/function/func_echoit", http.MethodGet, reqBody)
+	unsupportedMethod := http.MethodHead
+	_, code, err := fireRequest("http://localhost:8080/function/echoit", unsupportedMethod, reqBody)
 	want := http.StatusMethodNotAllowed
 	if code != want {
 		t.Logf("Failed got: %d, wanted: %d", code, want)
@@ -67,15 +68,18 @@ func TestEchoIt_Post_Route_Handler_ForwardsClientHeaders(t *testing.T) {
 	headers := make(map[string]string, 0)
 	headers["X-Api-Key"] = "123"
 
-	body, code, err := fireRequestWithHeaders("http://localhost:8080/function/func_echoit", http.MethodPost, reqBody, headers)
+	body, code, err := fireRequestWithHeaders("http://localhost:8080/function/echoit", http.MethodPost, reqBody, headers)
 
 	if err != nil {
 		t.Log(err)
 		t.Fail()
 	}
+
 	if code != http.StatusOK {
-		t.Log("Failed")
+		t.Logf("Failed, code: %d, body:%s", code, body)
+		t.Fail()
 	}
+
 	if body != reqBody {
 		t.Log("Expected body returned")
 		t.Fail()
@@ -84,7 +88,7 @@ func TestEchoIt_Post_Route_Handler_ForwardsClientHeaders(t *testing.T) {
 
 func TestEchoIt_Post_Route_Handler(t *testing.T) {
 	reqBody := "test message"
-	body, code, err := fireRequest("http://localhost:8080/function/func_echoit", http.MethodPost, reqBody)
+	body, code, err := fireRequest("http://localhost:8080/function/echoit", http.MethodPost, reqBody)
 
 	if err != nil {
 		t.Log(err)
@@ -99,23 +103,23 @@ func TestEchoIt_Post_Route_Handler(t *testing.T) {
 	}
 }
 
-func TestEchoIt_Post_X_Header_Routing_Handler(t *testing.T) {
-	reqBody := "test message"
-	headers := make(map[string]string, 0)
-	headers["X-Function"] = "func_echoit"
+// Test suppressed due to X-Header deprecation.
+// func TestEchoIt_Post_X_Header_Routing_Handler(t *testing.T) {
+// 	reqBody := "test message"
+// 	headers := make(map[string]string, 0)
+// 	headers["X-Function"] = "func_echoit"
 
-	body, code, err := fireRequestWithHeaders("http://localhost:8080/", http.MethodPost, reqBody, headers)
+// 	body, code, err := fireRequestWithHeaders("http://localhost:8080/", http.MethodPost, reqBody, headers)
 
-	if err != nil {
-		t.Log(err)
-		t.Fail()
-	}
-	if code != http.StatusOK {
-		t.Log("Failed")
-	}
-	if body != reqBody {
-		t.Log("Expected body returned")
-		t.Fail()
-	}
-
-}
+// 	if err != nil {
+// 		t.Log(err)
+// 		t.Fail()
+// 	}
+// 	if code != http.StatusOK {
+// 		t.Logf("statusCode - want: %d, got: %d", http.StatusOK, code)
+// 	}
+// 	if body != reqBody {
+// 		t.Logf("Expected body from echo function to be equal to input, but was: %s", body)
+// 		t.Fail()
+// 	}
+// }

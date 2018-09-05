@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/mgutz/logxi/v1"
+	log "github.com/hashicorp/go-hclog"
 
 	"github.com/hashicorp/go-cleanhttp"
-	"github.com/hashicorp/vault/helper/logformat"
+	"github.com/hashicorp/vault/helper/logging"
 	"github.com/hashicorp/vault/physical"
 	"github.com/ncw/swift"
 )
@@ -25,6 +25,8 @@ func TestSwiftBackend(t *testing.T) {
 	project := os.Getenv("OS_PROJECT_NAME")
 	domain := os.Getenv("OS_USER_DOMAIN_NAME")
 	projectDomain := os.Getenv("OS_PROJECT_DOMAIN_NAME")
+	region := os.Getenv("OS_REGION_NAME")
+	tenantID := os.Getenv("OS_TENANT_ID")
 
 	ts := time.Now().UnixNano()
 	container := fmt.Sprintf("vault-test-%d", ts)
@@ -36,6 +38,8 @@ func TestSwiftBackend(t *testing.T) {
 		AuthUrl:      authUrl,
 		Tenant:       project,
 		TenantDomain: projectDomain,
+		Region:       region,
+		TenantId:     tenantID,
 		Transport:    cleanhttp.DefaultPooledTransport(),
 	}
 
@@ -65,7 +69,7 @@ func TestSwiftBackend(t *testing.T) {
 		}
 	}()
 
-	logger := logformat.NewVaultLogger(log.LevelTrace)
+	logger := logging.NewVaultLogger(log.Debug)
 
 	b, err := NewSwiftBackend(map[string]string{
 		"username":       username,
@@ -75,6 +79,8 @@ func TestSwiftBackend(t *testing.T) {
 		"project":        project,
 		"domain":         domain,
 		"project-domain": projectDomain,
+		"tenant_id":      tenantID,
+		"region":         region,
 	}, logger)
 	if err != nil {
 		t.Fatalf("err: %s", err)

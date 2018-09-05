@@ -144,6 +144,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), logger, stats),
 		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats, *functionTimeout),
 		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
+		InfoHandler:    handlers.MakeInfo(logger, stats, version),
 	}
 }
 

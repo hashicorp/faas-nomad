@@ -33,7 +33,7 @@ This process will take a few minutes as Droplets are created and Docker installe
 for i in 1 2 3; do
     docker-machine create \
         --driver digitalocean \
-        --digitalocean-image ubuntu-17-04-x64 \
+        --digitalocean-image ubuntu-17-10-x64 \
         --digitalocean-tags openfaas-getting-started \
         --digitalocean-region=nyc3 \
         --digitalocean-access-token $DOTOKEN \
@@ -106,7 +106,7 @@ This command clones the OpenFaaS Github repository then checkouts out a stable r
 ```
 $ git clone https://github.com/alexellis/faas && \
   cd faas && \
-  git checkout 0.7.1 && \
+  git checkout 0.8.0 && \
   ./deploy_stack.sh
 ```
 

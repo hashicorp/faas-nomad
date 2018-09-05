@@ -8,7 +8,7 @@ description: |-
   keys.
 ---
 
-# Static Secrets
+# Static Secrets - Key/Value Secret Engine
 
 Vault can be used to store any secret in a secure manner.  The secrets may be
 SSL certificates and keys for your organization's domain, credentials to connect
@@ -19,8 +19,8 @@ Secret Storage.
 
 ## Reference Material
 
-- [Key/Value Secret Backend](/docs/secrets/kv/index.html)
-- [Key/Value Secret Backend API](/api/secret/kv/index.html)
+- [Key/Value Secret Engine](/docs/secrets/kv/index.html)
+- [Key/Value Secret Engine API](/api/secret/kv/index.html)
 - [Client libraries](/api/libraries.html) for Vault API for commonly used languages
 
 ## Estimated Time to Complete
@@ -57,6 +57,8 @@ nonce prior to writing them to its persistent storage. The storage backend never
 sees the unencrypted value, so gaining access to the raw storage isn't enough to
 access your secrets.
 
+~> **NOTE:** This guide demonstrates secret management using [v2 of the KV
+secret engine](/docs/secrets/kv/kv-v2.html).
 
 ## Prerequisites
 
@@ -77,7 +79,7 @@ To perform all tasks demonstrated in this guide, your policy must include the
 following permissions:
 
 ```shell
-# Write and manage secrets in key/value backend
+# Write and manage secrets in key/value secret engine
 path "secret/*" {
   capabilities = [ "create", "read", "update", "delete", "list" ]
 }
@@ -106,9 +108,9 @@ scenario here is to store the following secrets:
 - Root certificate of a production database (MySQL)
 
 To store your API key within the configured physical storage for Vault, use the
-**key/value** secret backend via **`secret/`** prefixed path.
+**key/value** secret engine via **`secret/`** prefixed path.
 
--> Key/Value secret backend passes through any operation back to the configured
+-> Key/Value secret engine passes through any operation back to the configured
 storage backend for Vault. For example, if your Vault server is configured with
 Consul as its storage backend, a "read" operation turns into a read from Consul
 at the same path.
@@ -116,27 +118,113 @@ at the same path.
 
 You will perform the following:
 
-1. [Store the Google API key](#step1)
-2. [Store the root certificate for MySQL](#step2)
-3. [Generate a token for apps](#step3)
-4. [Retrieve the secrets](#step4)
+1. [Enable KV Secret Engine v2](#step1)
+1. [Store the Google API key](#step2)
+1. [Store the root certificate for MySQL](#step3)
+1. [Generate a token for apps](#step4)
+1. [Retrieve the secrets](#step5)
 
 ![Personas Introduction](/assets/images/vault-static-secrets.png)
 
-Step 1 through 3 are performed by `devops` psersona.  Step 4 describes the
+Step 1 through 4 are performed by `devops` persona.  Step 5 describes the
 commands that `apps` persona runs to read secrets from Vault.
 
-### <a name="step1"></a>Step 1: Store the Google API key
+### <a name="step1"></a>Step 1: Enable KV Secret Engine v2
+(**Persona:** devops)
+
+Currently, when you start the Vault server in [**dev
+mode**](/intro/getting-started/dev-server.html#starting-the-dev-server), it
+automatically enables **v2** of the KV secret engine at **`secret/`**. If you
+start the Vault server in non-dev mode, the default is v1.
+
+If you are running the server in **dev** mode, skip to [Step 2](#step2).
+Otherwise, you must perform one of the following:
+
+- Option 1: Upgrade the v1 of KV secret engine to v2
+- Option 2: Enable the KV secret engine v2 at a different path
+
+
+#### CLI command
+
+Option 1: To upgrade from **v1** to **v2**:
+
+```plaintext
+$ vault kv enable-versioning secret/
+```
+<br>
+Option 2: To enable the KV secret engine v2 at **`secret_v2/`**:
+
+```plaintext
+$ vault secrets enable -path=secret_v2/ kv-v2
+```
+
+Or
+
+```plaintext
+$ vault secrets enable -path=secret_v2/ -version=2 kv
+```
+
+
+#### API call using cURL
+
+Option 1: To upgrade from **v1** to **v2**:
+
+```plaintext
+$ curl --header "X-Vault-Token: <TOKEN>" \
+       --request POST \
+       --data @payload.json \
+       <VAULT_ADDRESS>/v1/sys/mounts/secret/tune
+```
+
+Where `<TOKEN>` is your valid token, and `<VAULT_ADDRESS>` is where your vault
+server is running. The `payload.json` includes the version information.
+
+
+**Example:**
+
+```plaintext
+$ cat payload.json
+{
+  "options": {
+      "version": "2"
+  }
+}
+
+$ curl --header "X-Vault-Token: ..." \
+       --request POST \
+       --data @payload.json \
+       http://127.0.0.1:8200/v1/sys/mounts/secret/tune
+```
+
+<br>
+Option 2: To enable the KV secret engine v2 at **`secret_v2/`**:
+
+
+```plaintext
+$ curl --header "X-Vault-Token: ..." \
+       --request POST \
+       --data '{"type":"kv-v2"}' \
+       https://127.0.0.1:8200/v1/sys/mounts/secret_v2
+```
+
+
+<br>
+
+~> **NOTE:** This guide assumes that you are working with KV secret engine
+**v2** which is mounted at **`secret/`**.
+
+
+### <a name="step2"></a>Step 2: Store the Google API key
 (**Persona:** devops)
 
 Everything after the **`secret/`** path is a key-value pair to write to the
-secret backend. You can specify multiple values. If the value has a space, you
+secret engine. You can specify multiple values. If the value has a space, you
 need to surround it with quotes. Having keys with spaces is permitted, but
 strongly discouraged because it can lead to unexpected client-side behavior.
 
 Let's assume that the path convention in your organization is
 **`secret/<OWNER>/apikey/<APP>`** for API keys. To store the Google API key used
-by the engineering team, the path would be `secret/eng/apikey/Googl`. If you
+by the engineering team, the path would be `secret/eng/apikey/Google`. If you
 have an API key for New Relic owned by the DevOps team, the path would look like
 `secret/devops/apikey/New_Relic`.
 
@@ -144,8 +232,8 @@ have an API key for New Relic owned by the DevOps team, the path would look like
 
 To create key/value secrets:
 
-```shell
-$ vault write secret/<PATH> <KEY>=VALUE>
+```plaintext
+$ vault kv put secret/<PATH> <KEY>=VALUE>
 ```
 
 The `<PATH>` can be anything you want it to be, and your organization should
@@ -153,8 +241,8 @@ decide on the naming convention that makes most sense.
 
 **Example:**
 
-```shell
-$ vault write secret/eng/apikey/Google key=AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI
+```plaintext
+$ vault kv put secret/eng/apikey/Google key=AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI
 Success! Data written to: secret/eng/apikey/Google
 ```
 
@@ -163,37 +251,46 @@ this example.
 
 #### API call using cURL
 
-Use `/secret/<PATH>` endpoint to create secrets:
+Use `/secret/data/<PATH>` endpoint to create secrets:
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: <TOKEN>" \
        --request POST \
-       --data <SECRETS> \
-       <VAULT_ADDRESS>/v1/secret/<PATH>
+       --data @payload.json \
+       <VAULT_ADDRESS>/v1/secret/data/<PATH>
 ```
 
-Where `<TOKEN>` is your valid token, `<SECRETS>` is the key-value pair(s) of your
-secrets, and `secret/<PATH>` is the path to your secrets.
+Where `<TOKEN>` is your valid token, and `secret/data/<PATH>` is the path to
+your secrets. The [`payload.json`](/api/secret/kv/kv-v2.html#parameters-2)
+contains the parameters to invoke the endpoint.
 
 **Example:**
 
-```shell
+```plaintext
+$ tee payload.json <<EOF
+{
+  "data": {
+    "key": "AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI"
+  }
+}
+EOF
+
 $ curl --header "X-Vault-Token: ..." --request POST \
-       --data '{"key": "AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI"}' \
-       https://vault.rocks/v1/secret/eng/apikey/Google
+       --data @payload.json \
+       http://127.0.0.1:8200/v1/secret/data/eng/apikey/Google
 ```
 
 The secret key is "key" and its value is
 "AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI" in this example.
 
 
-### <a name="step2"></a>Step 2: Store the root certificate for MySQL
+### <a name="step3"></a>Step 3: Store the root certificate for MySQL
 (**Persona:** devops)
 
 For the purpose of this guide, generate a new self-sign certificate using
 [OpenSSL](https://www.openssl.org/source/).
 
-```shell
+```plaintext
 $ openssl req --request509 -sha256 -nodes -newkey rsa:2048 -keyout selfsigned.key -out cert.pem
 ```
 
@@ -231,12 +328,12 @@ save it as `cert.pem`.
 The command is basically the same as the Google API key example. Now, the path
 convention for certificates is **`secret/<ENVIRONMENT>/cert/<SYSTEM>`**. To
 store the root certificate for production MySQL, the path becomes
-`secret/staging/cert/postgres`.
+`secret/prod/cert/mysql`.
 
 **Example:**
 
-```shell
-$ vault write secret/prod/cert/mysql cert=@cert.pem
+```plaintext
+$ vault kv put secret/prod/cert/mysql cert=@cert.pem
 ```
 
 This example reads the root certificate from a PEM file from the disk, and store
@@ -250,31 +347,31 @@ To perform the same task using the Vault API, pass the token in the request head
 
 **Example:**
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: ..." \
        --request POST \
        --data @cert.pem \
-       https://vault.rocks/v1/secret/prod/cert/mysql
+       http://127.0.0.1:8200/v1/secret/data/prod/cert/mysql
 ```
 > **NOTE:** Any value begins with "@" is loaded from a file.
 
 
-### <a name="step3"></a>Step 3: Generate a token for apps
+### <a name="step4"></a>Step 4: Generate a token for apps
 (**Persona:** devops)
 
-To read the secrets, `apps` persona needs "read" permit on those secret backend
+To read the secrets, `apps` persona needs "read" permit on those secret engine
 paths. In this scenario, the `apps` policy must include the following:
 
 **Example:** `apps-policy.hcl`
 
 ```shell
 # Read-only permit
-path "secret/eng/apikey/Google" {
+path "secret/data/eng/apikey/Google" {
   capabilities = [ "read" ]  
 }
 
 # Read-only permit
-path "secret/prod/cert/mysql" {
+path "secret/data/prod/cert/mysql" {
   capabilities = [ "read" ]
 }
 ```
@@ -313,20 +410,21 @@ as an `app` persona.
 
 ```shell
 # Payload to pass in the API call
-$ cat payload.json
+$ tee payload.json <<EOF
 {
-  "policy": "path \"secret/eng/apikey/Google\" { capabilities = [ \"read\" ] ...}"
+  "policy": "path \"secret/data/eng/apikey/Google\" { capabilities = [ \"read\" ] ...}"
 }
+EOF
 
 # Create "apps" policy
 $ curl --header "X-Vault-Token: ..." --request PUT \
        --data @payload.json \
-       https://vault.rocks/v1/sys/policy/apps
+       http://127.0.0.1:8200/v1/sys/policy/apps
 
 # Generate a new token with apps policy
 $ curl --header "X-Vault-Token: ..." --request POST \
        --data '{"policies": ["apps"]}' \
-       https://vault.rocks/v1/auth/token/create | jq
+       http://127.0.0.1:8200/v1/auth/token/create | jq
 {
  "request_id": "e1737bc8-7e51-3943-42a0-2dbd6cb40e3e",
  "lease_id": "",
@@ -363,10 +461,10 @@ access.
 
 
 
-### <a name="step4"></a>Step 4: Retrieve the secrets
+### <a name="step5"></a>Step 5: Retrieve the secrets
 (**Persona:** apps)
 
-Using the token from [Step 3](#step3), read the Google API key, and root certificate for
+Using the token from [Step 4](#step4), read the Google API key, and root certificate for
 MySQL.
 
 
@@ -374,8 +472,8 @@ MySQL.
 
 The command to read secret is:
 
-```shell
-$ vault read secret/<PATH>
+```plaintext
+$ vault kv get secret/<PATH>
 ```
 
 **Example:**
@@ -389,7 +487,7 @@ token_duration: 2764277
 token_policies: [apps default]
 
 # Read the API key
-$ vault read secret/eng/apikey/Google
+$ vault kv get secret/eng/apikey/Google
 Key             	Value
 ---             	-----
 refresh_interval	768h0m0s
@@ -398,8 +496,8 @@ key             	AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI
 
 To return the key value alone, pass `-field=key` as an argument.
 
-```shell
-$ vault read -field=key secret/eng/apikey/Google
+```plaintext
+$ vault kv get -field=key secret/eng/apikey/Google
 AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI
 ```
 
@@ -407,8 +505,8 @@ AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI
 
 The command is basically the same:
 
-```shell
-$ vault read -field=cert secret/prod/cert/mysql
+```plaintext
+$ vault kv get -field=cert secret/prod/cert/mysql
 -----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEA6E2Uq0XqreZISgVMUu9pnoMsq+OoK1PI54rsA9vtDE6wiRk0GWhf5vD4DGf1
 ...
@@ -416,22 +514,22 @@ MIIEowIBAAKCAQEA6E2Uq0XqreZISgVMUu9pnoMsq+OoK1PI54rsA9vtDE6wiRk0GWhf5vD4DGf1
 
 #### API call using cURL
 
-Use `secret/` endpoint to retrieve secrets from key/value backend:
+Use `secret/` endpoint to retrieve secrets from key/value secret engine:
 
-```shell
-$ curl --header "X-Vault-Token: <TOKEN_FROM_STEP3>" \
+```plaintext
+$ curl --header "X-Vault-Token: <TOKEN_FROM_STEP4>" \
        --request Get \
-       <VAULT_ADDRESS>/v1/secret/<PATH>
+       <VAULT_ADDRESS>/v1/secret/data/<PATH>
 ```
 
 **Example:**
 
 Read the Google API key.
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: 1c97b03a-6098-31cf-9d8b-b404e52dcb4a" \
        --request GET \
-       https://vault.rocks/v1/secret/eng/apikey/Google | jq
+       http://127.0.0.1:8200/v1/secret/data/eng/apikey/Google | jq
 {
 "request_id": "5a2005ac-1149-2275-cab3-76cee71bf524",
 "lease_id": "",
@@ -450,18 +548,18 @@ $ curl --header "X-Vault-Token: 1c97b03a-6098-31cf-9d8b-b404e52dcb4a" \
 
 Retrieve the key value with `jq`:
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: 1c97b03a-6098-31cf-9d8b-b404e52dcb4a" \
        --request GET \
-       https://vault.rocks/v1/secret/eng/apikey/Google | jq ".data.key"
+       http://127.0.0.1:8200/v1/secret/data/eng/apikey/Google | jq ".data.key"
 ```
 
 #### Root certificate example:
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: 1c97b03a-6098-31cf-9d8b-b404e52dcb4a" \
        --request GET \
-       https://vault.rocks/v1/secret/prod/cert/mysql | jq ".data.cert"
+       http://127.0.0.1:8200/v1/secret/data/prod/cert/mysql | jq ".data.cert"
 ```
 
 ## Additional Discussion
@@ -478,8 +576,8 @@ An easy technique is to use a dash "-" and then press Enter. This allows you to
 enter the secret in a new line. After entering the secret, press **`Ctrl+d`** to
 end the pipe and write the secret to the Vault.
 
-```shell
-$ vault write secret/eng/apikey/Google key=-
+```plaintext
+$ vault kv put secret/eng/apikey/Google key=-
 
 AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI
 <Ctrl+d>
@@ -489,7 +587,7 @@ AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI
 
 Using the Google API key example, you can create a file containing the key (apikey.txt):
 
-```text
+```plaintext
 {
   "key": "AAaaBBccDDeeOTXzSMT1234BB_Z8JzG7JkSVxI"
 }
@@ -497,20 +595,20 @@ Using the Google API key example, you can create a file containing the key (apik
 
 The CLI command would look like:
 
-```shell
-$ vault write secret/eng/apikey/Google @apikey.txt
+```plaintext
+$ vault kv put secret/eng/apikey/Google @apikey.txt
 ```
 
 #### Option 3: Disable all vault command history
 
 Sometimes, you may not even want the vault command itself to appear in history
 at all.  The Option 1 and Option 2 prevents the secret to appear in the history;
-however, the vault command, `vault write secret/eng/apikey/Google` will appear
+however, the vault command, `vault kv put secret/eng/apikey/Google` will appear
 in history.
 
 In bash:
 
-```shell
+```plaintext
 $ export HISTIGNORE="&:vault*"
 ```
 
@@ -519,31 +617,33 @@ $ export HISTIGNORE="&:vault*"
 
 ### Q: How do I save multiple values?
 
-The two examples introduced in this guide only had a single key-value pair.  You can pass multiple values in the command.
+The two examples introduced in this guide only had a single key-value pair.  You
+can pass multiple values in the command.
 
-```shell
-$ vault write secret/dev/config/mongodb url=foo.example.com:35533 db_name=users \
- username=admin password=pa$$w0rd
+```plaintext
+$ vault kv put secret/dev/config/mongodb url=foo.example.com:35533 db_name=users \
+ username=admin password=passw0rd
 ```
 
 Or, read the secret from a file:
 
-```shell
-$ vault write secret/dev/config/mongodb @mongodb.txt
-
-$ cat mongodb.txt
+```plaintext
+$ tee mongodb.txt <<EOF
 {
-  "url": "foo.example.com:35533",
-  "db_name": "users",
-  "username": "admin",
-  "password": "pa$$w0rd"
+    "url": "foo.example.com:35533",
+    "db_name": "users",
+    "username": "admin",
+    "password": "pa$$w0rd"
 }
+EOF
+
+$ vault kv put secret/dev/config/mongodb @mongodb.txt
 ```
 
 ## Next steps
 
 This guide introduced the CLI commands and API endpoints to read and write
-secrets in key/value backend. To keep it simple, the `devops` persona generated a
-token for `apps`.  Read [AppRole Pull
+secrets in key/value secret engine. To keep it simple, the `devops` persona
+generated a token for `apps`.  Read [AppRole Pull
 Authentication](/guides/identity/authentication.html) guide to learn about
 programmatically generate a token for apps.

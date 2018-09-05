@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/armon/go-metrics"
+	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/helper/strutil"
 	"github.com/hashicorp/vault/physical"
@@ -86,7 +87,7 @@ func (b *AESGCMBarrier) Initialized(ctx context.Context) (bool, error) {
 	// Read the keyring file
 	keys, err := b.backend.List(ctx, keyringPrefix)
 	if err != nil {
-		return false, fmt.Errorf("failed to check for initialization: %v", err)
+		return false, errwrap.Wrapf("failed to check for initialization: {{err}}", err)
 	}
 	if strutil.StrListContains(keys, "keyring") {
 		return true, nil
@@ -95,7 +96,7 @@ func (b *AESGCMBarrier) Initialized(ctx context.Context) (bool, error) {
 	// Fallback, check for the old sentinel file
 	out, err := b.backend.Get(ctx, barrierInitPath)
 	if err != nil {
-		return false, fmt.Errorf("failed to check for initialization: %v", err)
+		return false, errwrap.Wrapf("failed to check for initialization: {{err}}", err)
 	}
 	return out != nil, nil
 }
@@ -106,7 +107,7 @@ func (b *AESGCMBarrier) Initialize(ctx context.Context, key []byte) error {
 	// Verify the key size
 	min, max := b.KeyLength()
 	if len(key) < min || len(key) > max {
-		return fmt.Errorf("Key size must be %d or %d", min, max)
+		return fmt.Errorf("key size must be %d or %d", min, max)
 	}
 
 	// Check if already initialized
@@ -119,7 +120,7 @@ func (b *AESGCMBarrier) Initialize(ctx context.Context, key []byte) error {
 	// Generate encryption key
 	encrypt, err := b.GenerateKey()
 	if err != nil {
-		return fmt.Errorf("failed to generate encryption key: %v", err)
+		return errwrap.Wrapf("failed to generate encryption key: {{err}}", err)
 	}
 
 	// Create a new keyring, install the keys
@@ -131,7 +132,7 @@ func (b *AESGCMBarrier) Initialize(ctx context.Context, key []byte) error {
 		Value:   encrypt,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create keyring: %v", err)
+		return errwrap.Wrapf("failed to create keyring: {{err}}", err)
 	}
 	return b.persistKeyring(ctx, keyring)
 }
@@ -143,7 +144,7 @@ func (b *AESGCMBarrier) persistKeyring(ctx context.Context, keyring *Keyring) er
 	keyringBuf, err := keyring.Serialize()
 	defer memzero(keyringBuf)
 	if err != nil {
-		return fmt.Errorf("failed to serialize keyring: %v", err)
+		return errwrap.Wrapf("failed to serialize keyring: {{err}}", err)
 	}
 
 	// Create the AES-GCM
@@ -161,7 +162,7 @@ func (b *AESGCMBarrier) persistKeyring(ctx context.Context, keyring *Keyring) er
 		Value: value,
 	}
 	if err := b.backend.Put(ctx, pe); err != nil {
-		return fmt.Errorf("failed to persist keyring: %v", err)
+		return errwrap.Wrapf("failed to persist keyring: {{err}}", err)
 	}
 
 	// Serialize the master key value
@@ -173,7 +174,7 @@ func (b *AESGCMBarrier) persistKeyring(ctx context.Context, keyring *Keyring) er
 	keyBuf, err := key.Serialize()
 	defer memzero(keyBuf)
 	if err != nil {
-		return fmt.Errorf("failed to serialize master key: %v", err)
+		return errwrap.Wrapf("failed to serialize master key: {{err}}", err)
 	}
 
 	// Encrypt the master key
@@ -190,7 +191,7 @@ func (b *AESGCMBarrier) persistKeyring(ctx context.Context, keyring *Keyring) er
 		Value: value,
 	}
 	if err := b.backend.Put(ctx, pe); err != nil {
-		return fmt.Errorf("failed to persist master key: %v", err)
+		return errwrap.Wrapf("failed to persist master key: {{err}}", err)
 	}
 	return nil
 }
@@ -212,8 +213,9 @@ func (b *AESGCMBarrier) KeyLength() (int, int) {
 // is not expected to be able to perform any CRUD until it is unsealed.
 func (b *AESGCMBarrier) Sealed() (bool, error) {
 	b.l.RLock()
-	defer b.l.RUnlock()
-	return b.sealed, nil
+	sealed := b.sealed
+	b.l.RUnlock()
+	return sealed, nil
 }
 
 // VerifyMaster is used to check if the given key matches the master key
@@ -245,7 +247,7 @@ func (b *AESGCMBarrier) ReloadKeyring(ctx context.Context) error {
 	// Read in the keyring
 	out, err := b.backend.Get(ctx, keyringPath)
 	if err != nil {
-		return fmt.Errorf("failed to check for keyring: %v", err)
+		return errwrap.Wrapf("failed to check for keyring: {{err}}", err)
 	}
 
 	// Ensure that the keyring exists. This should never happen,
@@ -267,7 +269,7 @@ func (b *AESGCMBarrier) ReloadKeyring(ctx context.Context) error {
 	// Recover the keyring
 	keyring, err := DeserializeKeyring(plain)
 	if err != nil {
-		return fmt.Errorf("keyring deserialization failed: %v", err)
+		return errwrap.Wrapf("keyring deserialization failed: {{err}}", err)
 	}
 
 	// Setup the keyring and finish
@@ -282,7 +284,7 @@ func (b *AESGCMBarrier) ReloadMasterKey(ctx context.Context) error {
 	// Read the masterKeyPath upgrade
 	out, err := b.Get(ctx, masterKeyPath)
 	if err != nil {
-		return fmt.Errorf("failed to read master key path: %v", err)
+		return errwrap.Wrapf("failed to read master key path: {{err}}", err)
 	}
 
 	// The masterKeyPath could be missing (backwards incompatible),
@@ -297,7 +299,7 @@ func (b *AESGCMBarrier) ReloadMasterKey(ctx context.Context) error {
 	// Deserialize the master key
 	key, err := DeserializeKey(out.Value)
 	if err != nil {
-		return fmt.Errorf("failed to deserialize key: %v", err)
+		return errwrap.Wrapf("failed to deserialize key: {{err}}", err)
 	}
 
 	b.l.Lock()
@@ -335,7 +337,7 @@ func (b *AESGCMBarrier) Unseal(ctx context.Context, key []byte) error {
 	// Read in the keyring
 	out, err := b.backend.Get(ctx, keyringPath)
 	if err != nil {
-		return fmt.Errorf("failed to check for keyring: %v", err)
+		return errwrap.Wrapf("failed to check for keyring: {{err}}", err)
 	}
 	if out != nil {
 		// Decrypt the barrier init key
@@ -351,7 +353,7 @@ func (b *AESGCMBarrier) Unseal(ctx context.Context, key []byte) error {
 		// Recover the keyring
 		keyring, err := DeserializeKeyring(plain)
 		if err != nil {
-			return fmt.Errorf("keyring deserialization failed: %v", err)
+			return errwrap.Wrapf("keyring deserialization failed: {{err}}", err)
 		}
 
 		// Setup the keyring and finish
@@ -363,7 +365,7 @@ func (b *AESGCMBarrier) Unseal(ctx context.Context, key []byte) error {
 	// Read the barrier initialization key
 	out, err = b.backend.Get(ctx, barrierInitPath)
 	if err != nil {
-		return fmt.Errorf("failed to check for initialization: %v", err)
+		return errwrap.Wrapf("failed to check for initialization: {{err}}", err)
 	}
 	if out == nil {
 		return ErrBarrierNotInit
@@ -398,7 +400,7 @@ func (b *AESGCMBarrier) Unseal(ctx context.Context, key []byte) error {
 		Value:   init.Key,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create keyring: %v", err)
+		return errwrap.Wrapf("failed to create keyring: {{err}}", err)
 	}
 	if err := b.persistKeyring(ctx, keyring); err != nil {
 		return err
@@ -406,7 +408,7 @@ func (b *AESGCMBarrier) Unseal(ctx context.Context, key []byte) error {
 
 	// Delete the old barrier entry
 	if err := b.backend.Delete(ctx, barrierInitPath); err != nil {
-		return fmt.Errorf("failed to delete barrier init file: %v", err)
+		return errwrap.Wrapf("failed to delete barrier init file: {{err}}", err)
 	}
 
 	// Set the vault as unsealed
@@ -441,7 +443,7 @@ func (b *AESGCMBarrier) Rotate(ctx context.Context) (uint32, error) {
 	// Generate a new key
 	encrypt, err := b.GenerateKey()
 	if err != nil {
-		return 0, fmt.Errorf("failed to generate encryption key: %v", err)
+		return 0, errwrap.Wrapf("failed to generate encryption key: {{err}}", err)
 	}
 
 	// Get the next term
@@ -455,7 +457,7 @@ func (b *AESGCMBarrier) Rotate(ctx context.Context) (uint32, error) {
 		Value:   encrypt,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to add new encryption key: %v", err)
+		return 0, errwrap.Wrapf("failed to add new encryption key: {{err}}", err)
 	}
 
 	// Persist the new keyring
@@ -547,7 +549,7 @@ func (b *AESGCMBarrier) CheckUpgrade(ctx context.Context) (bool, uint32, error) 
 	// Update the keyring
 	newKeyring, err := b.keyring.AddKey(key)
 	if err != nil {
-		return false, 0, fmt.Errorf("failed to add new encryption key: %v", err)
+		return false, 0, errwrap.Wrapf("failed to add new encryption key: {{err}}", err)
 	}
 	b.keyring = newKeyring
 
@@ -625,7 +627,7 @@ func (b *AESGCMBarrier) updateMasterKeyCommon(key []byte) (*Keyring, error) {
 	// Verify the key size
 	min, max := b.KeyLength()
 	if len(key) < min || len(key) > max {
-		return nil, fmt.Errorf("Key size must be %d or %d", min, max)
+		return nil, fmt.Errorf("key size must be %d or %d", min, max)
 	}
 
 	return b.keyring.SetMasterKey(key), nil
@@ -674,7 +676,7 @@ func (b *AESGCMBarrier) Get(ctx context.Context, key string) (*Entry, error) {
 	// Decrypt the ciphertext
 	plain, err := b.decryptKeyring(key, pe.Value)
 	if err != nil {
-		return nil, fmt.Errorf("decryption failed: %v", err)
+		return nil, errwrap.Wrapf("decryption failed: {{err}}", err)
 	}
 
 	// Wrap in a logical entry
@@ -751,7 +753,7 @@ func (b *AESGCMBarrier) aeadFromKey(key []byte) (cipher.AEAD, error) {
 	// Create the AES cipher
 	aesCipher, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher: %v", err)
+		return nil, errwrap.Wrapf("failed to create cipher: {{err}}", err)
 	}
 
 	// Create the GCM mode AEAD
@@ -851,34 +853,39 @@ func (b *AESGCMBarrier) decryptKeyring(path string, cipher []byte) ([]byte, erro
 // Encrypt is used to encrypt in-memory for the BarrierEncryptor interface
 func (b *AESGCMBarrier) Encrypt(ctx context.Context, key string, plaintext []byte) ([]byte, error) {
 	b.l.RLock()
-	defer b.l.RUnlock()
 	if b.sealed {
+		b.l.RUnlock()
 		return nil, ErrBarrierSealed
 	}
 
 	term := b.keyring.ActiveTerm()
 	primary, err := b.aeadForTerm(term)
 	if err != nil {
+		b.l.RUnlock()
 		return nil, err
 	}
 
 	ciphertext := b.encrypt(key, term, primary, plaintext)
+	b.l.RUnlock()
 	return ciphertext, nil
 }
 
 // Decrypt is used to decrypt in-memory for the BarrierEncryptor interface
 func (b *AESGCMBarrier) Decrypt(ctx context.Context, key string, ciphertext []byte) ([]byte, error) {
 	b.l.RLock()
-	defer b.l.RUnlock()
 	if b.sealed {
+		b.l.RUnlock()
 		return nil, ErrBarrierSealed
 	}
 
 	// Decrypt the ciphertext
 	plain, err := b.decryptKeyring(key, ciphertext)
 	if err != nil {
-		return nil, fmt.Errorf("decryption failed: %v", err)
+		b.l.RUnlock()
+		return nil, errwrap.Wrapf("decryption failed: {{err}}", err)
 	}
+
+	b.l.RUnlock()
 	return plain, nil
 }
 

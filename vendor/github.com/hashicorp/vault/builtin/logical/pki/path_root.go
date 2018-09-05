@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/errwrap"
@@ -122,7 +123,9 @@ func (b *backend) pathCAGenerateRoot(ctx context.Context, req *logical.Request, 
 		return nil, err
 	}
 	if entry != nil {
-		return nil, nil
+		resp := &logical.Response{}
+		resp.AddWarning(fmt.Sprintf("Refusing to generate a root certificate over an existing root certificate. If you really want to destroy the original root certificate, please issue a delete against %sroot.", req.MountPoint))
+		return resp, nil
 	}
 
 	exported, format, role, errorResp := b.getGenerationParams(data)
@@ -229,7 +232,7 @@ func (b *backend) pathCAGenerateRoot(ctx context.Context, req *logical.Request, 
 	}
 
 	// Build a fresh CRL
-	err = buildCRL(ctx, b, req)
+	err = buildCRL(ctx, b, req, true)
 	if err != nil {
 		return nil, err
 	}
@@ -259,12 +262,14 @@ func (b *backend) pathCASignIntermediate(ctx context.Context, req *logical.Reque
 		Province:              data.Get("province").([]string),
 		StreetAddress:         data.Get("street_address").([]string),
 		PostalCode:            data.Get("postal_code").([]string),
-		TTL:                   (time.Duration(data.Get("ttl").(int)) * time.Second).String(),
+		TTL:                   time.Duration(data.Get("ttl").(int)) * time.Second,
 		AllowLocalhost:        true,
 		AllowAnyName:          true,
 		AllowIPSANs:           true,
 		EnforceHostnames:      false,
 		KeyType:               "any",
+		AllowedURISANs:        []string{"*"},
+		AllowedSerialNumbers:  []string{"*"},
 		AllowExpirationPastCA: true,
 	}
 
@@ -308,17 +313,17 @@ func (b *backend) pathCASignIntermediate(ctx context.Context, req *logical.Reque
 	}
 
 	if err := parsedBundle.Verify(); err != nil {
-		return nil, fmt.Errorf("verification of parsed bundle failed: %s", err)
+		return nil, errwrap.Wrapf("verification of parsed bundle failed: {{err}}", err)
 	}
 
 	signingCB, err := signingBundle.ToCertBundle()
 	if err != nil {
-		return nil, fmt.Errorf("Error converting raw signing bundle to cert bundle: %s", err)
+		return nil, errwrap.Wrapf("error converting raw signing bundle to cert bundle: {{err}}", err)
 	}
 
 	cb, err := parsedBundle.ToCertBundle()
 	if err != nil {
-		return nil, fmt.Errorf("Error converting raw cert bundle to cert bundle: %s", err)
+		return nil, errwrap.Wrapf("error converting raw cert bundle to cert bundle: {{err}}", err)
 	}
 
 	resp := &logical.Response{
@@ -365,7 +370,7 @@ func (b *backend) pathCASignIntermediate(ctx context.Context, req *logical.Reque
 		Value: parsedBundle.CertificateBytes,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("Unable to store certificate locally: %v", err)
+		return nil, errwrap.Wrapf("unable to store certificate locally: {{err}}", err)
 	}
 
 	if parsedBundle.Certificate.MaxPathLen == 0 {
@@ -412,7 +417,7 @@ func (b *backend) pathCASignSelfIssued(ctx context.Context, req *logical.Request
 
 	signingCB, err := signingBundle.ToCertBundle()
 	if err != nil {
-		return nil, fmt.Errorf("Error converting raw signing bundle to cert bundle: %s", err)
+		return nil, errwrap.Wrapf("error converting raw signing bundle to cert bundle: {{err}}", err)
 	}
 
 	urls := &urlEntries{}
@@ -437,7 +442,7 @@ func (b *backend) pathCASignSelfIssued(ctx context.Context, req *logical.Request
 
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"certificate": string(pemCert),
+			"certificate": strings.TrimSpace(string(pemCert)),
 			"issuing_ca":  signingCB.Certificate,
 		},
 	}, nil

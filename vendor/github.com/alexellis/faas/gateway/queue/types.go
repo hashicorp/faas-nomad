@@ -9,8 +9,10 @@ import "net/http"
 // Request for asynchronous processing
 type Request struct {
 	Header      http.Header
+	Host        string
 	Body        []byte
 	Method      string
+	Path        string
 	QueryString string
 	Function    string
 	CallbackURL *url.URL `json:"CallbackUrl"`
