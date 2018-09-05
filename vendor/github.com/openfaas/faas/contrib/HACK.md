@@ -1,3 +1,25 @@
+# UI development
+
+The OpenFaaS UI consists of static pages built in Angular 1.x. These call the OpenFaaS API gateway for operations such as listing / creating and deleting functions.
+
+The [Function Store](https://github.com/openfaas/store) is stored on GitHub as a JSON file which is fecthed by the browser over HTTPS. A CORS exception is maintained for GitHub's RAW CDN for this purpose within the [gateway code](https://github.com/openfaas/faas/blob/master/gateway/server.go).
+
+## Multi-browser testing
+
+UI changes should be tested in:
+
+* Safari
+* Chrome
+* FireFox
+* IE11
+
+### Testing on Windows
+
+Windows VMs are available from Microsoft for free - for testing pages/projects with their browsers:
+https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/
+
+[VirtualBox](https://www.virtualbox.org/wiki/Downloads) can run these VMs at no cost.
+
 ## Build a development API Gateway
 
 1. Build a new development Docker image:
@@ -41,7 +63,8 @@ Now you can run the gateway as its own container via `docker run` and bind-mount
 
 ```
 $ docker service rm func_gateway
-$ docker run --name func_gateway -v `pwd`/gateway/assets:/root/assets \
+$ docker run --name func_gateway -e "functions_provider_url=http://faas-swarm:8080/" \
+  -v `pwd`/gateway/assets:/home/app/assets \
   -v "/var/run/docker.sock:/var/run/docker.sock" \
   -p 8080:8080 --network=func_functions \
   -d functions/gateway:latest-dev

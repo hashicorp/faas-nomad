@@ -125,7 +125,7 @@ func NewBuilder(flags Flags) (*Builder, error) {
 			Data:   s,
 		})
 	}
-	b.Tail = append(b.Tail, NonUserSource(), DefaultConsulSource(), DefaultVersionSource())
+	b.Tail = append(b.Tail, NonUserSource(), DefaultConsulSource(), DefaultEnterpriseSource(), DefaultVersionSource())
 	if b.boolVal(b.Flags.DevMode) {
 		b.Tail = append(b.Tail, DevConsulSource())
 	}
@@ -961,6 +961,8 @@ func (b *Builder) checkVal(v *CheckDefinition) *structs.CheckDefinition {
 		Interval:          b.durationVal(fmt.Sprintf("check[%s].interval", id), v.Interval),
 		DockerContainerID: b.stringVal(v.DockerContainerID),
 		Shell:             b.stringVal(v.Shell),
+		GRPC:              b.stringVal(v.GRPC),
+		GRPCUseTLS:        b.boolVal(v.GRPCUseTLS),
 		TLSSkipVerify:     b.boolVal(v.TLSSkipVerify),
 		Timeout:           b.durationVal(fmt.Sprintf("check[%s].timeout", id), v.Timeout),
 		TTL:               b.durationVal(fmt.Sprintf("check[%s].ttl", id), v.TTL),

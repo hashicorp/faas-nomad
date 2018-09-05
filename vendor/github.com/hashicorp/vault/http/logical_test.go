@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strconv"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	log "github.com/mgutz/logxi/v1"
 
 	"github.com/hashicorp/vault/helper/logformat"
+	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/physical"
 	"github.com/hashicorp/vault/physical/inmem"
 	"github.com/hashicorp/vault/vault"
@@ -157,6 +160,7 @@ func TestLogical_StandbyRedirect(t *testing.T) {
 			"creation_ttl":     json.Number("0"),
 			"explicit_max_ttl": json.Number("0"),
 			"expire_time":      nil,
+			"entity_id":        "",
 		},
 		"warnings":  nilWarnings,
 		"wrap_info": nil,
@@ -206,6 +210,7 @@ func TestLogical_CreateToken(t *testing.T) {
 			"metadata":       nil,
 			"lease_duration": json.Number("0"),
 			"renewable":      false,
+			"entity_id":      "",
 		},
 		"warnings": nilWarnings,
 	}
@@ -296,5 +301,36 @@ func TestLogical_ListSuffix(t *testing.T) {
 	}
 	if !strings.HasSuffix(lreq.Path, "/") {
 		t.Fatal("trailing slash not found on path")
+	}
+}
+
+func TestLogical_RespondWithStatusCode(t *testing.T) {
+	resp := &logical.Response{
+		Data: map[string]interface{}{
+			"test-data": "foo",
+		},
+	}
+
+	resp404, err := logical.RespondWithStatusCode(resp, &logical.Request{ID: "id"}, http.StatusNotFound)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	respondLogical(w, nil, nil, false, resp404)
+
+	if w.Code != 404 {
+		t.Fatalf("Bad Status code: %d", w.Code)
+	}
+
+	bodyRaw, err := ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := `{"request_id":"id","lease_id":"","renewable":false,"lease_duration":0,"data":{"test-data":"foo"},"wrap_info":null,"warnings":null,"auth":null}`
+
+	if string(bodyRaw[:]) != strings.Trim(expected, "\n") {
+		t.Fatalf("bad response: %s", string(bodyRaw[:]))
 	}
 }

@@ -1,19 +1,19 @@
 ---
 layout: "api"
-page_title: "AWS Auth Backend - HTTP API"
+page_title: "AWS - Auth Methods - HTTP API"
 sidebar_current: "docs-http-auth-aws"
 description: |-
-  This is the API documentation for the Vault AWS authentication backend.
+  This is the API documentation for the Vault AWS auth method.
 ---
 
-# AWS Auth Backend HTTP API
+# AWS Auth Method (API)
 
-This is the API documentation for the Vault AWS authentication backend. For
-general information about the usage and operation of the AWS backend, please
-see the [Vault AWS backend documentation](/docs/auth/aws.html).
+This is the API documentation for the Vault AWS auth method. For
+general information about the usage and operation of the AWS method, please
+see the [Vault AWS method documentation](/docs/auth/aws.html).
 
-This documentation assumes the AWS backend is mounted at the `/auth/aws`
-path in Vault. Since it is possible to mount auth backends at any location,
+This documentation assumes the AWS method is mounted at the `/auth/aws`
+path in Vault. Since it is possible to enable auth methods at any location,
 please update your API calls accordingly.
 
 ## Configure Client
@@ -26,7 +26,7 @@ of the instances via DescribeInstances API. If static credentials are not
 provided using this endpoint, then the credentials will be retrieved from
 the environment variables `AWS_ACCESS_KEY`, `AWS_SECRET_KEY` and
 `AWS_REGION` respectively. If the credentials are still not found and if the
-backend is configured on an EC2 instance with metadata querying
+method is configured on an EC2 instance with metadata querying
 capabilities, the credentials are fetched automatically.
 
 | Method   | Path                         | Produces               |
@@ -35,6 +35,9 @@ capabilities, the credentials are fetched automatically.
 
 ### Parameters
 
+- `max_retries` `(int: -1)` - Number of max retries the client should use for
+  recoverable errors. The default (`-1`) falls back to the AWS SDK's default
+  behavior.
 - `access_key` `(string: "")` - AWS Access key with permissions to query AWS
   APIs. The permissions required depend on the specific configurations. If using
   the `iam` auth method without inferencing, then no credentials are necessary.
@@ -101,19 +104,14 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "secret_key": "vCtSM8ZUEQ3mOFVlYPBQkf2sO6F/W7a5TVzrl3Oj",
-    "access_key": "VKIAJBRHKH6EVTTNXDHA"
-    "endpoint" "",
-    "iam_endpoint" "",
-    "sts_endpoint" "",
-    "iam_server_id_header_value" "",
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+    "access_key": "VKIAJBRHKH6EVTTNXDHA",
+    "endpoint": "",
+    "iam_endpoint": "",
+    "sts_endpoint": "",
+    "iam_server_id_header_value": ""
+  }
 }
 ```
 
@@ -142,14 +140,14 @@ digest, the identity signature will have RSA digest, and hence the public
 keys for each type varies respectively. Indicate the type of the public key
 using the "type" parameter.
 
-| Method   | Path                         | Produces               |
-| :------- | :--------------------------- | :--------------------- |
+| Method   | Path                                         | Produces               |
+| :------- | :------------------------------------------- | :--------------------- |
 | `POST`   | `/auth/aws/config/certificate/:cert_name`    | `204 (empty body)`     |
 
 ### Parameters
 
 - `cert_name` `(string: <required>)` - Name of the certificate.
-- `aws_public_cert` `(string: <required>)` - AWS Public key required to verify
+- `aws_public_cert` `(string: <required>)` - Base64 encoded AWS Public key required to verify
   PKCS7 signature of the EC2 instance metadata.
 - `type` `(string: "pkcs7")` - Takes the value of either "pkcs7" or "identity",
   indicating the type of document which can be verified using the given
@@ -161,7 +159,7 @@ using the "type" parameter.
 
 ```json
 {
-  "aws_public_cert": "-----BEGIN CERTIFICATE-----\nMIIC7TCCAq0CCQCWukjZ5V4aZzAJBgcqhkjOOAQDMFwxCzAJBgNVBAYTAlVTMRkw\nFwYDVQQIExBXYXNoaW5ndG9uIFN0YXRlMRAwDgYDVQQHEwdTZWF0dGxlMSAwHgYD\nVQQKExdBbWF6b24gV2ViIFNlcnZpY2VzIExMQzAeFw0xMjAxMDUxMjU2MTJaFw0z\nODAxMDUxMjU2MTJaMFwxCzAJBgNVBAYTAlVTMRkwFwYDVQQIExBXYXNoaW5ndG9u\nIFN0YXRlMRAwDgYDVQQHEwdTZWF0dGxlMSAwHgYDVQQKExdBbWF6b24gV2ViIFNl\ncnZpY2VzIExMQzCCAbcwggEsBgcqhkjOOAQBMIIBHwKBgQCjkvcS2bb1VQ4yt/5e\nih5OO6kK/n1Lzllr7D8ZwtQP8fOEpp5E2ng+D6Ud1Z1gYipr58Kj3nssSNpI6bX3\nVyIQzK7wLclnd/YozqNNmgIyZecN7EglK9ITHJLP+x8FtUpt3QbyYXJdmVMegN6P\nhviYt5JH/nYl4hh3Pa1HJdskgQIVALVJ3ER11+Ko4tP6nwvHwh6+ERYRAoGBAI1j\nk+tkqMVHuAFcvAGKocTgsjJem6/5qomzJuKDmbJNu9Qxw3rAotXau8Qe+MBcJl/U\nhhy1KHVpCGl9fueQ2s6IL0CaO/buycU1CiYQk40KNHCcHfNiZbdlx1E9rpUp7bnF\nlRa2v1ntMX3caRVDdbtPEWmdxSCYsYFDk4mZrOLBA4GEAAKBgEbmeve5f8LIE/Gf\nMNmP9CM5eovQOGx5ho8WqD+aTebs+k2tn92BBPqeZqpWRa5P/+jrdKml1qx4llHW\nMXrs3IgIb6+hUIB+S8dz8/mmO0bpr76RoZVCXYab2CZedFut7qc3WUH9+EUAH5mw\nvSeDCOUMYQR7R9LINYwouHIziqQYMAkGByqGSM44BAMDLwAwLAIUWXBlk40xTwSw\n7HX32MxXYruse9ACFBNGmdX2ZBrVNGrN9N2f6ROk0k9K\n-----END CERTIFICATE-----\n"
+  "aws_public_cert": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUM3VENDQXEwQ0NRQ1d1a2paNVY0YVp6QUpCZ2NxaGtqT09BUURNRnd4Q3pBSkJnTlZCQVlUQWxWVE1Sa3cKRndZRFZRUUlFeEJYWVhOb2FXNW5kRzl1SUZOMFlYUmxNUkF3RGdZRFZRUUhFd2RUWldGMGRHeGxNU0F3SGdZRApWUVFLRXhkQmJXRjZiMjRnVjJWaUlGTmxjblpwWTJWeklFeE1RekFlRncweE1qQXhNRFV4TWpVMk1USmFGdzB6Ck9EQXhNRFV4TWpVMk1USmFNRnd4Q3pBSkJnTlZCQVlUQWxWVE1Sa3dGd1lEVlFRSUV4QlhZWE5vYVc1bmRHOXUKSUZOMFlYUmxNUkF3RGdZRFZRUUhFd2RUWldGMGRHeGxNU0F3SGdZRFZRUUtFeGRCYldGNmIyNGdWMlZpSUZObApjblpwWTJWeklFeE1RekNDQWJjd2dnRXNCZ2NxaGtqT09BUUJNSUlCSHdLQmdRQ2prdmNTMmJiMVZRNHl0LzVlCmloNU9PNmtLL24xTHpsbHI3RDhad3RRUDhmT0VwcDVFMm5nK0Q2VWQxWjFnWWlwcjU4S2ozbnNzU05wSTZiWDMKVnlJUXpLN3dMY2xuZC9Zb3pxTk5tZ0l5WmVjTjdFZ2xLOUlUSEpMUCt4OEZ0VXB0M1FieVlYSmRtVk1lZ042UApodmlZdDVKSC9uWWw0aGgzUGExSEpkc2tnUUlWQUxWSjNFUjExK0tvNHRQNm53dkh3aDYrRVJZUkFvR0JBSTFqCmsrdGtxTVZIdUFGY3ZBR0tvY1Rnc2pKZW02LzVxb216SnVLRG1iSk51OVF4dzNyQW90WGF1OFFlK01CY0psL1UKaGh5MUtIVnBDR2w5ZnVlUTJzNklMMENhTy9idXljVTFDaVlRazQwS05IQ2NIZk5pWmJkbHgxRTlycFVwN2JuRgpsUmEydjFudE1YM2NhUlZEZGJ0UEVXbWR4U0NZc1lGRGs0bVpyT0xCQTRHRUFBS0JnRWJtZXZlNWY4TElFL0dmCk1ObVA5Q001ZW92UU9HeDVobzhXcUQrYVRlYnMrazJ0bjkyQkJQcWVacXBXUmE1UC8ranJkS21sMXF4NGxsSFcKTVhyczNJZ0liNitoVUlCK1M4ZHo4L21tTzBicHI3NlJvWlZDWFlhYjJDWmVkRnV0N3FjM1dVSDkrRVVBSDVtdwp2U2VEQ09VTVlRUjdSOUxJTll3b3VISXppcVFZTUFrR0J5cUdTTTQ0QkFNREx3QXdMQUlVV1hCbGs0MHhUd1N3CjdIWDMyTXhYWXJ1c2U5QUNGQk5HbWRYMlpCclZOR3JOOU4yZjZST2swazlLCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K"
 }
 ```
 
@@ -179,8 +177,8 @@ $ curl \
 
 Returns the previously configured AWS public key.
 
-| Method   | Path                         | Produces               |
-| :------- | :--------------------------- | :--------------------- |
+| Method   | Path                                     | Produces               |
+| :------- | :--------------------------------------- | :--------------------- |
 | `GET`   | `/auth/aws/config/certificate/:cert_name` | `200 application/json` |
 
 ### Parameters
@@ -199,25 +197,37 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
-  "data": {
-    "aws_public_cert": "-----BEGIN CERTIFICATE-----\nMIIC7TCCAq0CCQCWukjZ5V4aZzAJBgcqhkjOOAQDMFwxCzAJBgNVBAYTAlVTMRkw\nFwYDVQQIExBXYXNoaW5ndG9uIFN0YXRlMRAwDgYDVQQHEwdTZWF0dGxlMSAwHgYD\nVQQKExdBbWF6b24gV2ViIFNlcnZpY2VzIExMQzAeFw0xMjAxMDUxMjU2MTJaFw0z\nODAxMDUxMjU2MTJaMFwxCzAJBgNVBAYTAlVTMRkwFwYDVQQIExBXYXNoaW5ndG9u\nIFN0YXRlMRAwDgYDVQQHEwdTZWF0dGxlMSAwHgYDVQQKExdBbWF6b24gV2ViIFNl\ncnZpY2VzIExMQzCCAbcwggEsBgcqhkjOOAQBMIIBHwKBgQCjkvcS2bb1VQ4yt/5e\nih5OO6kK/n1Lzllr7D8ZwtQP8fOEpp5E2ng+D6Ud1Z1gYipr58Kj3nssSNpI6bX3\nVyIQzK7wLclnd/YozqNNmgIyZecN7EglK9ITHJLP+x8FtUpt3QbyYXJdmVMegN6P\nhviYt5JH/nYl4hh3Pa1HJdskgQIVALVJ3ER11+Ko4tP6nwvHwh6+ERYRAoGBAI1j\nk+tkqMVHuAFcvAGKocTgsjJem6/5qomzJuKDmbJNu9Qxw3rAotXau8Qe+MBcJl/U\nhhy1KHVpCGl9fueQ2s6IL0CaO/buycU1CiYQk40KNHCcHfNiZbdlx1E9rpUp7bnF\nlRa2v1ntMX3caRVDdbtPEWmdxSCYsYFDk4mZrOLBA4GEAAKBgEbmeve5f8LIE/Gf\nMNmP9CM5eovQOGx5ho8WqD+aTebs+k2tn92BBPqeZqpWRa5P/+jrdKml1qx4llHW\nMXrs3IgIb6+hUIB+S8dz8/mmO0bpr76RoZVCXYab2CZedFut7qc3WUH9+EUAH5mw\nvSeDCOUMYQR7R9LINYwouHIziqQYMAkGByqGSM44BAMDLwAwLAIUWXBlk40xTwSw\n7HX32MxXYruse9ACFBNGmdX2ZBrVNGrN9N2f6ROk0k9K\n-----END CERTIFICATE-----\n"
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+        "data": {
+                "aws_public_cert": "-----BEGIN CERTIFICATE-----\nMIIC7TCCAq0CCQCWukjZ5V4aZzAJBgcqhkjOOAQDMFwxCzAJBgNVBAYTAlVTMRkw\nFwYDVQQIExBXYXNoaW5ndG9uIFN0YXRlMRAwDgYDVQQHEwdTZWF0dGxlMSAwHgYD\nVQQKExdBbWF6b24gV2ViIFNlcnZpY2VzIExMQzAeFw0xMjAxMDUxMjU2MTJaFw0z\nODAxMDUxMjU2MTJaMFwxCzAJBgNVBAYTAlVTMRkwFwYDVQQIExBXYXNoaW5ndG9u\nIFN0YXRlMRAwDgYDVQQHEwdTZWF0dGxlMSAwHgYDVQQKExdBbWF6b24gV2ViIFNl\ncnZpY2VzIExMQzCCAbcwggEsBgcqhkjOOAQBMIIBHwKBgQCjkvcS2bb1VQ4yt/5e\nih5OO6kK/n1Lzllr7D8ZwtQP8fOEpp5E2ng+D6Ud1Z1gYipr58Kj3nssSNpI6bX3\nVyIQzK7wLclnd/YozqNNmgIyZecN7EglK9ITHJLP+x8FtUpt3QbyYXJdmVMegN6P\nhviYt5JH/nYl4hh3Pa1HJdskgQIVALVJ3ER11+Ko4tP6nwvHwh6+ERYRAoGBAI1j\nk+tkqMVHuAFcvAGKocTgsjJem6/5qomzJuKDmbJNu9Qxw3rAotXau8Qe+MBcJl/U\nhhy1KHVpCGl9fueQ2s6IL0CaO/buycU1CiYQk40KNHCcHfNiZbdlx1E9rpUp7bnF\nlRa2v1ntMX3caRVDdbtPEWmdxSCYsYFDk4mZrOLBA4GEAAKBgEbmeve5f8LIE/Gf\nMNmP9CM5eovQOGx5ho8WqD+aTebs+k2tn92BBPqeZqpWRa5P/+jrdKml1qx4llHW\nMXrs3IgIb6+hUIB+S8dz8/mmO0bpr76RoZVCXYab2CZedFut7qc3WUH9+EUAH5mw\nvSeDCOUMYQR7R9LINYwouHIziqQYMAkGByqGSM44BAMDLwAwLAIUWXBlk40xTwSw\n7HX32MxXYruse9ACFBNGmdX2ZBrVNGrN9N2f6ROk0k9K\n-----END CERTIFICATE-----\n",
+                "type": "pkcs7"
+        }
 }
+```
+
+## Delete Certificate Configuration
+
+Removes the previously configured AWS public key.
+
+| Method   | Path                                      | Produces               |
+| :------- | :---------------------------------------- | :--------------------- |
+| `DELETE` | `/auth/aws/config/certificate/:cert_name` | `204 (empty body)`     |
+
+### Sample Request
+
+```
+$ curl \
+    --header "X-Vault-Token: ..." \
+    --request DELETE \
+    https://vault.rocks/v1/auth/aws/config/certificate/test-cert
 ```
 
 ## List Certificate Configurations
 
-Lists all the AWS public certificates that are registered with the backend.
+Lists all the AWS public certificates that are registered with the method.
 
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `LIST`   | `/auth/aws/config/certificates` | `200 application/json` |
-| `GET`   | `/auth/aws/config/certificates?list=true` | `200 application/json` |
 
 ### Sample Request
 
@@ -232,17 +242,11 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
-  "wrap_info": null,
   "data": {
     "keys": [
       "cert1"
     ]
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -310,14 +314,9 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "sts_role ": "arn:aws:iam:111122223333:role/myRole"
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -328,7 +327,6 @@ Lists all the AWS Account IDs for which an STS role is registered.
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `LIST`   | `/auth/aws/config/sts`       | `200 application/json` |
-| `GET`   | `/auth/aws/config/sts?list=true`       | `200 application/json` |
 
 ### Sample Request
 
@@ -343,17 +341,12 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "keys": [
       "111122223333",
       "999988887777"
     ]
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -385,7 +378,7 @@ Configures the periodic tidying operation of the whitelisted identity entries.
 ### Parameters
 
 - `safety_buffer` `(string: "72h")` - The amount of extra time that must have
-  passed beyond the `roletag` expiration, before it is removed from the backend
+  passed beyond the `roletag` expiration, before it is removed from the method
   storage. Defaults to 72h.
 - `disable_periodic_tidy` `(bool: false)` - If set to 'true', disables the
   periodic tidying of the `identity-whitelist/<instance_id>` entries.
@@ -414,7 +407,7 @@ Returns the previously configured periodic whitelist tidying settings.
 
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
-| `GET`   | `/auth/aws/config/tidy/identity-whitelist` | `200 applicaiton/json`     |
+| `GET`   | `/auth/aws/config/tidy/identity-whitelist` | `200 application/json`     |
 
 ### Sample Request
 
@@ -428,15 +421,10 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "safety_buffer": 600,
     "disable_periodic_tidy": false
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -468,7 +456,7 @@ Configures the periodic tidying operation of the blacklisted role tag entries.
 ### Parameters
 
 - `safety_buffer` `(string: "72h")` - The amount of extra time that must have
-  passed beyond the `roletag` expiration, before it is removed from the backend
+  passed beyond the `roletag` expiration, before it is removed from the method
   storage. Defaults to 72h.
 - `disable_periodic_tidy` `(bool: false)` - If set to 'true', disables the
   periodic tidying of the `roletag-blacklist/<instance_id>` entries.
@@ -497,7 +485,7 @@ Returns the previously configured periodic blacklist tidying settings.
 
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
-| `GET`   | `/auth/aws/config/tidy/roletag-blacklist` | `200 applicaiton/json`     |
+| `GET`   | `/auth/aws/config/tidy/roletag-blacklist` | `200 application/json`     |
 
 ### Sample Request
 
@@ -511,15 +499,10 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "safety_buffer": 600,
     "disable_periodic_tidy": false
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -542,7 +525,7 @@ $ curl \
 
 ## Create Role
 
-Registers a role in the backend. Only those instances or principals which
+Registers a role in the method. Only those instances or principals which
 are using the role registered using this endpoint, will be able to perform
 the login operation. Contraints can be specified on the role, that are
 applied on the instances or principals attempting to login. At least one
@@ -669,12 +652,14 @@ inferencing configuration of that role.
   the metadata document, so essentially, this disables the client nonce check
   whenever the instance is migrated to a new host and pendingTime is newer than
   the previously-remembered time. Use with caution. This only applies to
-  authentications via the ec2 auth method.
+  authentications via the ec2 auth method. This is mutually exclusive with
+  `disallow_reauthentication`.
 - `disallow_reauthentication` `(bool: false)` - If set, only allows a single
   token to be granted per instance ID. In order to perform a fresh login, the
   entry in whitelist for the instance ID needs to be cleared using
   'auth/aws/identity-whitelist/<instance_id>' endpoint. Defaults to 'false'.
-  This only applies to authentications via the ec2 auth method.
+  This only applies to authentications via the ec2 auth method. This is mutually
+  exclusive with `allow_instance_migration`.
 
 ### Sample Payload
 
@@ -727,8 +712,6 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "bound_ami_id": "ami-fce36987",
     "role_tag": "",
@@ -740,21 +723,17 @@ $ curl \
     "max_ttl": 1800000,
     "disallow_reauthentication": false,
     "allow_instance_migration": false
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
 ## List Roles
 
-Lists all the roles that are registered with the backend.
+Lists all the roles that are registered with the method.
 
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `LIST`   | `/auth/aws/roles`       | `200 application/json` |
-| `GET`   | `/auth/aws/roles?list=true`       | `200 application/json` |
 
 ### Sample Request
 
@@ -769,17 +748,12 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "keys": [
       "dev-role",
       "prod-role"
     ]
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -840,15 +814,17 @@ given instance can be allowed to gain in a worst-case scenario.
   the metadata document, so essentially, this disables the client nonce check
   whenever the instance is migrated to a new host and pendingTime is newer than
   the previously-remembered time. Use with caution. Defaults to 'false'.
+  Mutually exclusive with `disallow_reauthentication`.
 - `disallow_reauthentication` `(bool: false)` - If set, only allows a single
   token to be granted per instance ID. This can be cleared with the
-  auth/aws/identity-whitelist endpoint. Defaults to 'false'.
+  auth/aws/identity-whitelist endpoint. Defaults to 'false'. Mutually exclusive
+  with `allow_instance_migration`.
 
 ### Sample Payload
 
 ```json
 {
-  "policies": ["default", "prod"]
+  "policies": ["default", "dev-api"]
 }
 ```
 
@@ -859,22 +835,17 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/aws/role/dev-role/tag
+    https://vault.rocks/v1/auth/aws/role/dev-api-and-web-role/tag
 ```
 
 ### Sample Response
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
-    "tag_value": "v1:09Vp0qGuyB8=:r=dev-role:p=default,prod:d=false:t=300h0m0s:uPLKCQxqsefRhrp1qmVa1wsQVUXXJG8UZP/pJIdVyOI=",
+    "tag_value": "v1:09Vp0qGuyB8=:r=dev-role:p=default,dev-api:d=false:t=300h0m0s:uPLKCQxqsefRhrp1qmVa1wsQVUXXJG8UZP/pJIdVyOI=",
     "tag_key": "VaultRole"
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -912,7 +883,7 @@ along with its RSA digest can be supplied to this endpoint.
   and `signature` need to be set when using the ec2 auth method.
 - `nonce` `(string: "")` - The nonce to be used for subsequent login requests.
   If this parameter is not specified at all and if reauthentication is allowed,
-  then the backend will generate a random nonce, attaches it to the instance's
+  then the method will generate a random nonce, attaches it to the instance's
   identity-whitelist entry and returns the nonce back as part of auth metadata.
   This value should be used with further login requests, to establish client
   authenticity. Clients can choose to set a custom nonce if preferred, in which
@@ -969,23 +940,18 @@ $ curl \
     "lease_duration": 1800000,
     "metadata": {
       "role_tag_max_ttl": "0",
-      "instance_id": "i-de0f1344"
-      "ami_id": "ami-fce36983"
+      "instance_id": "i-de0f1344",
+      "ami_id": "ami-fce36983",
       "role": "dev-role",
       "auth_type": "ec2"
     },
     "policies": [
       "default",
-      "dev",
+      "dev"
     ],
     "accessor": "20b89871-e6f2-1160-fb29-31c2f6d4645e",
     "client_token": "c9368254-3f21-aded-8a6f-7c818e81b17a"
-  },
-  "warnings": null,
-  "data": null,
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -1043,15 +1009,10 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "expiration_time": "2016-04-25T10:35:20.127058773-04:00",
     "creation_time": "2016-04-12T22:35:01.178348124-04:00"
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -1062,7 +1023,6 @@ Lists all the role tags that are blacklisted.
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `LIST`   | `/auth/aws/roletag-blacklist`       | `200 application/json` |
-| `GET`   | `/auth/aws/roletag-blacklist?list=true`       | `200 application/json` |
 
 ### Sample Request
 
@@ -1077,16 +1037,11 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "keys": [
       "v1:09Vp0qGuyB8=:a=ami-fce3c696:p=default,prod:d=false:t=300h0m0s:uPLKCQxqsefRhrp1qmVa1wsQVUXXJG8UZP/"
     ]
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -1126,7 +1081,7 @@ Cleans up the entries in the blacklist based on expiration time on the entry and
 ### Parameters
 
 - `safety_buffer` `(string: "72h")` - The amount of extra time that must have
-  passed beyond the `roletag` expiration, before it is removed from the backend
+  passed beyond the `roletag` expiration, before it is removed from the method
   storage. Defaults to 72h.
 
 ### Sample Request
@@ -1166,18 +1121,13 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "pending_time": "2016-04-14T01:01:41Z",
     "expiration_time": "2016-05-05 10:09:16.67077232 +0000 UTC",
     "creation_time": "2016-04-14 14:09:16.67077232 +0000 UTC",
     "client_nonce": "5defbf9e-a8f9-3063-bdfc-54b7a42a1f95",
     "role": "dev-role"
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -1188,7 +1138,6 @@ $ curl \
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `LIST`   | `/auth/aws/identity-whitelist`       | `200 application/json` |
-| `GET`   | `/auth/aws/identity-whitelist?list=true`       | `200 application/json` |
 
 ### Sample Request
 
@@ -1203,16 +1152,11 @@ $ curl \
 
 ```json
 {
-  "auth": null,
-  "warnings": null,
   "data": {
     "keys": [
       "i-aab47d37"
     ]
-  },
-  "lease_duration": 0,
-  "renewable": false,
-  "lease_id": ""
+  }
 }
 ```
 
@@ -1251,7 +1195,7 @@ Cleans up the entries in the whitelist based on expiration time and
 ### Parameters
 
 - `safety_buffer` `(string: "72h")` - The amount of extra time that must have
-  passed beyond the `roletag` expiration, before it is removed from the backend
+  passed beyond the `roletag` expiration, before it is removed from the method
   storage. Defaults to 72h.
 
 ### Sample Request

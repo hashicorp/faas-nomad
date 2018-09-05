@@ -1,10 +1,10 @@
-FROM golang:1.9.2-alpine as builder
+FROM golang:1.9.4-alpine as builder
 
 MAINTAINER alex@openfaas.com
 ENTRYPOINT []
 
 RUN apk --no-cache add make curl \
-    && curl -sL https://github.com/openfaas/faas/releases/download/0.6.9/fwatchdog > /usr/bin/fwatchdog \
+    && curl -sL https://github.com/openfaas/faas/releases/download/0.7.1/fwatchdog > /usr/bin/fwatchdog \
     && chmod +x /usr/bin/fwatchdog
 
 WORKDIR /go/src/github.com/openfaas/faas/sample-functions/ApiKeyProtected
