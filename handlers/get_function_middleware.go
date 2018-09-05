@@ -7,7 +7,7 @@ import (
 )
 
 // FunctionNameCTXKey is a context key which points to the location of the function
-// name set bu the ExtractFunctiopn middleware
+// name set bu the ExtractFunction middleware
 var FunctionNameCTXKey = struct{}{}
 
 // MakeExtractFunctionMiddleWare returns a middleware handler which validates

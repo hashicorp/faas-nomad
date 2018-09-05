@@ -31,10 +31,10 @@ type WrappedWatcher struct {
 	*watch.Watcher
 }
 
-type itterateFunc func(dep dependency.Dependency, deps []*dependency.CatalogService)
+type iterateFunc func(dep dependency.Dependency, deps []*dependency.CatalogService)
 
-// ItterateDataCh returns the list of CatalogService from the View
-func (ww *WrappedWatcher) ItterateDataCh(f itterateFunc) {
+// IterateDataCh returns the list of CatalogService from the View
+func (ww *WrappedWatcher) IterateDataCh(f iterateFunc) {
 	for cs := range ww.DataCh() {
 		f(
 			cs.Dependency(),
@@ -47,7 +47,7 @@ func (ww *WrappedWatcher) ItterateDataCh(f itterateFunc) {
 type Watcher interface {
 	Add(dependency dependency.Dependency) (bool, error)
 	Remove(dependency dependency.Dependency) bool
-	ItterateDataCh(itterateFunc)
+	IterateDataCh(iterateFunc)
 }
 
 // ServiceResolver uses consul to resolve a function name into addresses
@@ -139,7 +139,7 @@ func (sr *Resolver) RemoveCacheItem(function string) {
 
 // watch watches consul for changes and updates the cache on change
 func (sr *Resolver) watch() {
-	sr.watcher.ItterateDataCh(
+	sr.watcher.IterateDataCh(
 		func(dep dependency.Dependency, deps []*dependency.CatalogService) {
 			sr.updateCatalog(dep, deps)
 		},

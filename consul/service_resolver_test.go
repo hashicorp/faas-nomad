@@ -27,7 +27,7 @@ func setup(t *testing.T, queryError error) (*Resolver, *MockWatcher, *cache.Cach
 	watcher := &MockWatcher{data: make(chan []*dependency.CatalogService)}
 	watcher.On("Add", mock.Anything).Return(true, nil)
 	watcher.On("Remove", mock.Anything).Return(true)
-	watcher.On("ItterateDataCh", mock.Anything).Return(serviceQuery)
+	watcher.On("IterateDataCh", mock.Anything).Return(serviceQuery)
 
 	pc := cache.New(5*time.Minute, 10*time.Minute)
 	return &Resolver{
@@ -44,7 +44,7 @@ func setup(t *testing.T, queryError error) (*Resolver, *MockWatcher, *cache.Cach
 		serviceQuery
 }
 
-func TestResolveWithCachReturnsURLS(t *testing.T) {
+func TestResolveWithCacheReturnsURLS(t *testing.T) {
 	address := "http://mytest.com"
 	r, _, c, sq := setup(t, nil)
 	c.Add(sq.String(), &cacheItem{addresses: []string{address}}, cache.DefaultExpiration)

@@ -10,7 +10,7 @@ type MockJob struct {
 	mock.Mock
 }
 
-// Register is a mock implementaion of the register interface method
+// Register is a mock implementation of the register interface method
 func (m *MockJob) Register(job *api.Job, options *api.WriteOptions) (
 	*api.JobRegisterResponse,
 	*api.WriteMeta, error) {
@@ -72,4 +72,20 @@ func (m *MockJob) Deregister(jobID string, purge bool, q *api.WriteOptions) (
 	args := m.Called(jobID, purge, q)
 
 	return "", nil, args.Error(2)
+}
+
+func (m *MockJob) Allocations(jobID string, allAllocs bool, q *api.QueryOptions) ([]*api.AllocationListStub, *api.QueryMeta, error) {
+	args := m.Called(jobID, allAllocs, q)
+
+	var allocs []*api.AllocationListStub
+	if a := args.Get(0); a != nil {
+		allocs = a.([]*api.AllocationListStub)
+	}
+
+	var meta *api.QueryMeta
+	if r := args.Get(1); r != nil {
+		meta = r.(*api.QueryMeta)
+	}
+
+	return allocs, meta, args.Error(2)
 }
