@@ -1,3 +1,6 @@
+**NOTE: This repository is not currently actively maintained**
+
+
 [![Build Status](https://travis-ci.org/hashicorp/faas-nomad.svg)](https://travis-ci.org/hashicorp/faas-nomad)
 [![Docker Repository on Quay](https://quay.io/repository/nicholasjackson/faas-nomad/status "Docker Repository on Quay")](https://quay.io/repository/nicholasjackson/faas-nomad)
 [![OpenFaaS](https://img.shields.io/badge/openfaas-serverless-blue.svg)](https://www.openfaas.com)
