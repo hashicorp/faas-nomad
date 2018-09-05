@@ -114,8 +114,8 @@ Vagrant.configure("2") do |config|
 
   # test if consul, nomad are running properly
   config.vm.provision "shell", inline: <<-SHELL
-  echo 'Waiting for consul...'
-  while true
+    echo 'Waiting for consul...'
+    while true
     do
       START=`consul members | grep "alive"`
       if [ -n "$START" ]; then
