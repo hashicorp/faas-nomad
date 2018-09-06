@@ -4,14 +4,12 @@ maintainers:
  - johnmccabe
  - jockdarock
  - ericstoekl
- - austinfrey
  - itscaro
- - rorpage
  - kenfdev
  - BurtonR
  - iyovcheva
+ - stefanprodan
 
 features:
  - dco_check
  - comments
- 

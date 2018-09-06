@@ -6,14 +6,14 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hashicorp/vault/helper/logformat"
+	log "github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/vault/helper/logging"
 	"github.com/hashicorp/vault/physical"
 	"github.com/hashicorp/vault/physical/inmem"
-	log "github.com/mgutz/logxi/v1"
 )
 
 var (
-	logger = logformat.NewVaultLogger(log.LevelTrace)
+	logger = logging.NewVaultLogger(log.Trace)
 )
 
 // mockBarrier returns a physical backend, security barrier, and master key
@@ -157,7 +157,7 @@ func TestAESGCMBarrier_BackwardsCompatible(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 
-	// Check for migraiton
+	// Check for migration
 	out, err := inm.Get(context.Background(), barrierInitPath)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -208,7 +208,7 @@ func TestAESGCMBarrier_Confidential(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 
-	// Check the physcial entry
+	// Check the physical entry
 	pe, err := inm.Get(context.Background(), "test")
 	if err != nil {
 		t.Fatalf("err: %v", err)

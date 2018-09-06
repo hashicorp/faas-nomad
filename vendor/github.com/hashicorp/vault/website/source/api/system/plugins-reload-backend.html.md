@@ -23,10 +23,10 @@ This endpoint reloads mounted plugin backends.
 
 ### Parameters
 
-- `plugin` `(string: "")` – The name of the plugin to reload, as 
+- `plugin` `(string: "")` – The name of the plugin to reload, as
   registered in the plugin catalog.
 
-- `mounts` `(slice: [])` – Array or comma-separated string mount paths 
+- `mounts` `(array: [])` – Array or comma-separated string mount paths
   of the plugin backends to reload.
 
 ### Sample Payload
@@ -43,5 +43,5 @@ This endpoint reloads mounted plugin backends.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request PUT
-    https://vault.rocks/v1/sys/plugins/reload/backend
+    http://127.0.0.1:8200/v1/sys/plugins/reload/backend
 ```

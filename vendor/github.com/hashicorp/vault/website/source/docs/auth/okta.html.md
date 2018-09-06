@@ -33,10 +33,9 @@ at a different path, use that value instead of `okta`.
 
 ```shell
 $ curl \
-    --header "X-Vault-Token: ..." \
     --request POST \
     --data '{"password": "MY_PASSWORD"}' \
-    https://vault.rocks/v1/auth/okta/login/my-username
+    http://127.0.0.1:8200/v1/auth/okta/login/my-username
 ```
 
 The response will contain a token at `auth.client_token`:

@@ -9,10 +9,10 @@ import (
 )
 
 // CheckType is used to create either the CheckMonitor or the CheckTTL.
-// Six types are supported: Script, HTTP, TCP, Docker, TTL and GRPC. Script,
+// The following types are supported: Script, HTTP, TCP, Docker, TTL, GRPC, Alias. Script,
 // HTTP, Docker, TCP and GRPC all require Interval. Only one of the types may
 // to be provided: TTL or Script/Interval or HTTP/Interval or TCP/Interval or
-// Docker/Interval or GRPC/Interval.
+// Docker/Interval or GRPC/Interval or AliasService.
 type CheckType struct {
 	// fields already embedded in CheckDefinition
 	// Note: CheckType.CheckID == CheckDefinition.ID
@@ -25,13 +25,14 @@ type CheckType struct {
 	// fields copied to CheckDefinition
 	// Update CheckDefinition when adding fields here
 
-	Script            string
 	ScriptArgs        []string
 	HTTP              string
 	Header            map[string][]string
 	Method            string
 	TCP               string
 	Interval          time.Duration
+	AliasNode         string
+	AliasService      string
 	DockerContainerID string
 	Shell             string
 	GRPC              string
@@ -57,7 +58,13 @@ func (c *CheckType) Validate() error {
 	if intervalCheck && c.Interval <= 0 {
 		return fmt.Errorf("Interval must be > 0 for Script, HTTP, or TCP checks")
 	}
-	if !intervalCheck && c.TTL <= 0 {
+	if intervalCheck && c.IsAlias() {
+		return fmt.Errorf("Interval cannot be set for Alias checks")
+	}
+	if c.IsAlias() && c.TTL > 0 {
+		return fmt.Errorf("TTL must be not be set for Alias checks")
+	}
+	if !intervalCheck && !c.IsAlias() && c.TTL <= 0 {
 		return fmt.Errorf("TTL must be > 0 for TTL checks")
 	}
 	return nil
@@ -68,9 +75,14 @@ func (c *CheckType) Empty() bool {
 	return reflect.DeepEqual(c, &CheckType{})
 }
 
+// IsAlias checks if this is an alias check.
+func (c *CheckType) IsAlias() bool {
+	return c.AliasNode != "" || c.AliasService != ""
+}
+
 // IsScript checks if this is a check that execs some kind of script.
 func (c *CheckType) IsScript() bool {
-	return c.Script != "" || len(c.ScriptArgs) > 0
+	return len(c.ScriptArgs) > 0
 }
 
 // IsTTL checks if this is a TTL type

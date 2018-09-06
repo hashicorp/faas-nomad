@@ -89,6 +89,7 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, d *framew
 		DisplayName: username,
 		LeaseOptions: logical.LeaseOptions{
 			TTL:       cfg.TTL,
+			MaxTTL:    cfg.MaxTTL,
 			Renewable: true,
 		},
 		Alias: &logical.Alias{
@@ -117,7 +118,7 @@ func (b *backend) pathLoginRenew(ctx context.Context, req *logical.Request, d *f
 		return resp, err
 	}
 
-	if !policyutil.EquivalentPolicies(loginPolicies, req.Auth.Policies) {
+	if !policyutil.EquivalentPolicies(loginPolicies, req.Auth.TokenPolicies) {
 		return nil, fmt.Errorf("policies have changed, not renewing")
 	}
 
@@ -126,10 +127,9 @@ func (b *backend) pathLoginRenew(ctx context.Context, req *logical.Request, d *f
 		return nil, err
 	}
 
-	resp, err = framework.LeaseExtend(cfg.TTL, cfg.MaxTTL, b.System())(ctx, req, d)
-	if err != nil {
-		return nil, err
-	}
+	resp.Auth = req.Auth
+	resp.Auth.TTL = cfg.TTL
+	resp.Auth.MaxTTL = cfg.MaxTTL
 
 	// Remove old aliases
 	resp.Auth.GroupAliases = nil

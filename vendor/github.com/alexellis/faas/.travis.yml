@@ -1,7 +1,12 @@
 sudo: required
 
+language: go
+go:
+  - "1.9"
+
 services:
       - docker
+
 addons:
   apt:
     packages:
@@ -10,15 +15,25 @@ addons:
 before_install:
 
 script:
-    - sh build.sh
-    # Invoke ci script too
-    - sh contrib/ci.sh
+    - ./build.sh
+    - ./contrib/ci.sh
+
 after_success:
-    - if [ ! -s "$TRAVIS_TAG" ] ; then 
-        docker tag $DOCKER_NS/gateway:latest-dev $DOCKER_NS/gateway:$TRAVIS_TAG;
-        docker login -u=$DOCKER_USERNAME -p=$DOCKER_PASSWORD;
-        docker push $DOCKER_NS/gateway:$TRAVIS_TAG;
+    - if [ -z $DOCKER_NS ] ; then
+        export DOCKER_NS=openfaas;
         fi
+
+    - if [ ! -z "$TRAVIS_TAG" ] ; then 
+        docker tag $DOCKER_NS/gateway:latest-dev $DOCKER_NS/gateway:$TRAVIS_TAG;
+        echo $DOCKER_PASSWORD | docker login -u=$DOCKER_USERNAME --password-stdin;
+        docker push $DOCKER_NS/gateway:$TRAVIS_TAG;
+
+        docker tag $DOCKER_NS/gateway:latest-dev quay.io/$DOCKER_NS/gateway:$TRAVIS_TAG;
+        echo $QUAY_PASSWORD | docker login -u=$QUAY_USERNAME --password-stdin quay.io;
+        docker push quay.io/$DOCKER_NS/gateway:$TRAVIS_TAG;
+
+        fi
+
 deploy:
   provider: releases
   api_key:

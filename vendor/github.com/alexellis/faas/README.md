@@ -18,11 +18,11 @@ OpenFaaS (Functions as a Service) is a framework for building serverless functio
 * [CLI](http://github.com/openfaas/faas-cli) available with YAML format for templating and defining functions
 * Auto-scales as demand increases
 
-## New: become an OpenFaaS backer or sponsor
+## Overview of OpenFaaS
 
-We need your support to keep delivering on Serverless Functions Made Simple so pledge to OpenFaaS and [become a backer or a sponsor](https://www.patreon.com/alexellis) with a unique set of rewards. Help us hit our goals and get to back a great project at the same time.
+> Serverless Functions Made Simple.
 
-View the [List of backers and sponsors](https://github.com/openfaas/faas/blob/master/BACKERS.md)
+![Stack](https://pbs.twimg.com/media/DFrkF4NXoAAJwN2.jpg)
 
 ## Press-kit/media/swag
 
@@ -32,11 +32,13 @@ For stickers, swag, media or press-kit information head over to [openfaas/media]
 
 OpenFaaS is an independent project created by [Alex Ellis](https://www.alexellis.io) which is now being built and shaped by a growing community of contributors. Project website: [openfaas.com](https://www.openfaas.com).
 
-## Overview of OpenFaaS
+## Users
 
-> Serverless Functions Made Simple.
+[View some of our end-users](https://docs.openfaas.com/#users-of-openfaas) or [get in touch to be listed](https://github.com/openfaas/faas/issues/776).
 
-![Stack](https://pbs.twimg.com/media/DFrkF4NXoAAJwN2.jpg)
+> Please support [OpenFaaS on Patreon](https://www.patreon.com/alexellis)). Help us hit our goals and get to back a great project at the same time. View the [List of backers and sponsors](https://github.com/openfaas/faas/blob/master/BACKERS.md).
+
+Thank you for your help
 
 ### Function Watchdog
 
@@ -71,8 +73,8 @@ You can generate new functions using the FaaS-CLI and built-in templates or use 
 import requests
 
 def handle(req):
-        r =  requests.get(req, timeout = 1)
-        print(req +" => " + str(r.status_code))
+    r =  requests.get(req, timeout = 1)
+    print(req +" => " + str(r.status_code))
 ```
 *handler.py*
 
@@ -91,28 +93,41 @@ Other [Sample functions](https://github.com/openfaas/faas/tree/master/sample-fun
 
 ## Documentation
 
-[View our guides](https://github.com/openfaas/faas/tree/master/guide) for documentation, deployment guides and tutorials.
+We are building a new documentation site at [docs.openfaas.com](http://docs.openfaas.com). 
+The source repository for the documentation website is [openfaas/docs](https://github.com/openfaas/docs).
+
+For all other guides, tutorials, trouble-shooting and blog posts head over to our [guides page](https://github.com/openfaas/faas/tree/master/guide) on GitHub.
 
 ## Get started with OpenFaaS
 
-### TestDrive
+### Official documentation and blog
+See our documentation on [docs.openfaas.com](https://docs.openfaas.com/)
+
+Read latest news on OpenFaaS from the community [blog](https://www.openfaas.com/blog/)
+
+### Hands-on labs (detailed getting started)
+
+You can learn how to build functions with OpenFaaS using our hands-on labs in the [OpenFaaS workshop](http://github.com/openfaas/workshop).
+
+### TestDrive (classic getting started)
+
+**Kubernetes**
+
+OpenFaaS is Kubernetes-native - you can follow the [deployment guide here](http://docs.openfaas.com/deployment/kubernetes/).
 
 **Docker Swarm**
 
 The deployment guide for Docker Swarm contains a simple one-line command to get you up and running in around 60 seconds. It also includes a set of [sample functions](https://github.com/openfaas/faas/tree/master/sample-functions) which you can use with the TestDrive instructions below.
 
-[Deployment guide for Docker Swarm](https://github.com/openfaas/faas/blob/master/guide/deployment_swarm.md)
+[Deployment guide for Docker Swarm](http://docs.openfaas.com/deployment/docker-swarm/)
 
-**Kubernetes**
-
-OpenFaaS is Kubernetes-native - you can follow the [deployment guide here](https://github.com/openfaas/faas/blob/master/guide/deployment_k8s.md).
-
-The new login feature breaks the one-click deployment to PWD. 
 **Docker Playground**
 
-You can quickly start OpenFaaS on Docker Swarm online using the community-run Docker playground: play-with-docker.com (PWD) by clicking the button below:
+You can quickly start OpenFaaS on Docker Swarm online using the community-run Docker playground: [Play-with-Docker](https://labs.play-with-docker.com/) (PWD)
 
-[![Try in PWD](https://cdn.rawgit.com/play-with-docker/stacks/cff22438/assets/images/button.png)](http://play-with-docker.com?stack=https://raw.githubusercontent.com/openfaas/faas/master/docker-compose.yml&stack_name=func)
+Simply follow the deployment guide for Swarm above in a new session
+
+> You will need a free Docker Hub account to get access. Get one here: [Docker Hub](https://hub.docker.com/)
 
 
 #### Begin the TestDrive
@@ -145,7 +160,8 @@ If you'd like to find the functions I used in the demos head over to the [faas-d
 
 **Background story**
 
-This is my original blog post on FaaS from January: [Functions as a Service blog post](http://blog.alexellis.io/functions-as-a-service/)
+* [Introducing OpenFaaS (Functions as a Service)](https://blog.alexellis.io/introducing-functions-as-a-service/) -  August 2017
+* [Functions as a Service (FaaS)](http://blog.alexellis.io/functions-as-a-service/) - January 2017
 
 ### Community
 
@@ -153,34 +169,24 @@ Have you written a blog about OpenFaaS? Send a Pull Request to the community pag
 
 * [Read blogs/articles and find events about OpenFaaS](https://github.com/openfaas/faas/blob/master/community.md)
 
-If you'd like to join OpenFaaS community Slack channel to chat with contributors or get some help - then send a Tweet to [@alexellisuk](https://twitter.com/alexellisuk/) or email alex@openfaas.com.
+If you'd like to join OpenFaaS community Slack channel to chat with contributors or get some help then check out [this page on community](https://docs.openfaas.com/community).
 
 ### Roadmap and contributing
 
 OpenFaaS is written in Golang and is MIT licensed - contributions are welcomed whether that means providing feedback, testing existing and new feature or hacking on the source.
 
-To get started you can read the [roadmap](https://github.com/openfaas/faas/blob/master/ROADMAP.md) and [contribution guide](https://github.com/openfaas/faas/blob/master/CONTRIBUTING.md) or:
+#### How do I become a contributor?
 
-* [Browse FaaS issues on Github](https://github.com/openfaas/faas/issues).
-* [Browse FaaS-CLI issues on Github](https://github.com/openfaas/faas-cli/issues).
+Please see the guide on [community & contributing](https://docs.openfaas.com/community/#contribute)
 
-Highlights:
+#### Roadmap
 
-* New: Kubernetes support via [FaaS-netes](https://github.com/openfaas/faas-netes) plugin
-* New: FaaS CLI and easy install via `curl` and `brew`
-* New: Windows function support
-* New: Asynchronous/long-running OpenFaaS functions via [NATS Streaming](https://nats.io/documentation/streaming/nats-streaming-intro/) - [Follow this guide](https://github.com/openfaas/faas/blob/master/guide/asynchronous.md)
-
-### How do I become a contributor?
-
-Anyone is invited to contribute to the project in-line with the [contribution guide](https://github.com/openfaas/faas/blob/master/CONTRIBUTING.md) - you can also read the guide for ideas on how to get involved. We invite new contributors to join our Slack community. We would also ask you to propose any changes or contributions ahead of time, especially when there is no issue or proposal already tracking it.
+The roadmap is represented in [GitHub issues](https://github.com/openfaas/faas/issues) and a Trello board. There is also a historical ROADMAP file in the [main faas repository](https://github.com/openfaas/faas/blob/master/ROADMAP.md).
 
 ### Other
 
 Example of a Grafana dashboards linked to OpenFaaS showing auto-scaling live in action: [here](https://grafana.com/dashboards/3526)
 
-
 ![](https://pbs.twimg.com/media/C9caE6CXUAAX_64.jpg:large)
-
 
 An alternative community dashboard is [available here](https://grafana.com/dashboards/3434)

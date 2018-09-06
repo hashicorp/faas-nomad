@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/acl"
+	ca "github.com/hashicorp/consul/agent/connect/ca"
 	"github.com/hashicorp/consul/agent/consul/autopilot"
 	"github.com/hashicorp/consul/agent/consul/fsm"
 	"github.com/hashicorp/consul/agent/consul/state"
@@ -32,7 +33,6 @@ import (
 	"github.com/hashicorp/consul/types"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
-	"github.com/hashicorp/serf/coordinate"
 	"github.com/hashicorp/serf/serf"
 )
 
@@ -75,6 +75,10 @@ const (
 	raftRemoveGracePeriod = 5 * time.Second
 )
 
+var (
+	ErrWANFederationDisabled = fmt.Errorf("WAN Federation is disabled")
+)
+
 // Server is Consul server which manages the service discovery,
 // health checking, DC forwarding, Raft, and multiple Serf pools.
 type Server struct {
@@ -92,6 +96,22 @@ type Server struct {
 
 	// autopilotWaitGroup is used to block until Autopilot shuts down.
 	autopilotWaitGroup sync.WaitGroup
+
+	// caProvider is the current CA provider in use for Connect. This is
+	// only non-nil when we are the leader.
+	caProvider ca.Provider
+	// caProviderRoot is the CARoot that was stored along with the ca.Provider
+	// active. It's only updated in lock-step with the caProvider. This prevents
+	// races between state updates to active roots and the fetch of the provider
+	// instance.
+	caProviderRoot *structs.CARoot
+	caProviderLock sync.RWMutex
+
+	// caPruningCh is used to shut down the CA root pruning goroutine when we
+	// lose leadership.
+	caPruningCh      chan struct{}
+	caPruningLock    sync.RWMutex
+	caPruningEnabled bool
 
 	// Consul configuration
 	config *Config
@@ -205,6 +225,9 @@ type Server struct {
 	shutdown     bool
 	shutdownCh   chan struct{}
 	shutdownLock sync.Mutex
+
+	// embedded struct to hold all the enterprise specific data
+	EnterpriseServer
 }
 
 func NewServer(config *Config) (*Server, error) {
@@ -294,6 +317,12 @@ func NewServerLogger(config *Config, logger *log.Logger, tokens *token.Store) (*
 		shutdownCh:       shutdownCh,
 	}
 
+	// Initialize enterprise specific server functionality
+	if err := s.initEnterprise(); err != nil {
+		s.Shutdown()
+		return nil, err
+	}
+
 	// Initialize the stats fetcher that autopilot will use.
 	s.statsFetcher = NewStatsFetcher(logger, s.connPool, s.config.Datacenter)
 
@@ -344,21 +373,23 @@ func NewServerLogger(config *Config, logger *log.Logger, tokens *token.Store) (*
 	// created, so we can pull it out from there reliably, even though it's
 	// a little gross to be reading the updated config.
 
-	// Initialize the WAN Serf.
-	serfBindPortWAN := config.SerfWANConfig.MemberlistConfig.BindPort
-	s.serfWAN, err = s.setupSerf(config.SerfWANConfig, s.eventChWAN, serfWANSnapshot, true, serfBindPortWAN, "", s.Listener)
-	if err != nil {
-		s.Shutdown()
-		return nil, fmt.Errorf("Failed to start WAN Serf: %v", err)
-	}
-
-	// See big comment above why we are doing this.
-	if serfBindPortWAN == 0 {
+	// Initialize the WAN Serf if enabled
+	serfBindPortWAN := -1
+	if config.SerfWANConfig != nil {
 		serfBindPortWAN = config.SerfWANConfig.MemberlistConfig.BindPort
-		if serfBindPortWAN == 0 {
-			return nil, fmt.Errorf("Failed to get dynamic bind port for WAN Serf")
+		s.serfWAN, err = s.setupSerf(config.SerfWANConfig, s.eventChWAN, serfWANSnapshot, true, serfBindPortWAN, "", s.Listener)
+		if err != nil {
+			s.Shutdown()
+			return nil, fmt.Errorf("Failed to start WAN Serf: %v", err)
 		}
-		s.logger.Printf("[INFO] agent: Serf WAN TCP bound to port %d", serfBindPortWAN)
+		// See big comment above why we are doing this.
+		if serfBindPortWAN == 0 {
+			serfBindPortWAN = config.SerfWANConfig.MemberlistConfig.BindPort
+			if serfBindPortWAN == 0 {
+				return nil, fmt.Errorf("Failed to get dynamic bind port for WAN Serf")
+			}
+			s.logger.Printf("[INFO] agent: Serf WAN TCP bound to port %d", serfBindPortWAN)
+		}
 	}
 
 	// Initialize the LAN segments before the default LAN Serf so we have
@@ -380,20 +411,28 @@ func NewServerLogger(config *Config, logger *log.Logger, tokens *token.Store) (*
 	s.floodSegments(config)
 
 	// Add a "static route" to the WAN Serf and hook it up to Serf events.
-	if err := s.router.AddArea(types.AreaWAN, s.serfWAN, s.connPool, s.config.VerifyOutgoing); err != nil {
-		s.Shutdown()
-		return nil, fmt.Errorf("Failed to add WAN serf route: %v", err)
-	}
-	go router.HandleSerfEvents(s.logger, s.router, types.AreaWAN, s.serfWAN.ShutdownCh(), s.eventChWAN)
-
-	// Fire up the LAN <-> WAN join flooder.
-	portFn := func(s *metadata.Server) (int, bool) {
-		if s.WanJoinPort > 0 {
-			return s.WanJoinPort, true
+	if s.serfWAN != nil {
+		if err := s.router.AddArea(types.AreaWAN, s.serfWAN, s.connPool, s.config.VerifyOutgoing); err != nil {
+			s.Shutdown()
+			return nil, fmt.Errorf("Failed to add WAN serf route: %v", err)
 		}
-		return 0, false
+		go router.HandleSerfEvents(s.logger, s.router, types.AreaWAN, s.serfWAN.ShutdownCh(), s.eventChWAN)
+
+		// Fire up the LAN <-> WAN join flooder.
+		portFn := func(s *metadata.Server) (int, bool) {
+			if s.WanJoinPort > 0 {
+				return s.WanJoinPort, true
+			}
+			return 0, false
+		}
+		go s.Flood(nil, portFn, s.serfWAN)
 	}
-	go s.Flood(nil, portFn, s.serfWAN)
+
+	// Start enterprise specific functionality
+	if err := s.startEnterprise(); err != nil {
+		s.Shutdown()
+		return nil, err
+	}
 
 	// Start monitoring leadership. This must happen after Serf is set up
 	// since it can fire events when leadership is obtained.
@@ -831,6 +870,9 @@ func (s *Server) JoinLAN(addrs []string) (int, error) {
 // The target address should be another node listening on the
 // Serf WAN address
 func (s *Server) JoinWAN(addrs []string) (int, error) {
+	if s.serfWAN == nil {
+		return 0, ErrWANFederationDisabled
+	}
 	return s.serfWAN.Join(addrs, true)
 }
 
@@ -846,6 +888,9 @@ func (s *Server) LANMembers() []serf.Member {
 
 // WANMembers is used to return the members of the LAN cluster
 func (s *Server) WANMembers() []serf.Member {
+	if s.serfWAN == nil {
+		return nil
+	}
 	return s.serfWAN.Members()
 }
 
@@ -854,8 +899,10 @@ func (s *Server) RemoveFailedNode(node string) error {
 	if err := s.serfLAN.RemoveFailedNode(node); err != nil {
 		return err
 	}
-	if err := s.serfWAN.RemoveFailedNode(node); err != nil {
-		return err
+	if s.serfWAN != nil {
+		if err := s.serfWAN.RemoveFailedNode(node); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -877,7 +924,11 @@ func (s *Server) KeyManagerWAN() *serf.KeyManager {
 
 // Encrypted determines if gossip is encrypted
 func (s *Server) Encrypted() bool {
-	return s.serfLAN.EncryptionEnabled() && s.serfWAN.EncryptionEnabled()
+	LANEncrypted := s.serfLAN.EncryptionEnabled()
+	if s.serfWAN == nil {
+		return LANEncrypted
+	}
+	return LANEncrypted && s.serfWAN.EncryptionEnabled()
 }
 
 // LANSegments returns a map of LAN segments by name
@@ -995,9 +1046,22 @@ func (s *Server) Stats() map[string]map[string]string {
 		},
 		"raft":     s.raft.Stats(),
 		"serf_lan": s.serfLAN.Stats(),
-		"serf_wan": s.serfWAN.Stats(),
 		"runtime":  runtimeStats(),
 	}
+	if s.serfWAN != nil {
+		stats["serf_wan"] = s.serfWAN.Stats()
+	}
+
+	for outerKey, outerValue := range s.enterpriseStats() {
+		if _, ok := stats[outerKey]; ok {
+			for innerKey, innerValue := range outerValue {
+				stats[outerKey][innerKey] = innerValue
+			}
+		} else {
+			stats[outerKey] = outerValue
+		}
+	}
+
 	return stats
 }
 
@@ -1019,9 +1083,10 @@ func (s *Server) GetLANCoordinate() (lib.CoordinateSet, error) {
 	return cs, nil
 }
 
-// GetWANCoordinate returns the coordinate of the server in the WAN gossip pool.
-func (s *Server) GetWANCoordinate() (*coordinate.Coordinate, error) {
-	return s.serfWAN.GetCoordinate()
+// ReloadConfig is used to have the Server do an online reload of
+// relevant configuration information
+func (s *Server) ReloadConfig(config *Config) error {
+	return nil
 }
 
 // Atomically sets a readiness state flag when leadership is obtained, to indicate that server is past its barrier write

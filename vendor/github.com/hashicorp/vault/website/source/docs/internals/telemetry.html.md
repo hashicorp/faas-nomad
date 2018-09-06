@@ -256,6 +256,14 @@ Thes operations take a request and response with an associated lease and registe
 
 **[S]** Summary (Milliseconds): Time taken for register authentication operations which create lease entries without lease ID
 
+### vault.merkle_flushdirty
+
+**[S]** Summary (Milliseconds): Time taken to flush any dirty pages to cold storage
+
+### vault.merkle_savecheckpoint
+
+**[S]** Summary (Milliseconds): Time taken to save the checkpoint
+
 ### vault.policy.get_policy
 
 **[S]** Summary (Milliseconds): Time taken to get a policy
@@ -295,6 +303,26 @@ Thes operations take a request and response with an associated lease and registe
 ### vault.token.store
 
 **[S]** Summary (Milliseconds): Time taken to store an updated token entry without writing to the secondary index
+
+### vault.wal_deletewals
+
+**[S]** Summary (Milliseconds): Time taken to delete a Write Ahead Log (WAL)
+
+### vault.wal_gc_deleted
+
+**[C]** Counter (Number of WAL): Number of Write Ahead Logs (WAL) deleted during each garbage collection run
+
+### vault.wal_gc_total
+
+**[C]** Counter (Number of WAL): Total Number of Write Ahead Logs (WAL) on disk
+
+### vault.wal_persistwals
+
+**[S]** Summary (Milliseconds): Time taken to persist a Write Ahead Log (WAL)
+
+### vault.wal_flushready
+
+**[S]** Summary (Milliseconds): Time taken to flush a ready Write Ahead Log (WAL) to storage
 
 ## Auth Methods Metrics
 
@@ -350,7 +378,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of operations): Number of database secrets engine initialization operations across database secrets engines
 
-### database.<name>.Initialize
+### database.&lt;name&gt;.Initialize
 
 **[S]** Summary (Milliseconds): Time taken to initialize a database secret engine for the named database secrets engine `<name>`, for example: `database.postgresql-prod.Initialize`
 
@@ -360,7 +388,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of errors): Number of database secrets engine initialization operation errors across all database secrets engines
 
-### database.<name>.Initialize.error
+### database.&lt;name&gt;.Initialize.error
 
 **[C]** Counter (Number of errors): Number of database secrets engine initialization operation errors for the named database secrets engine `<name>`, for example: `database.postgresql-prod.Initialize.error`
 
@@ -370,7 +398,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of operations): Number of database secrets engine close operations across database secrets engines
 
-### database.<name>.Close
+### database.&lt;name&gt;.Close
 
 **[S]** Summary (Milliseconds): Time taken to close a database secret engine for the named database secrets engine `<name>`, for example: `database.postgresql-prod.Close`
 
@@ -380,7 +408,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of errors): Number of database secrets engine close operation errors across all database secrets engines
 
-### database.<name>.Close.error
+### database.&lt;name&gt;.Close.error
 
 **[C]** Counter (Number of errors): Number of database secrets engine close operation errors for the named database secrets engine `<name>`, for example: `database.postgresql-prod.Close.error`
 
@@ -390,7 +418,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of operations): Number of user creation operations across database secrets engines
 
-### database.<name>.CreateUser
+### database.&lt;name&gt;.CreateUser
 
 **[S]** Summary (Milliseconds): Time taken to create a user for the named database secrets engine `<name>`
 
@@ -400,7 +428,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of errors): Number of user creation operation errors across all database secrets engines
 
-### database.<name>.CreateUser.error
+### database.&lt;name&gt;.CreateUser.error
 
 **[C]** Counter (Number of operations): Number of user creation operation errors for the named database secrets engine `<name>`, for example: `database.postgresql-prod.CreateUser.error`
 
@@ -410,7 +438,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of operations): Number of user renewal operations across database secrets engines
 
-### database.<name>.RenewUser
+### database.&lt;name&gt;.RenewUser
 
 **[S]** Summary (Milliseconds): Time taken to renew a user for the named database secrets engine `<name>`, for example: `database.postgresql-prod.RenewUser`
 
@@ -420,7 +448,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of errors): Number of user renewal operation errors across all database secrets engines
 
-### database.<name>.RenewUser.error
+### database.&lt;name&gt;.RenewUser.error
 
 **[C]** Counter (Number of errors): Number of user renewal operations for the named database secrets engine `<name>`, for example: `database.postgresql-prod.RenewUser.error`
 
@@ -430,7 +458,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of operations): Number of user revocation operations across database secrets engines
 
-### database.<name>.RevokeUser
+### database.&lt;name&gt;.RevokeUser
 
 **[S]** Summary (Milliseconds): Time taken to revoke a user for the named database secrets engine `<name>`, for example: `database.postgresql-prod.RevokeUser`
 
@@ -440,7 +468,7 @@ These metrics relate to the supported [secrets engines][secrets-engines].
 
 **[C]** Counter (Number of errors): Number of user revocation operation errors across all database secrets engines
 
-### database.<name>.RevokeUser.error
+### database.&lt;name&gt;.RevokeUser.error
 
 **[C]** Counter (Number of errors): Number of user revocation operations for the named database secrets engine `<name>`, for example: `database.postgresql-prod.RevokeUser.error`
 
@@ -576,6 +604,18 @@ These metrics relate to the supported [storage backends][storage-backends].
 
 **[S]** Summary (Milliseconds):  Duration of a LIST operation against the [Google Cloud Storage storage backend][gcs-storage-backend]
 
+### vault.gcs.lock.unlock
+
+**[S]** Summary (Milliseconds): Duration of an UNLOCK operation against the [Google Cloud Storage storage backend][gcs-storage-backend] in HA mode
+
+### vault.gcs.lock.lock
+
+**[S]** Summary (Milliseconds): Duration of a LOCK operation against the [Google Cloud Storage storage backend][gcs-storage-backend] in HA mode
+
+### vault.gcs.lock.value
+
+**[S]** Summary (Milliseconds): Duration of a VALUE operation against the [Google Cloud Storage storage backend][gcs-storage-backend] in HA mode
+
 ### vault.mssql.put
 
 **[S]** Summary (Milliseconds): Duration of a PUT operation against the [MS-SQL storage backend][mssql-storage-backend]
@@ -640,6 +680,34 @@ These metrics relate to the supported [storage backends][storage-backends].
 
 **[S]** Summary (Milliseconds):  Duration of a LIST operation against the [Amazon S3 storage backend][s3-storage-backend]
 
+### vault.spanner.put
+
+**[S]** Summary (Milliseconds): Duration of a PUT operation against the [Google Cloud Spanner storage backend][spanner-storage-backend]
+
+### vault.spanner.get
+
+**[S]** Summary (Milliseconds): Duration of a GET operation against the [Google Cloud Spanner storage backend][spanner-storage-backend]
+
+### vault.spanner.delete
+
+**[S]** Summary (Milliseconds):  Duration of a DELETE operation against the [Google Cloud Spanner storage backend][spanner-storage-backend]
+
+### vault.spanner.list
+
+**[S]** Summary (Milliseconds):  Duration of a LIST operation against the [Google Cloud Spanner storage backend][spanner-storage-backend]
+
+### vault.spanner.lock.unlock
+
+**[S]** Summary (Milliseconds): Duration of an UNLOCK operation against the [Google Cloud Spanner storage backend][spanner-storage-backend] in HA mode
+
+### vault.spanner.lock.lock
+
+**[S]** Summary (Milliseconds): Duration of a LOCK operation against the [Google Cloud Spanner storage backend][spanner-storage-backend] in HA mode
+
+### vault.spanner.lock.value
+
+**[S]** Summary (Milliseconds): Duration of a VALUE operation against the [Google Cloud Spanner storage backend][gcs-storage-backend] in HA mode
+
 ### vault.swift.put
 
 **[S]** Summary (Milliseconds): Duration of a PUT operation against the [Swift storage backend][swift-storage-backend]
@@ -686,7 +754,8 @@ These metrics relate to the supported [storage backends][storage-backends].
 [couchdb-storage-backend]: /docs/configuration/storage/couchdb.html
 [dynamodb-storage-backend]: /docs/configuration/storage/dynamodb.html
 [etcd-storage-backend]: /docs/configuration/storage/etcd.html
-[gcs-storage-backend]: /docs/configuration/storage/google-cloud.html
+[gcs-storage-backend]: /docs/configuration/storage/google-cloud-storage.html
+[spanner-storage-backend]: /docs/configuration/storage/google-cloud-spanner.html
 [mssql-storage-backend]: /docs/configuration/storage/mssql.html
 [mysql-storage-backend]: /docs/configuration/storage/mysql.html
 [postgresql-storage-backend]: /docs/configuration/storage/postgresql.html

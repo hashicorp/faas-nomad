@@ -25,6 +25,7 @@ type LoginCommand struct {
 	flagMethod    string
 	flagPath      string
 	flagNoStore   bool
+	flagNoPrint   bool
 	flagTokenOnly bool
 
 	// Deprecations
@@ -115,6 +116,14 @@ func (c *LoginCommand) Flags() *FlagSets {
 	})
 
 	f.BoolVar(&BoolVar{
+		Name:    "no-print",
+		Target:  &c.flagNoPrint,
+		Default: false,
+		Usage: "Do not display the token. The token will be still be stored to the " +
+			"configured token helper.",
+	})
+
+	f.BoolVar(&BoolVar{
 		Name:    "token-only",
 		Target:  &c.flagTokenOnly,
 		Default: false,
@@ -158,26 +167,28 @@ func (c *LoginCommand) Run(args []string) int {
 	// TODO: remove in 0.10.0
 	switch {
 	case c.flagNoVerify:
-		c.UI.Warn(wrapAtLength(
-			"WARNING! The -no-verify flag is deprecated. In the past, Vault " +
-				"performed a lookup on a token after authentication. This is no " +
-				"longer the case for all auth methods except \"token\". Vault will " +
-				"still attempt to perform a lookup when given a token directly " +
-				"because that is how it gets the list of policies, ttl, and other " +
-				"metadata. To disable this lookup, specify \"lookup=false\" as a " +
-				"configuration option to the token auth method, like this:"))
-		c.UI.Warn("")
-		c.UI.Warn("    $ vault auth token=ABCD lookup=false")
-		c.UI.Warn("")
-		c.UI.Warn("Or omit the token and Vault will prompt for it:")
-		c.UI.Warn("")
-		c.UI.Warn("    $ vault auth lookup=false")
-		c.UI.Warn("    Token (will be hidden): ...")
-		c.UI.Warn("")
-		c.UI.Warn(wrapAtLength(
-			"If you are not using token authentication, you can safely omit this " +
-				"flag. Vault will not perform a lookup after authentication."))
-		c.UI.Warn("")
+		if Format(c.UI) == "table" {
+			c.UI.Warn(wrapAtLength(
+				"WARNING! The -no-verify flag is deprecated. In the past, Vault " +
+					"performed a lookup on a token after authentication. This is no " +
+					"longer the case for all auth methods except \"token\". Vault will " +
+					"still attempt to perform a lookup when given a token directly " +
+					"because that is how it gets the list of policies, ttl, and other " +
+					"metadata. To disable this lookup, specify \"lookup=false\" as a " +
+					"configuration option to the token auth method, like this:"))
+			c.UI.Warn("")
+			c.UI.Warn("    $ vault auth token=ABCD lookup=false")
+			c.UI.Warn("")
+			c.UI.Warn("Or omit the token and Vault will prompt for it:")
+			c.UI.Warn("")
+			c.UI.Warn("    $ vault auth lookup=false")
+			c.UI.Warn("    Token (will be hidden): ...")
+			c.UI.Warn("")
+			c.UI.Warn(wrapAtLength(
+				"If you are not using token authentication, you can safely omit this " +
+					"flag. Vault will not perform a lookup after authentication."))
+			c.UI.Warn("")
+		}
 
 		// There's no point in passing this to other auth handlers...
 		if c.flagMethod == "token" {
@@ -190,6 +201,12 @@ func (c *LoginCommand) Run(args []string) int {
 	if c.flagTokenOnly {
 		c.flagNoStore = true
 		c.flagField = "token"
+	}
+
+	if c.flagNoStore && c.flagNoPrint {
+		c.UI.Error(wrapAtLength(
+			"-no-store and -no-print cannot be used together"))
+		return 1
 	}
 
 	// Get the auth method
@@ -222,7 +239,7 @@ func (c *LoginCommand) Run(args []string) int {
 		stdin = c.testStdin
 	}
 
-	// If the user provided a token, pass it along to the auth provier.
+	// If the user provided a token, pass it along to the auth provider.
 	if authMethod == "token" && len(args) > 0 && !strings.Contains(args[0], "=") {
 		args = append([]string{"token=" + args[0]}, args[1:]...)
 	}
@@ -321,11 +338,16 @@ func (c *LoginCommand) Run(args []string) int {
 				"use the value set by this command, unset the VAULT_TOKEN environment "+
 				"variable or set it to the token displayed below.") + "\n")
 		}
-	} else {
+	} else if !c.flagTokenOnly {
+		// If token-only the user knows it won't be stored, so don't warn
 		c.UI.Warn(wrapAtLength(
 			"The token was not stored in token helper. Set the VAULT_TOKEN "+
 				"environment variable or pass the token below with each request to "+
 				"Vault.") + "\n")
+	}
+
+	if c.flagNoPrint {
+		return 0
 	}
 
 	// If the user requested a particular field, print that out now since we
@@ -348,7 +370,7 @@ func (c *LoginCommand) Run(args []string) int {
 
 // extractToken extracts the token from the given secret, automatically
 // unwrapping responses and handling error conditions if unwrap is true. The
-// result also returns whether it was a wrapped resonse that was not unwrapped.
+// result also returns whether it was a wrapped response that was not unwrapped.
 func (c *LoginCommand) extractToken(client *api.Client, secret *api.Secret, unwrap bool) (*api.Secret, bool, error) {
 	switch {
 	case secret == nil:

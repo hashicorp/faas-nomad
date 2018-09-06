@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/types"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestEncodeDecode(t *testing.T) {
@@ -133,12 +134,17 @@ func testServiceNode() *ServiceNode {
 		NodeMeta: map[string]string{
 			"tag": "value",
 		},
-		ServiceID:                "service1",
-		ServiceName:              "dogs",
-		ServiceTags:              []string{"prod", "v1"},
-		ServiceAddress:           "127.0.0.2",
-		ServicePort:              8080,
+		ServiceKind:    ServiceKindTypical,
+		ServiceID:      "service1",
+		ServiceName:    "dogs",
+		ServiceTags:    []string{"prod", "v1"},
+		ServiceAddress: "127.0.0.2",
+		ServicePort:    8080,
+		ServiceMeta: map[string]string{
+			"service": "metadata",
+		},
 		ServiceEnableTagOverride: true,
+		ServiceProxyDestination:  "cats",
 		RaftIndex: RaftIndex{
 			CreateIndex: 1,
 			ModifyIndex: 2,
@@ -175,6 +181,17 @@ func TestStructs_ServiceNode_PartialClone(t *testing.T) {
 	if reflect.DeepEqual(sn, clone) {
 		t.Fatalf("clone wasn't independent of the original")
 	}
+
+	revert := make([]string, len(sn.ServiceTags)-1)
+	copy(revert, sn.ServiceTags[0:len(sn.ServiceTags)-1])
+	sn.ServiceTags = revert
+	if !reflect.DeepEqual(sn, clone) {
+		t.Fatalf("bad: %v VS %v", clone, sn)
+	}
+	sn.ServiceMeta["new_meta"] = "new_value"
+	if reflect.DeepEqual(sn, clone) {
+		t.Fatalf("clone wasn't independent of the original for Meta")
+	}
 }
 
 func TestStructs_ServiceNode_Conversions(t *testing.T) {
@@ -194,14 +211,79 @@ func TestStructs_ServiceNode_Conversions(t *testing.T) {
 	}
 }
 
+func TestStructs_NodeService_ValidateConnectProxy(t *testing.T) {
+	cases := []struct {
+		Name   string
+		Modify func(*NodeService)
+		Err    string
+	}{
+		{
+			"valid",
+			func(x *NodeService) {},
+			"",
+		},
+
+		{
+			"connect-proxy: no ProxyDestination",
+			func(x *NodeService) { x.ProxyDestination = "" },
+			"ProxyDestination must be",
+		},
+
+		{
+			"connect-proxy: whitespace ProxyDestination",
+			func(x *NodeService) { x.ProxyDestination = "  " },
+			"ProxyDestination must be",
+		},
+
+		{
+			"connect-proxy: valid ProxyDestination",
+			func(x *NodeService) { x.ProxyDestination = "hello" },
+			"",
+		},
+
+		{
+			"connect-proxy: no port set",
+			func(x *NodeService) { x.Port = 0 },
+			"Port must",
+		},
+
+		{
+			"connect-proxy: ConnectNative set",
+			func(x *NodeService) { x.Connect.Native = true },
+			"cannot also be",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			assert := assert.New(t)
+			ns := TestNodeServiceProxy(t)
+			tc.Modify(ns)
+
+			err := ns.Validate()
+			assert.Equal(err != nil, tc.Err != "", err)
+			if err == nil {
+				return
+			}
+
+			assert.Contains(strings.ToLower(err.Error()), strings.ToLower(tc.Err))
+		})
+	}
+}
+
 func TestStructs_NodeService_IsSame(t *testing.T) {
 	ns := &NodeService{
-		ID:                "node1",
-		Service:           "theservice",
-		Tags:              []string{"foo", "bar"},
-		Address:           "127.0.0.1",
+		ID:      "node1",
+		Service: "theservice",
+		Tags:    []string{"foo", "bar"},
+		Address: "127.0.0.1",
+		Meta: map[string]string{
+			"meta1": "value1",
+			"meta2": "value2",
+		},
 		Port:              1234,
 		EnableTagOverride: true,
+		ProxyDestination:  "db",
 	}
 	if !ns.IsSame(ns) {
 		t.Fatalf("should be equal to itself")
@@ -214,6 +296,12 @@ func TestStructs_NodeService_IsSame(t *testing.T) {
 		Address:           "127.0.0.1",
 		Port:              1234,
 		EnableTagOverride: true,
+		Meta: map[string]string{
+			// We don't care about order
+			"meta2": "value2",
+			"meta1": "value1",
+		},
+		ProxyDestination: "db",
 		RaftIndex: RaftIndex{
 			CreateIndex: 1,
 			ModifyIndex: 2,
@@ -245,7 +333,11 @@ func TestStructs_NodeService_IsSame(t *testing.T) {
 	check(func() { other.Tags = []string{"foo"} }, func() { other.Tags = []string{"foo", "bar"} })
 	check(func() { other.Address = "XXX" }, func() { other.Address = "127.0.0.1" })
 	check(func() { other.Port = 9999 }, func() { other.Port = 1234 })
+	check(func() { other.Meta["meta2"] = "wrongValue" }, func() { other.Meta["meta2"] = "value2" })
 	check(func() { other.EnableTagOverride = false }, func() { other.EnableTagOverride = true })
+	check(func() { other.Kind = ServiceKindConnectProxy }, func() { other.Kind = "" })
+	check(func() { other.ProxyDestination = "" }, func() { other.ProxyDestination = "db" })
+	check(func() { other.Connect.Native = true }, func() { other.Connect.Native = false })
 }
 
 func TestStructs_HealthCheck_IsSame(t *testing.T) {
@@ -417,6 +509,20 @@ func TestStructs_CheckServiceNodes_Filter(t *testing.T) {
 				},
 			},
 		},
+		CheckServiceNode{
+			Node: &Node{
+				Node:    "node4",
+				Address: "127.0.0.4",
+			},
+			Checks: HealthChecks{
+				// This check has a different ID to the others to ensure it is not
+				// ignored by accident
+				&HealthCheck{
+					CheckID: "failing2",
+					Status:  api.HealthCritical,
+				},
+			},
+		},
 	}
 
 	// Test the case where warnings are allowed.
@@ -444,6 +550,26 @@ func TestStructs_CheckServiceNodes_Filter(t *testing.T) {
 		filtered := twiddle.Filter(true)
 		expected := CheckServiceNodes{
 			nodes[1],
+		}
+		if !reflect.DeepEqual(filtered, expected) {
+			t.Fatalf("bad: %v", filtered)
+		}
+	}
+
+	// Allow failing checks to be ignored (note that the test checks have empty
+	// CheckID which is valid).
+	{
+		twiddle := make(CheckServiceNodes, len(nodes))
+		if n := copy(twiddle, nodes); n != len(nodes) {
+			t.Fatalf("bad: %d", n)
+		}
+		filtered := twiddle.FilterIgnore(true, []types.CheckID{""})
+		expected := CheckServiceNodes{
+			nodes[0],
+			nodes[1],
+			nodes[2], // Node 3's critical check should be ignored.
+			// Node 4 should still be failing since it's got a critical check with a
+			// non-ignored ID.
 		}
 		if !reflect.DeepEqual(filtered, expected) {
 			t.Fatalf("bad: %v", filtered)

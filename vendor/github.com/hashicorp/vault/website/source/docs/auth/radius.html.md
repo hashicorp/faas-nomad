@@ -30,10 +30,9 @@ at a different path, use that value instead of `radius`.
 
 ```shell
 $ curl \
-    --header "X-Vault-Token: ..." \
     --request POST \
     --data '{"password": "..."}' \
-    https://vault.rocks/v1/auth/radius/login/sethvargo
+    http://127.0.0.1:8200/v1/auth/radius/login/sethvargo
 ```
 
 The response will contain a token at `auth.client_token`:

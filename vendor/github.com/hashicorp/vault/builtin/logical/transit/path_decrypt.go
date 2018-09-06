@@ -3,9 +3,10 @@ package transit
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 
+	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/helper/errutil"
+	"github.com/hashicorp/vault/helper/keysutil"
 	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/logical/framework"
 	"github.com/mitchellh/mapstructure"
@@ -58,7 +59,7 @@ func (b *backend) pathDecryptWrite(ctx context.Context, req *logical.Request, d 
 	if batchInputRaw != nil {
 		err = mapstructure.Decode(batchInputRaw, &batchInputItems)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse batch input: %v", err)
+			return nil, errwrap.Wrapf("failed to parse batch input: {{err}}", err)
 		}
 
 		if len(batchInputItems) == 0 {
@@ -111,15 +112,18 @@ func (b *backend) pathDecryptWrite(ctx context.Context, req *logical.Request, d 
 	}
 
 	// Get the policy
-	p, lock, err := b.lm.GetPolicyShared(ctx, req.Storage, d.Get("name").(string))
-	if lock != nil {
-		defer lock.RUnlock()
-	}
+	p, _, err := b.lm.GetPolicy(ctx, keysutil.PolicyRequest{
+		Storage: req.Storage,
+		Name:    d.Get("name").(string),
+	})
 	if err != nil {
 		return nil, err
 	}
 	if p == nil {
 		return logical.ErrorResponse("encryption key not found"), logical.ErrInvalidRequest
+	}
+	if !b.System().CachingDisabled() {
+		p.Lock(false)
 	}
 
 	for i, item := range batchInputItems {
@@ -134,6 +138,7 @@ func (b *backend) pathDecryptWrite(ctx context.Context, req *logical.Request, d 
 				batchResponseItems[i].Error = err.Error()
 				continue
 			default:
+				p.Unlock()
 				return nil, err
 			}
 		}
@@ -147,6 +152,7 @@ func (b *backend) pathDecryptWrite(ctx context.Context, req *logical.Request, d 
 		}
 	} else {
 		if batchResponseItems[0].Error != "" {
+			p.Unlock()
 			return logical.ErrorResponse(batchResponseItems[0].Error), logical.ErrInvalidRequest
 		}
 		resp.Data = map[string]interface{}{
@@ -154,6 +160,7 @@ func (b *backend) pathDecryptWrite(ctx context.Context, req *logical.Request, d 
 		}
 	}
 
+	p.Unlock()
 	return resp, nil
 }
 

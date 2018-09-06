@@ -11,10 +11,6 @@ import (
 )
 
 func (s *HTTPServer) HealthChecksInState(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
-	if req.Method != "GET" {
-		return nil, MethodNotAllowedError{req.Method, []string{"GET"}}
-	}
-
 	// Set default DC
 	args := structs.ChecksInStateRequest{}
 	s.parseSource(req, &args.Source)
@@ -34,9 +30,16 @@ func (s *HTTPServer) HealthChecksInState(resp http.ResponseWriter, req *http.Req
 	// Make the RPC request
 	var out structs.IndexedHealthChecks
 	defer setMeta(resp, &out.QueryMeta)
+RETRY_ONCE:
 	if err := s.agent.RPC("Health.ChecksInState", &args, &out); err != nil {
 		return nil, err
 	}
+	if args.QueryOptions.AllowStale && args.MaxStaleDuration > 0 && args.MaxStaleDuration < out.LastContact {
+		args.AllowStale = false
+		args.MaxStaleDuration = 0
+		goto RETRY_ONCE
+	}
+	out.ConsistencyLevel = args.QueryOptions.ConsistencyLevel()
 
 	// Use empty list instead of nil
 	if out.HealthChecks == nil {
@@ -53,10 +56,6 @@ func (s *HTTPServer) HealthChecksInState(resp http.ResponseWriter, req *http.Req
 }
 
 func (s *HTTPServer) HealthNodeChecks(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
-	if req.Method != "GET" {
-		return nil, MethodNotAllowedError{req.Method, []string{"GET"}}
-	}
-
 	// Set default DC
 	args := structs.NodeSpecificRequest{}
 	if done := s.parse(resp, req, &args.Datacenter, &args.QueryOptions); done {
@@ -74,9 +73,16 @@ func (s *HTTPServer) HealthNodeChecks(resp http.ResponseWriter, req *http.Reques
 	// Make the RPC request
 	var out structs.IndexedHealthChecks
 	defer setMeta(resp, &out.QueryMeta)
+RETRY_ONCE:
 	if err := s.agent.RPC("Health.NodeChecks", &args, &out); err != nil {
 		return nil, err
 	}
+	if args.QueryOptions.AllowStale && args.MaxStaleDuration > 0 && args.MaxStaleDuration < out.LastContact {
+		args.AllowStale = false
+		args.MaxStaleDuration = 0
+		goto RETRY_ONCE
+	}
+	out.ConsistencyLevel = args.QueryOptions.ConsistencyLevel()
 
 	// Use empty list instead of nil
 	if out.HealthChecks == nil {
@@ -93,10 +99,6 @@ func (s *HTTPServer) HealthNodeChecks(resp http.ResponseWriter, req *http.Reques
 }
 
 func (s *HTTPServer) HealthServiceChecks(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
-	if req.Method != "GET" {
-		return nil, MethodNotAllowedError{req.Method, []string{"GET"}}
-	}
-
 	// Set default DC
 	args := structs.ServiceSpecificRequest{}
 	s.parseSource(req, &args.Source)
@@ -116,9 +118,16 @@ func (s *HTTPServer) HealthServiceChecks(resp http.ResponseWriter, req *http.Req
 	// Make the RPC request
 	var out structs.IndexedHealthChecks
 	defer setMeta(resp, &out.QueryMeta)
+RETRY_ONCE:
 	if err := s.agent.RPC("Health.ServiceChecks", &args, &out); err != nil {
 		return nil, err
 	}
+	if args.QueryOptions.AllowStale && args.MaxStaleDuration > 0 && args.MaxStaleDuration < out.LastContact {
+		args.AllowStale = false
+		args.MaxStaleDuration = 0
+		goto RETRY_ONCE
+	}
+	out.ConsistencyLevel = args.QueryOptions.ConsistencyLevel()
 
 	// Use empty list instead of nil
 	if out.HealthChecks == nil {
@@ -134,13 +143,17 @@ func (s *HTTPServer) HealthServiceChecks(resp http.ResponseWriter, req *http.Req
 	return out.HealthChecks, nil
 }
 
-func (s *HTTPServer) HealthServiceNodes(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
-	if req.Method != "GET" {
-		return nil, MethodNotAllowedError{req.Method, []string{"GET"}}
-	}
+func (s *HTTPServer) HealthConnectServiceNodes(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
+	return s.healthServiceNodes(resp, req, true)
+}
 
+func (s *HTTPServer) HealthServiceNodes(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
+	return s.healthServiceNodes(resp, req, false)
+}
+
+func (s *HTTPServer) healthServiceNodes(resp http.ResponseWriter, req *http.Request, connect bool) (interface{}, error) {
 	// Set default DC
-	args := structs.ServiceSpecificRequest{}
+	args := structs.ServiceSpecificRequest{Connect: connect}
 	s.parseSource(req, &args.Source)
 	args.NodeMetaFilters = s.parseMetaFilter(req)
 	if done := s.parse(resp, req, &args.Datacenter, &args.QueryOptions); done {
@@ -154,8 +167,14 @@ func (s *HTTPServer) HealthServiceNodes(resp http.ResponseWriter, req *http.Requ
 		args.TagFilter = true
 	}
 
+	// Determine the prefix
+	prefix := "/v1/health/service/"
+	if connect {
+		prefix = "/v1/health/connect/"
+	}
+
 	// Pull out the service name
-	args.ServiceName = strings.TrimPrefix(req.URL.Path, "/v1/health/service/")
+	args.ServiceName = strings.TrimPrefix(req.URL.Path, prefix)
 	if args.ServiceName == "" {
 		resp.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(resp, "Missing service name")
@@ -165,9 +184,16 @@ func (s *HTTPServer) HealthServiceNodes(resp http.ResponseWriter, req *http.Requ
 	// Make the RPC request
 	var out structs.IndexedCheckServiceNodes
 	defer setMeta(resp, &out.QueryMeta)
+RETRY_ONCE:
 	if err := s.agent.RPC("Health.ServiceNodes", &args, &out); err != nil {
 		return nil, err
 	}
+	if args.QueryOptions.AllowStale && args.MaxStaleDuration > 0 && args.MaxStaleDuration < out.LastContact {
+		args.AllowStale = false
+		args.MaxStaleDuration = 0
+		goto RETRY_ONCE
+	}
+	out.ConsistencyLevel = args.QueryOptions.ConsistencyLevel()
 
 	// Filter to only passing if specified
 	if _, ok := params[api.HealthPassing]; ok {

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/helper/certutil"
 	"github.com/hashicorp/vault/helper/errutil"
 	"github.com/hashicorp/vault/logical"
@@ -25,6 +26,13 @@ func pathGenerateIntermediate(b *backend) *framework.Path {
 
 	ret.Fields = addCACommonFields(map[string]*framework.FieldSchema{})
 	ret.Fields = addCAKeyGenerationFields(ret.Fields)
+	ret.Fields["add_basic_constraints"] = &framework.FieldSchema{
+		Type: framework.TypeBool,
+		Description: `Whether to add a Basic Constraints
+extension with CA: true. Only needed as a
+workaround in some compatibility scenarios
+with Active Directory Certificate Services.`,
+	}
 
 	return ret
 }
@@ -80,7 +88,7 @@ func (b *backend) pathGenerateIntermediate(ctx context.Context, req *logical.Req
 
 	csrb, err := parsedBundle.ToCSRBundle()
 	if err != nil {
-		return nil, fmt.Errorf("Error converting raw CSR bundle to CSR bundle: %s", err)
+		return nil, errwrap.Wrapf("error converting raw CSR bundle to CSR bundle: {{err}}", err)
 	}
 
 	resp = &logical.Response{
@@ -190,12 +198,12 @@ func (b *backend) pathSetSignedIntermediate(ctx context.Context, req *logical.Re
 	}
 
 	if err := inputBundle.Verify(); err != nil {
-		return nil, fmt.Errorf("verification of parsed bundle failed: %s", err)
+		return nil, errwrap.Wrapf("verification of parsed bundle failed: {{err}}", err)
 	}
 
 	cb, err = inputBundle.ToCertBundle()
 	if err != nil {
-		return nil, fmt.Errorf("error converting raw values into cert bundle: %s", err)
+		return nil, errwrap.Wrapf("error converting raw values into cert bundle: {{err}}", err)
 	}
 
 	entry, err = logical.StorageEntryJSON("config/ca_bundle", cb)
@@ -224,7 +232,7 @@ func (b *backend) pathSetSignedIntermediate(ctx context.Context, req *logical.Re
 	}
 
 	// Build a fresh CRL
-	err = buildCRL(ctx, b, req)
+	err = buildCRL(ctx, b, req, true)
 
 	return nil, err
 }

@@ -1,7 +1,9 @@
 package command
 
 import (
+	"flag"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,14 +18,20 @@ var _ cli.CommandAutocomplete = (*SecretsEnableCommand)(nil)
 type SecretsEnableCommand struct {
 	*BaseCommand
 
-	flagDescription     string
-	flagPath            string
-	flagDefaultLeaseTTL time.Duration
-	flagMaxLeaseTTL     time.Duration
-	flagForceNoCache    bool
-	flagPluginName      string
-	flagLocal           bool
-	flagSealWrap        bool
+	flagDescription               string
+	flagPath                      string
+	flagDefaultLeaseTTL           time.Duration
+	flagMaxLeaseTTL               time.Duration
+	flagAuditNonHMACRequestKeys   []string
+	flagAuditNonHMACResponseKeys  []string
+	flagListingVisibility         string
+	flagPassthroughRequestHeaders []string
+	flagForceNoCache              bool
+	flagPluginName                string
+	flagOptions                   map[string]string
+	flagLocal                     bool
+	flagSealWrap                  bool
+	flagVersion                   int
 }
 
 func (c *SecretsEnableCommand) Synopsis() string {
@@ -104,6 +112,33 @@ func (c *SecretsEnableCommand) Flags() *FlagSets {
 			"TTL.",
 	})
 
+	f.StringSliceVar(&StringSliceVar{
+		Name:   flagNameAuditNonHMACRequestKeys,
+		Target: &c.flagAuditNonHMACRequestKeys,
+		Usage: "Comma-separated string or list of keys that will not be HMAC'd by audit" +
+			"devices in the request data object.",
+	})
+
+	f.StringSliceVar(&StringSliceVar{
+		Name:   flagNameAuditNonHMACResponseKeys,
+		Target: &c.flagAuditNonHMACResponseKeys,
+		Usage: "Comma-separated string or list of keys that will not be HMAC'd by audit" +
+			"devices in the response data object.",
+	})
+
+	f.StringVar(&StringVar{
+		Name:   flagNameListingVisibility,
+		Target: &c.flagListingVisibility,
+		Usage:  "Determines the visibility of the mount in the UI-specific listing endpoint.",
+	})
+
+	f.StringSliceVar(&StringSliceVar{
+		Name:   flagNamePassthroughRequestHeaders,
+		Target: &c.flagPassthroughRequestHeaders,
+		Usage: "Comma-separated string or list of request header values that " +
+			"will be sent to the backend",
+	})
+
 	f.BoolVar(&BoolVar{
 		Name:    "force-no-cache",
 		Target:  &c.flagForceNoCache,
@@ -116,9 +151,17 @@ func (c *SecretsEnableCommand) Flags() *FlagSets {
 	f.StringVar(&StringVar{
 		Name:       "plugin-name",
 		Target:     &c.flagPluginName,
-		Completion: complete.PredictAnything,
+		Completion: c.PredictVaultPlugins(),
 		Usage: "Name of the secrets engine plugin. This plugin name must already " +
 			"exist in Vault's plugin catalog.",
+	})
+
+	f.StringMapVar(&StringMapVar{
+		Name:       "options",
+		Target:     &c.flagOptions,
+		Completion: complete.PredictAnything,
+		Usage: "Key-value pair provided as key=value for the mount options. " +
+			"This can be specified multiple times.",
 	})
 
 	f.BoolVar(&BoolVar{
@@ -134,6 +177,13 @@ func (c *SecretsEnableCommand) Flags() *FlagSets {
 		Target:  &c.flagSealWrap,
 		Default: false,
 		Usage:   "Enable seal wrapping of critical values in the secrets engine.",
+	})
+
+	f.IntVar(&IntVar{
+		Name:    "version",
+		Target:  &c.flagVersion,
+		Default: 0,
+		Usage:   "Select the version of the engine to run. Not supported by all engines.",
 	})
 
 	return set
@@ -185,6 +235,13 @@ func (c *SecretsEnableCommand) Run(args []string) int {
 		}
 	}
 
+	if c.flagVersion > 0 {
+		if c.flagOptions == nil {
+			c.flagOptions = make(map[string]string)
+		}
+		c.flagOptions["version"] = strconv.Itoa(c.flagVersion)
+	}
+
 	// Append a trailing slash to indicate it's a path in output
 	mountPath = ensureTrailingSlash(mountPath)
 
@@ -200,7 +257,27 @@ func (c *SecretsEnableCommand) Run(args []string) int {
 			ForceNoCache:    c.flagForceNoCache,
 			PluginName:      c.flagPluginName,
 		},
+		Options: c.flagOptions,
 	}
+
+	// Set these values only if they are provided in the CLI
+	f.Visit(func(fl *flag.Flag) {
+		if fl.Name == flagNameAuditNonHMACRequestKeys {
+			mountInput.Config.AuditNonHMACRequestKeys = c.flagAuditNonHMACRequestKeys
+		}
+
+		if fl.Name == flagNameAuditNonHMACResponseKeys {
+			mountInput.Config.AuditNonHMACResponseKeys = c.flagAuditNonHMACResponseKeys
+		}
+
+		if fl.Name == flagNameListingVisibility {
+			mountInput.Config.ListingVisibility = c.flagListingVisibility
+		}
+
+		if fl.Name == flagNamePassthroughRequestHeaders {
+			mountInput.Config.PassthroughRequestHeaders = c.flagPassthroughRequestHeaders
+		}
+	})
 
 	if err := client.Sys().Mount(mountPath, mountInput); err != nil {
 		c.UI.Error(fmt.Sprintf("Error enabling: %s", err))

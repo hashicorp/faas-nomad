@@ -39,7 +39,7 @@ team, or configuration management tooling.
 must be mounted before use.
 
     ```text
-    $ vault mount -path=ssh-client-signer ssh
+    $ vault secrets enable -path=ssh-client-signer ssh
     Successfully mounted 'ssh' at 'ssh-client-signer'!
     ```
 
@@ -76,7 +76,7 @@ be manual or automated using a configuration management tool. The public key is
 accessible via the API and does not require authentication.
 
     ```text
-    $ curl -o /etc/ssh/trusted-user-ca-keys.pem https://vault.rocks/v1/ssh-client-signer/public_key
+    $ curl -o /etc/ssh/trusted-user-ca-keys.pem http://127.0.0.1:8200/v1/ssh-client-signer/public_key
     ```
 
     ```text
@@ -201,7 +201,7 @@ accidentally SSHing into an unmanaged or malicious machine.
 client signer.
 
     ```text
-    $ vault mount -path=ssh-host-signer ssh
+    $ vault secrets enable -path=ssh-host-signer ssh
     Successfully mounted 'ssh' at 'ssh-host-signer'!
     ```
 
@@ -295,7 +295,7 @@ configuration on the host machine.
 target machines.
 
     ```text
-    $ curl https://vault.rocks/v1/ssh-host-signer/public_key
+    $ curl http://127.0.0.1:8200/v1/ssh-host-signer/public_key
     ```
 
     ```text

@@ -3,10 +3,10 @@ package vault
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
+	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/helper/strutil"
 	"github.com/hashicorp/vault/logical"
 )
@@ -32,7 +32,7 @@ var StdAllowedHeaders = []string{
 type CORSConfig struct {
 	sync.RWMutex   `json:"-"`
 	core           *Core
-	Enabled        uint32   `json:"enabled"`
+	Enabled        *uint32  `json:"enabled"`
 	AllowedOrigins []string `json:"allowed_origins,omitempty"`
 	AllowedHeaders []string `json:"allowed_headers,omitempty"`
 }
@@ -40,8 +40,9 @@ type CORSConfig struct {
 func (c *Core) saveCORSConfig(ctx context.Context) error {
 	view := c.systemBarrierView.SubView("config/")
 
+	enabled := atomic.LoadUint32(c.corsConfig.Enabled)
 	localConfig := &CORSConfig{
-		Enabled: atomic.LoadUint32(&c.corsConfig.Enabled),
+		Enabled: &enabled,
 	}
 	c.corsConfig.RLock()
 	localConfig.AllowedOrigins = c.corsConfig.AllowedOrigins
@@ -50,11 +51,11 @@ func (c *Core) saveCORSConfig(ctx context.Context) error {
 
 	entry, err := logical.StorageEntryJSON("cors", localConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create CORS config entry: %v", err)
+		return errwrap.Wrapf("failed to create CORS config entry: {{err}}", err)
 	}
 
 	if err := view.Put(ctx, entry); err != nil {
-		return fmt.Errorf("failed to save CORS config: %v", err)
+		return errwrap.Wrapf("failed to save CORS config: {{err}}", err)
 	}
 
 	return nil
@@ -67,7 +68,7 @@ func (c *Core) loadCORSConfig(ctx context.Context) error {
 	// Load the config in
 	out, err := view.Get(ctx, "cors")
 	if err != nil {
-		return fmt.Errorf("failed to read CORS config: %v", err)
+		return errwrap.Wrapf("failed to read CORS config: {{err}}", err)
 	}
 	if out == nil {
 		return nil
@@ -78,6 +79,11 @@ func (c *Core) loadCORSConfig(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	if newConfig.Enabled == nil {
+		newConfig.Enabled = new(uint32)
+	}
+
 	newConfig.core = c
 
 	c.corsConfig = newConfig
@@ -85,11 +91,11 @@ func (c *Core) loadCORSConfig(ctx context.Context) error {
 	return nil
 }
 
-// Enable takes either a '*' or a comma-seprated list of URLs that can make
+// Enable takes either a '*' or a comma-separated list of URLs that can make
 // cross-origin requests to Vault.
 func (c *CORSConfig) Enable(ctx context.Context, urls []string, headers []string) error {
 	if len(urls) == 0 {
-		return errors.New("at least one origin or the wildcard must be provided.")
+		return errors.New("at least one origin or the wildcard must be provided")
 	}
 
 	if strutil.StrListContains(urls, "*") && len(urls) > 1 {
@@ -109,19 +115,19 @@ func (c *CORSConfig) Enable(ctx context.Context, urls []string, headers []string
 	}
 	c.Unlock()
 
-	atomic.StoreUint32(&c.Enabled, CORSEnabled)
+	atomic.StoreUint32(c.Enabled, CORSEnabled)
 
 	return c.core.saveCORSConfig(ctx)
 }
 
 // IsEnabled returns the value of CORSConfig.isEnabled
 func (c *CORSConfig) IsEnabled() bool {
-	return atomic.LoadUint32(&c.Enabled) == CORSEnabled
+	return atomic.LoadUint32(c.Enabled) == CORSEnabled
 }
 
 // Disable sets CORS to disabled and clears the allowed origins & headers.
 func (c *CORSConfig) Disable(ctx context.Context) error {
-	atomic.StoreUint32(&c.Enabled, CORSDisabled)
+	atomic.StoreUint32(c.Enabled, CORSDisabled)
 	c.Lock()
 
 	c.AllowedOrigins = nil

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/mgutz/logxi/v1"
+	log "github.com/hashicorp/go-hclog"
 
 	"github.com/armon/go-metrics"
 	"github.com/hashicorp/errwrap"
@@ -85,6 +85,27 @@ func NewSwiftBackend(conf map[string]string, logger log.Logger) (physical.Backen
 		projectDomain = conf["project-domain"]
 	}
 
+	region := os.Getenv("OS_REGION_NAME")
+	if region == "" {
+		region = conf["region"]
+	}
+	tenantID := os.Getenv("OS_TENANT_ID")
+	if tenantID == "" {
+		tenantID = conf["tenant_id"]
+	}
+	trustID := os.Getenv("OS_TRUST_ID")
+	if trustID == "" {
+		trustID = conf["trust_id"]
+	}
+	storageUrl := os.Getenv("OS_STORAGE_URL")
+	if storageUrl == "" {
+		storageUrl = conf["storage_url"]
+	}
+	authToken := os.Getenv("OS_AUTH_TOKEN")
+	if authToken == "" {
+		authToken = conf["auth_token"]
+	}
+
 	c := swift.Connection{
 		Domain:       domain,
 		UserName:     username,
@@ -92,6 +113,11 @@ func NewSwiftBackend(conf map[string]string, logger log.Logger) (physical.Backen
 		AuthUrl:      authUrl,
 		Tenant:       project,
 		TenantDomain: projectDomain,
+		Region:       region,
+		TenantId:     tenantID,
+		TrustId:      trustID,
+		StorageUrl:   storageUrl,
+		AuthToken:    authToken,
 		Transport:    cleanhttp.DefaultPooledTransport(),
 	}
 
@@ -102,7 +128,7 @@ func NewSwiftBackend(conf map[string]string, logger log.Logger) (physical.Backen
 
 	_, _, err = c.Container(container)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to access container '%s': %v", container, err)
+		return nil, errwrap.Wrapf(fmt.Sprintf("Unable to access container %q: {{err}}", container), err)
 	}
 
 	maxParStr, ok := conf["max_parallel"]
@@ -113,7 +139,7 @@ func NewSwiftBackend(conf map[string]string, logger log.Logger) (physical.Backen
 			return nil, errwrap.Wrapf("failed parsing max_parallel parameter: {{err}}", err)
 		}
 		if logger.IsDebug() {
-			logger.Debug("swift: max_parallel set", "max_parallel", maxParInt)
+			logger.Debug("max_parallel set", "max_parallel", maxParInt)
 		}
 	}
 

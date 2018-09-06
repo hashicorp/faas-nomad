@@ -102,10 +102,6 @@ func TestBackend_config_connection(t *testing.T) {
 	if err != nil || (resp != nil && resp.IsError()) {
 		t.Fatalf("err:%s resp:%#v\n", err, resp)
 	}
-
-	if resp.Data["uri"] != configData["uri"] {
-		t.Fatalf("bad: %#v", resp)
-	}
 }
 
 func TestBackend_basic(t *testing.T) {
@@ -207,7 +203,7 @@ func testAccStepConfig(d map[string]interface{}, expectError bool) logicaltest.T
 					return err
 				}
 				if len(e.Error) == 0 {
-					return fmt.Errorf("expected error, but write succeeded.")
+					return fmt.Errorf("expected error, but write succeeded")
 				}
 				return nil
 			} else if resp != nil && resp.IsError() {

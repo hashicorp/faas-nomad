@@ -42,7 +42,11 @@ func TestTokenCapabilitiesCommand_Run(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			client, closer := testVaultServer(t)
+			defer closer()
+
 			ui, cmd := testTokenCapabilitiesCommand(t)
+			cmd.client = client
 
 			code := cmd.Run(tc.args)
 			if code != tc.code {
@@ -158,6 +162,23 @@ func TestTokenCapabilitiesCommand_Run(t *testing.T) {
 		combined := ui.OutputWriter.String() + ui.ErrorWriter.String()
 		if !strings.Contains(combined, expected) {
 			t.Errorf("expected %q to contain %q", combined, expected)
+		}
+	})
+
+	t.Run("multiple_paths", func(t *testing.T) {
+		t.Parallel()
+
+		client, closer := testVaultServer(t)
+		defer closer()
+
+		_, cmd := testTokenCapabilitiesCommand(t)
+		cmd.client = client
+
+		code := cmd.Run([]string{
+			"secret/foo,secret/bar",
+		})
+		if exp := 1; code != exp {
+			t.Errorf("expected %d to be %d", code, exp)
 		}
 	})
 

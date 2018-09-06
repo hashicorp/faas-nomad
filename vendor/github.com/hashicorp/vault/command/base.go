@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -13,13 +14,19 @@ import (
 
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/command/token"
+	"github.com/hashicorp/vault/helper/namespace"
 	"github.com/mitchellh/cli"
 	"github.com/pkg/errors"
 	"github.com/posener/complete"
 )
 
-// maxLineLength is the maximum width of any line.
-const maxLineLength int = 78
+const (
+	// maxLineLength is the maximum width of any line.
+	maxLineLength int = 78
+
+	// notSetNamespace is a flag value for a not-set namespace
+	notSetNamespace = "(not set)"
+)
 
 // reRemoveWhitespace is a regular expression for stripping whitespace from
 // a string.
@@ -36,12 +43,16 @@ type BaseCommand struct {
 	flagCAPath        string
 	flagClientCert    string
 	flagClientKey     string
+	flagNamespace     string
+	flagNS            string
 	flagTLSServerName string
 	flagTLSSkipVerify bool
 	flagWrapTTL       time.Duration
 
 	flagFormat string
 	flagField  string
+
+	flagMFA []string
 
 	tokenHelper token.TokenHelper
 
@@ -86,6 +97,11 @@ func (c *BaseCommand) Client() (*api.Client, error) {
 		return nil, errors.Wrap(err, "failed to create client")
 	}
 
+	// Turn off retries on the CLI
+	if os.Getenv(api.EnvVaultMaxRetries) == "" {
+		client.SetMaxRetries(0)
+	}
+
 	// Set the wrapping function
 	client.SetWrappingLookupFunc(c.DefaultWrappingLookupFunc)
 
@@ -109,9 +125,30 @@ func (c *BaseCommand) Client() (*api.Client, error) {
 		client.SetToken(token)
 	}
 
+	client.SetMFACreds(c.flagMFA)
+
+	// flagNS takes precedence over flagNamespace. After resolution, point both
+	// flags to the same value to be able to use them interchangeably anywhere.
+	if c.flagNS != notSetNamespace {
+		c.flagNamespace = c.flagNS
+	}
+	if c.flagNamespace != notSetNamespace {
+		client.SetNamespace(namespace.Canonicalize(c.flagNamespace))
+	}
+
 	c.client = client
 
 	return client, nil
+}
+
+// SetAddress sets the token helper on the command; useful for the demo server and other outside cases.
+func (c *BaseCommand) SetAddress(addr string) {
+	c.flagAddress = addr
+}
+
+// SetTokenHelper sets the token helper on the command.
+func (c *BaseCommand) SetTokenHelper(th token.TokenHelper) {
+	c.tokenHelper = th
 }
 
 // TokenHelper returns the token helper attached to the command.
@@ -160,14 +197,19 @@ func (c *BaseCommand) flagSet(bit FlagSetBit) *FlagSets {
 		if bit&FlagSetHTTP != 0 {
 			f := set.NewFlagSet("HTTP Options")
 
-			f.StringVar(&StringVar{
+			addrStringVar := &StringVar{
 				Name:       "address",
 				Target:     &c.flagAddress,
-				Default:    "https://127.0.0.1:8200",
 				EnvVar:     "VAULT_ADDR",
 				Completion: complete.PredictAnything,
 				Usage:      "Address of the Vault server.",
-			})
+			}
+			if c.flagAddress != "" {
+				addrStringVar.Default = c.flagAddress
+			} else {
+				addrStringVar.Default = "https://127.0.0.1:8200"
+			}
+			f.StringVar(addrStringVar)
 
 			f.StringVar(&StringVar{
 				Name:       "ca-cert",
@@ -177,7 +219,7 @@ func (c *BaseCommand) flagSet(bit FlagSetBit) *FlagSets {
 				Completion: complete.PredictFiles("*"),
 				Usage: "Path on the local disk to a single PEM-encoded CA " +
 					"certificate to verify the Vault server's SSL certificate. This " +
-					"takes precendence over -ca-path.",
+					"takes precedence over -ca-path.",
 			})
 
 			f.StringVar(&StringVar{
@@ -212,6 +254,26 @@ func (c *BaseCommand) flagSet(bit FlagSetBit) *FlagSets {
 			})
 
 			f.StringVar(&StringVar{
+				Name:       "namespace",
+				Target:     &c.flagNamespace,
+				Default:    notSetNamespace, // this can never be a real value
+				EnvVar:     "VAULT_NAMESPACE",
+				Completion: complete.PredictAnything,
+				Usage: "The namespace to use for the command. Setting this is not " +
+					"necessary but allows using relative paths. -ns can be used as " +
+					"shortcut.",
+			})
+
+			f.StringVar(&StringVar{
+				Name:       "ns",
+				Target:     &c.flagNS,
+				Default:    notSetNamespace, // this can never be a real value
+				Completion: complete.PredictAnything,
+				Hidden:     true,
+				Usage:      "Alias for -namespace. This takes precedence over -namespace.",
+			})
+
+			f.StringVar(&StringVar{
 				Name:       "tls-server-name",
 				Target:     &c.flagTLSServerName,
 				Default:    "",
@@ -242,6 +304,15 @@ func (c *BaseCommand) flagSet(bit FlagSetBit) *FlagSets {
 					"The TTL is specified as a numeric string with suffix like \"30s\" " +
 					"or \"5m\".",
 			})
+
+			f.StringSliceVar(&StringSliceVar{
+				Name:       "mfa",
+				Target:     &c.flagMFA,
+				Default:    nil,
+				EnvVar:     api.EnvVaultMFA,
+				Completion: complete.PredictAnything,
+				Usage:      "Supply MFA credentials as part of X-Vault-MFA header.",
+			})
 		}
 
 		if bit&(FlagSetOutputField|FlagSetOutputFormat) != 0 {
@@ -256,7 +327,7 @@ func (c *BaseCommand) flagSet(bit FlagSetBit) *FlagSets {
 					Usage: "Print only the field with the given name. Specifying " +
 						"this option will take precedence over other formatting " +
 						"directives. The result will not have a trailing newline " +
-						"making it idea for piping to other processes.",
+						"making it ideal for piping to other processes.",
 				})
 			}
 
@@ -330,6 +401,12 @@ func (f *FlagSets) Parsed() bool {
 // Args returns the remaining args after parsing.
 func (f *FlagSets) Args() []string {
 	return f.mainSet.Args()
+}
+
+// Visit visits the flags in lexicographical order, calling fn for each. It
+// visits only those flags that have been set.
+func (f *FlagSets) Visit(fn func(*flag.Flag)) {
+	f.mainSet.Visit(fn)
 }
 
 // Help builds custom help for this command, grouping by flag set.

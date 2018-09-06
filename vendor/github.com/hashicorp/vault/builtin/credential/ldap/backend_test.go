@@ -1,3 +1,5 @@
+// +build !travis
+
 package ldap
 
 import (
@@ -29,6 +31,182 @@ func createBackendWithStorage(t *testing.T) (*backend, logical.Storage) {
 	}
 
 	return b, config.StorageView
+}
+
+func TestLdapAuthBackend_CaseSensitivity(t *testing.T) {
+	var resp *logical.Response
+	var err error
+	b, storage := createBackendWithStorage(t)
+
+	ctx := context.Background()
+
+	testVals := func(caseSensitive bool) {
+		// Clear storage
+		userList, err := storage.List(ctx, "user/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, user := range userList {
+			err = storage.Delete(ctx, "user/"+user)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		groupList, err := storage.List(ctx, "group/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, group := range groupList {
+			err = storage.Delete(ctx, "group/"+group)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		configReq := &logical.Request{
+			Path:      "config",
+			Operation: logical.ReadOperation,
+			Storage:   storage,
+		}
+		resp, err = b.HandleRequest(ctx, configReq)
+		if err != nil || (resp != nil && resp.IsError()) {
+			t.Fatalf("err:%v resp:%#v", err, resp)
+		}
+		if resp == nil {
+			t.Fatal("nil response")
+		}
+		if resp.Data["case_sensitive_names"].(bool) != caseSensitive {
+			t.Fatalf("expected case sensitivity %t, got %t", caseSensitive, resp.Data["case_sensitive_names"].(bool))
+		}
+
+		groupReq := &logical.Request{
+			Operation: logical.UpdateOperation,
+			Data: map[string]interface{}{
+				"policies": "grouppolicy",
+			},
+			Path:    "groups/EngineerS",
+			Storage: storage,
+		}
+		resp, err = b.HandleRequest(ctx, groupReq)
+		if err != nil || (resp != nil && resp.IsError()) {
+			t.Fatalf("err:%v resp:%#v", err, resp)
+		}
+		keys, err := storage.List(ctx, "group/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch caseSensitive {
+		case true:
+			if keys[0] != "EngineerS" {
+				t.Fatalf("bad: %s", keys[0])
+			}
+		default:
+			if keys[0] != "engineers" {
+				t.Fatalf("bad: %s", keys[0])
+			}
+		}
+
+		userReq := &logical.Request{
+			Operation: logical.UpdateOperation,
+			Data: map[string]interface{}{
+				"groups":   "EngineerS",
+				"policies": "userpolicy",
+			},
+			Path:    "users/teSlA",
+			Storage: storage,
+		}
+		resp, err = b.HandleRequest(ctx, userReq)
+		if err != nil || (resp != nil && resp.IsError()) {
+			t.Fatalf("err:%v resp:%#v", err, resp)
+		}
+		keys, err = storage.List(ctx, "user/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch caseSensitive {
+		case true:
+			if keys[0] != "teSlA" {
+				t.Fatalf("bad: %s", keys[0])
+			}
+		default:
+			if keys[0] != "tesla" {
+				t.Fatalf("bad: %s", keys[0])
+			}
+		}
+
+		if caseSensitive {
+			// The online test server is actually case sensitive so we need to
+			// write again so it works
+			userReq = &logical.Request{
+				Operation: logical.UpdateOperation,
+				Data: map[string]interface{}{
+					"groups":   "EngineerS",
+					"policies": "userpolicy",
+				},
+				Path:    "users/tesla",
+				Storage: storage,
+			}
+			resp, err = b.HandleRequest(ctx, userReq)
+			if err != nil || (resp != nil && resp.IsError()) {
+				t.Fatalf("err:%v resp:%#v", err, resp)
+			}
+		}
+
+		loginReq := &logical.Request{
+			Operation: logical.UpdateOperation,
+			Path:      "login/tesla",
+			Data: map[string]interface{}{
+				"password": "password",
+			},
+			Storage: storage,
+		}
+		resp, err = b.HandleRequest(ctx, loginReq)
+		if err != nil || (resp != nil && resp.IsError()) {
+			t.Fatalf("err:%v resp:%#v", err, resp)
+		}
+		expected := []string{"grouppolicy", "userpolicy"}
+		if !reflect.DeepEqual(expected, resp.Auth.Policies) {
+			t.Fatalf("bad: policies: expected: %q, actual: %q", expected, resp.Auth.Policies)
+		}
+	}
+
+	configReq := &logical.Request{
+		Operation: logical.UpdateOperation,
+		Path:      "config",
+		Data: map[string]interface{}{
+			// Online LDAP test server
+			// http://www.forumsys.com/tutorials/integration-how-to/ldap/online-ldap-test-server/
+			"url":      "ldap://ldap.forumsys.com",
+			"userattr": "uid",
+			"userdn":   "dc=example,dc=com",
+			"groupdn":  "dc=example,dc=com",
+			"binddn":   "cn=read-only-admin,dc=example,dc=com",
+		},
+		Storage: storage,
+	}
+	resp, err = b.HandleRequest(ctx, configReq)
+	if err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("err:%v resp:%#v", err, resp)
+	}
+
+	testVals(false)
+
+	// Check that if the value is nil, on read it is case sensitive
+	configEntry, err := b.Config(ctx, configReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configEntry.CaseSensitiveNames = nil
+	entry, err := logical.StorageEntryJSON("config", configEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = configReq.Storage.Put(ctx, entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testVals(true)
 }
 
 func TestLdapAuthBackend_UserPolicies(t *testing.T) {
@@ -161,6 +339,39 @@ func TestBackend_basic(t *testing.T) {
 	})
 }
 
+func TestBackend_basic_noPolicies(t *testing.T) {
+	b := factory(t)
+	logicaltest.Test(t, logicaltest.TestCase{
+		Backend: b,
+		Steps: []logicaltest.TestStep{
+			testAccStepConfigUrl(t),
+			// Create LDAP user
+			testAccStepUser(t, "tesla", ""),
+			// Authenticate
+			testAccStepLoginNoAttachedPolicies(t, "tesla", "password"),
+			testAccStepUserList(t, []string{"tesla"}),
+		},
+	})
+}
+
+func TestBackend_basic_group_noPolicies(t *testing.T) {
+	b := factory(t)
+	logicaltest.Test(t, logicaltest.TestCase{
+		Backend: b,
+		Steps: []logicaltest.TestStep{
+			testAccStepConfigUrl(t),
+			// Create engineers group with no policies
+			testAccStepGroup(t, "engineers", ""),
+			// Map tesla user with local engineers group
+			testAccStepUser(t, "tesla", "engineers"),
+			// Authenticate
+			testAccStepLoginNoAttachedPolicies(t, "tesla", "password"),
+			// Verify group mapping can be listed back
+			testAccStepGroupList(t, []string{"engineers"}),
+		},
+	})
+}
+
 func TestBackend_basic_authbind(t *testing.T) {
 	b := factory(t)
 
@@ -278,10 +489,11 @@ func testAccStepConfigUrl(t *testing.T) logicaltest.TestStep {
 		Data: map[string]interface{}{
 			// Online LDAP test server
 			// http://www.forumsys.com/tutorials/integration-how-to/ldap/online-ldap-test-server/
-			"url":      "ldap://ldap.forumsys.com",
-			"userattr": "uid",
-			"userdn":   "dc=example,dc=com",
-			"groupdn":  "dc=example,dc=com",
+			"url":                  "ldap://ldap.forumsys.com",
+			"userattr":             "uid",
+			"userdn":               "dc=example,dc=com",
+			"groupdn":              "dc=example,dc=com",
+			"case_sensitive_names": true,
 		},
 	}
 }
@@ -294,12 +506,13 @@ func testAccStepConfigUrlWithAuthBind(t *testing.T) logicaltest.TestStep {
 			// Online LDAP test server
 			// http://www.forumsys.com/tutorials/integration-how-to/ldap/online-ldap-test-server/
 			// In this test we also exercise multiple URL support
-			"url":      "foobar://ldap.example.com,ldap://ldap.forumsys.com",
-			"userattr": "uid",
-			"userdn":   "dc=example,dc=com",
-			"groupdn":  "dc=example,dc=com",
-			"binddn":   "cn=read-only-admin,dc=example,dc=com",
-			"bindpass": "password",
+			"url":                  "foobar://ldap.example.com,ldap://ldap.forumsys.com",
+			"userattr":             "uid",
+			"userdn":               "dc=example,dc=com",
+			"groupdn":              "dc=example,dc=com",
+			"binddn":               "cn=read-only-admin,dc=example,dc=com",
+			"bindpass":             "password",
+			"case_sensitive_names": true,
 		},
 	}
 }
@@ -311,11 +524,12 @@ func testAccStepConfigUrlWithDiscover(t *testing.T) logicaltest.TestStep {
 		Data: map[string]interface{}{
 			// Online LDAP test server
 			// http://www.forumsys.com/tutorials/integration-how-to/ldap/online-ldap-test-server/
-			"url":        "ldap://ldap.forumsys.com",
-			"userattr":   "uid",
-			"userdn":     "dc=example,dc=com",
-			"groupdn":    "dc=example,dc=com",
-			"discoverdn": true,
+			"url":                  "ldap://ldap.forumsys.com",
+			"userattr":             "uid",
+			"userdn":               "dc=example,dc=com",
+			"groupdn":              "dc=example,dc=com",
+			"discoverdn":           true,
+			"case_sensitive_names": true,
 		},
 	}
 }
@@ -327,10 +541,11 @@ func testAccStepConfigUrlNoGroupDN(t *testing.T) logicaltest.TestStep {
 		Data: map[string]interface{}{
 			// Online LDAP test server
 			// http://www.forumsys.com/tutorials/integration-how-to/ldap/online-ldap-test-server/
-			"url":        "ldap://ldap.forumsys.com",
-			"userattr":   "uid",
-			"userdn":     "dc=example,dc=com",
-			"discoverdn": true,
+			"url":                  "ldap://ldap.forumsys.com",
+			"userattr":             "uid",
+			"userdn":               "dc=example,dc=com",
+			"discoverdn":           true,
+			"case_sensitive_names": true,
 		},
 	}
 }
@@ -449,8 +664,22 @@ func testAccStepLogin(t *testing.T, user string, pass string) logicaltest.TestSt
 		},
 		Unauthenticated: true,
 
-		// Verifies user tesla maps to groups via local group (engineers) as well as remote group (Scientiests)
+		// Verifies user tesla maps to groups via local group (engineers) as well as remote group (Scientists)
 		Check: logicaltest.TestCheckAuth([]string{"bar", "default", "foo"}),
+	}
+}
+
+func testAccStepLoginNoAttachedPolicies(t *testing.T, user string, pass string) logicaltest.TestStep {
+	return logicaltest.TestStep{
+		Operation: logical.UpdateOperation,
+		Path:      "login/" + user,
+		Data: map[string]interface{}{
+			"password": pass,
+		},
+		Unauthenticated: true,
+
+		// Verifies user tesla maps to groups via local group (engineers) as well as remote group (Scientists)
+		Check: logicaltest.TestCheckAuth([]string{"default"}),
 	}
 }
 
@@ -463,7 +692,7 @@ func testAccStepLoginNoGroupDN(t *testing.T, user string, pass string) logicalte
 		},
 		Unauthenticated: true,
 
-		// Verifies a search without defined GroupDN returns a warnting rather than failing
+		// Verifies a search without defined GroupDN returns a warning rather than failing
 		Check: func(resp *logical.Response) error {
 			if len(resp.Warnings) != 1 {
 				return fmt.Errorf("expected a warning due to no group dn, got: %#v", resp.Warnings)
@@ -474,30 +703,13 @@ func testAccStepLoginNoGroupDN(t *testing.T, user string, pass string) logicalte
 	}
 }
 
-func TestLDAPEscape(t *testing.T) {
-	testcases := map[string]string{
-		"#test":       "\\#test",
-		"test,hello":  "test\\,hello",
-		"test,hel+lo": "test\\,hel\\+lo",
-		"test\\hello": "test\\\\hello",
-		"  test  ":    "\\  test \\ ",
-	}
-
-	for test, answer := range testcases {
-		res := EscapeLDAPValue(test)
-		if res != answer {
-			t.Errorf("Failed to escape %s: %s != %s\n", test, res, answer)
-		}
-	}
-}
-
 func testAccStepGroupList(t *testing.T, groups []string) logicaltest.TestStep {
 	return logicaltest.TestStep{
 		Operation: logical.ListOperation,
 		Path:      "groups",
 		Check: func(resp *logical.Response) error {
 			if resp.IsError() {
-				return fmt.Errorf("Got error response: %#v", *resp)
+				return fmt.Errorf("got error response: %#v", *resp)
 			}
 
 			expected := make([]string, len(groups))
@@ -522,7 +734,7 @@ func testAccStepUserList(t *testing.T, users []string) logicaltest.TestStep {
 		Path:      "users",
 		Check: func(resp *logical.Response) error {
 			if resp.IsError() {
-				return fmt.Errorf("Got error response: %#v", *resp)
+				return fmt.Errorf("got error response: %#v", *resp)
 			}
 
 			expected := make([]string, len(users))

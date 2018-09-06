@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -12,7 +13,7 @@ import (
 	"time"
 
 	"github.com/armon/go-metrics"
-	log "github.com/mgutz/logxi/v1"
+	log "github.com/hashicorp/go-hclog"
 
 	"github.com/hashicorp/errwrap"
 	multierror "github.com/hashicorp/go-multierror"
@@ -21,6 +22,7 @@ import (
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/helper/locksutil"
 	"github.com/hashicorp/vault/logical"
+	"github.com/hashicorp/vault/logical/framework"
 )
 
 const (
@@ -50,23 +52,29 @@ const (
 	maxLeaseThreshold = 256000
 )
 
+type pendingInfo struct {
+	exportLeaseTimes *leaseEntry
+	timer            *time.Timer
+}
+
 // ExpirationManager is used by the Core to manage leases. Secrets
 // can provide a lease, meaning that they can be renewed or revoked.
 // If a secret is not renewed in timely manner, it may be expired, and
 // the ExpirationManager will handle doing automatic revocation.
 type ExpirationManager struct {
+	core       *Core
 	router     *Router
 	idView     *BarrierView
 	tokenView  *BarrierView
 	tokenStore *TokenStore
 	logger     log.Logger
 
-	pending     map[string]*time.Timer
+	pending     map[string]pendingInfo
 	pendingLock sync.RWMutex
 
-	tidyLock int32
+	tidyLock *int32
 
-	restoreMode        int32
+	restoreMode        *int32
 	restoreModeLock    sync.RWMutex
 	restoreRequestLock sync.RWMutex
 	restoreLocks       []*locksutil.LockEntry
@@ -75,33 +83,41 @@ type ExpirationManager struct {
 
 	coreStateLock     *sync.RWMutex
 	quitContext       context.Context
-	leaseCheckCounter uint32
+	leaseCheckCounter *uint32
+
+	logLeaseExpirations bool
 }
 
 // NewExpirationManager creates a new ExpirationManager that is backed
 // using a given view, and uses the provided router for revocation.
-func NewExpirationManager(c *Core, view *BarrierView) *ExpirationManager {
+func NewExpirationManager(c *Core, view *BarrierView, logger log.Logger) *ExpirationManager {
 	exp := &ExpirationManager{
+		core:       c,
 		router:     c.router,
 		idView:     view.SubView(leaseViewPrefix),
 		tokenView:  view.SubView(tokenViewPrefix),
 		tokenStore: c.tokenStore,
-		logger:     c.logger,
-		pending:    make(map[string]*time.Timer),
+		logger:     logger,
+		pending:    make(map[string]pendingInfo),
+		tidyLock:   new(int32),
 
 		// new instances of the expiration manager will go immediately into
 		// restore mode
-		restoreMode:  1,
+		restoreMode:  new(int32),
 		restoreLocks: locksutil.CreateLocks(),
 		quitCh:       make(chan struct{}),
 
 		coreStateLock:     &c.stateLock,
 		quitContext:       c.activeContext,
-		leaseCheckCounter: 0,
+		leaseCheckCounter: new(uint32),
+
+		logLeaseExpirations: os.Getenv("VAULT_SKIP_LOGGING_LEASE_EXPIRATIONS") == "",
 	}
+	*exp.restoreMode = 1
 
 	if exp.logger == nil {
-		exp.logger = log.New("expiration_manager")
+		opts := log.LoggerOptions{Name: "expiration_manager"}
+		exp.logger = log.New(&opts)
 	}
 
 	return exp
@@ -116,18 +132,18 @@ func (c *Core) setupExpiration() error {
 	view := c.systemBarrierView.SubView(expirationSubPath)
 
 	// Create the manager
-	mgr := NewExpirationManager(c, view)
+	mgr := NewExpirationManager(c, view, c.baseLogger.Named("expiration"))
 	c.expiration = mgr
 
 	// Link the token store to this
 	c.tokenStore.SetExpirationManager(mgr)
 
 	// Restore the existing state
-	c.logger.Info("expiration: restoring leases")
+	c.logger.Info("restoring leases")
 	errorFunc := func() {
-		c.logger.Error("expiration: shutting down")
+		c.logger.Error("shutting down")
 		if err := c.Shutdown(); err != nil {
-			c.logger.Error("expiration: error shutting down core: %v", err)
+			c.logger.Error("error shutting down core: %v", err)
 		}
 	}
 	go c.expiration.Restore(errorFunc)
@@ -161,7 +177,7 @@ func (m *ExpirationManager) unlockLease(leaseID string) {
 
 // inRestoreMode returns if we are currently in restore mode
 func (m *ExpirationManager) inRestoreMode() bool {
-	return atomic.LoadInt32(&m.restoreMode) == 1
+	return atomic.LoadInt32(m.restoreMode) == 1
 }
 
 // Tidy cleans up the dangling storage entries for leases. It scans the storage
@@ -177,15 +193,17 @@ func (m *ExpirationManager) Tidy() error {
 
 	var tidyErrors *multierror.Error
 
-	if !atomic.CompareAndSwapInt32(&m.tidyLock, 0, 1) {
-		m.logger.Warn("expiration: tidy operation on leases is already in progress")
-		return fmt.Errorf("tidy operation on leases is already in progress")
+	logger := m.logger.Named("tidy")
+
+	if !atomic.CompareAndSwapInt32(m.tidyLock, 0, 1) {
+		logger.Warn("tidy operation on leases is already in progress")
+		return nil
 	}
 
-	defer atomic.CompareAndSwapInt32(&m.tidyLock, 1, 0)
+	defer atomic.CompareAndSwapInt32(m.tidyLock, 1, 0)
 
-	m.logger.Info("expiration: beginning tidy operation on leases")
-	defer m.logger.Info("expiration: finished tidy operation on leases")
+	logger.Info("beginning tidy operation on leases")
+	defer logger.Info("finished tidy operation on leases")
 
 	// Create a cache to keep track of looked up tokens
 	tokenCache := make(map[string]bool)
@@ -194,24 +212,24 @@ func (m *ExpirationManager) Tidy() error {
 	tidyFunc := func(leaseID string) {
 		countLease++
 		if countLease%500 == 0 {
-			m.logger.Info("expiration: tidying leases", "progress", countLease)
+			logger.Info("tidying leases", "progress", countLease)
 		}
 
-		le, err := m.loadEntry(leaseID)
+		le, err := m.loadEntry(m.quitContext, leaseID)
 		if err != nil {
-			tidyErrors = multierror.Append(tidyErrors, fmt.Errorf("failed to load the lease ID %q: %v", leaseID, err))
+			tidyErrors = multierror.Append(tidyErrors, errwrap.Wrapf(fmt.Sprintf("failed to load the lease ID %q: {{err}}", leaseID), err))
 			return
 		}
 
 		if le == nil {
-			tidyErrors = multierror.Append(tidyErrors, fmt.Errorf("nil entry for lease ID %q: %v", leaseID, err))
+			tidyErrors = multierror.Append(tidyErrors, errwrap.Wrapf(fmt.Sprintf("nil entry for lease ID %q: {{err}}", leaseID), err))
 			return
 		}
 
 		var isValid, ok bool
 		revokeLease := false
 		if le.ClientToken == "" {
-			m.logger.Trace("expiration: revoking lease which has an empty token", "lease_id", leaseID)
+			logger.Debug("revoking lease which has an empty token", "lease_id", leaseID)
 			revokeLease = true
 			deletedCountEmptyToken++
 			goto REVOKE_CHECK
@@ -219,9 +237,9 @@ func (m *ExpirationManager) Tidy() error {
 
 		isValid, ok = tokenCache[le.ClientToken]
 		if !ok {
-			saltedID, err := m.tokenStore.SaltID(le.ClientToken)
+			saltedID, err := m.tokenStore.SaltID(m.quitContext, le.ClientToken)
 			if err != nil {
-				tidyErrors = multierror.Append(tidyErrors, fmt.Errorf("failed to lookup salt id: %v", err))
+				tidyErrors = multierror.Append(tidyErrors, errwrap.Wrapf("failed to lookup salt id: {{err}}", err))
 				return
 			}
 			lock := locksutil.LockForKey(m.tokenStore.tokenLocks, le.ClientToken)
@@ -230,12 +248,12 @@ func (m *ExpirationManager) Tidy() error {
 			lock.RUnlock()
 
 			if err != nil {
-				tidyErrors = multierror.Append(tidyErrors, fmt.Errorf("failed to lookup token: %v", err))
+				tidyErrors = multierror.Append(tidyErrors, errwrap.Wrapf("failed to lookup token: {{err}}", err))
 				return
 			}
 
 			if te == nil {
-				m.logger.Trace("expiration: revoking lease which holds an invalid token", "lease_id", leaseID)
+				logger.Debug("revoking lease which holds an invalid token", "lease_id", leaseID)
 				revokeLease = true
 				deletedCountInvalidToken++
 				tokenCache[le.ClientToken] = false
@@ -248,7 +266,7 @@ func (m *ExpirationManager) Tidy() error {
 				return
 			}
 
-			m.logger.Trace("expiration: revoking lease which contains an invalid token", "lease_id", leaseID)
+			logger.Debug("revoking lease which contains an invalid token", "lease_id", leaseID)
 			revokeLease = true
 			deletedCountInvalidToken++
 			goto REVOKE_CHECK
@@ -258,9 +276,9 @@ func (m *ExpirationManager) Tidy() error {
 		if revokeLease {
 			// Force the revocation and skip going through the token store
 			// again
-			err = m.revokeCommon(leaseID, true, true)
+			err = m.revokeCommon(m.quitContext, leaseID, true, true)
 			if err != nil {
-				tidyErrors = multierror.Append(tidyErrors, fmt.Errorf("failed to revoke an invalid lease with ID %q: %v", leaseID, err))
+				tidyErrors = multierror.Append(tidyErrors, errwrap.Wrapf(fmt.Sprintf("failed to revoke an invalid lease with ID %q: {{err}}", leaseID), err))
 				return
 			}
 			revokedCount++
@@ -271,10 +289,10 @@ func (m *ExpirationManager) Tidy() error {
 		return err
 	}
 
-	m.logger.Debug("expiration: number of leases scanned", "count", countLease)
-	m.logger.Debug("expiration: number of leases which had empty tokens", "count", deletedCountEmptyToken)
-	m.logger.Debug("expiration: number of leases which had invalid tokens", "count", deletedCountInvalidToken)
-	m.logger.Debug("expiration: number of leases successfully revoked", "count", revokedCount)
+	logger.Info("number of leases scanned", "count", countLease)
+	logger.Info("number of leases which had empty tokens", "count", deletedCountEmptyToken)
+	logger.Info("number of leases which had invalid tokens", "count", deletedCountInvalidToken)
+	logger.Info("number of leases successfully revoked", "count", revokedCount)
 
 	return tidyErrors.ErrorOrNil()
 }
@@ -287,16 +305,20 @@ func (m *ExpirationManager) Restore(errorFunc func()) (retErr error) {
 		// if restore mode finished successfully, restore mode was already
 		// disabled with the lock. In an error state, this will allow the
 		// Stop() function to shut everything down.
-		atomic.StoreInt32(&m.restoreMode, 0)
+		atomic.StoreInt32(m.restoreMode, 0)
 
 		switch {
 		case retErr == nil:
+		case strings.Contains(retErr.Error(), context.Canceled.Error()):
+			// Don't run error func because we lost leadership
+			m.logger.Warn("context cancled while restoring leases, stopping lease loading")
+			retErr = nil
 		case errwrap.Contains(retErr, ErrBarrierSealed.Error()):
 			// Don't run error func because we're likely already shutting down
-			m.logger.Warn("expiration: barrier sealed while restoring leases, stopping lease loading")
+			m.logger.Warn("barrier sealed while restoring leases, stopping lease loading")
 			retErr = nil
 		default:
-			m.logger.Error("expiration: error restoring leases", "error", retErr)
+			m.logger.Error("error restoring leases", "error", retErr)
 			if errorFunc != nil {
 				errorFunc()
 			}
@@ -304,12 +326,12 @@ func (m *ExpirationManager) Restore(errorFunc func()) (retErr error) {
 	}()
 
 	// Accumulate existing leases
-	m.logger.Debug("expiration: collecting leases")
+	m.logger.Debug("collecting leases")
 	existing, err := logical.CollectKeys(m.quitContext, m.idView)
 	if err != nil {
 		return errwrap.Wrapf("failed to scan for leases: {{err}}", err)
 	}
-	m.logger.Debug("expiration: leases collected", "num_existing", len(existing))
+	m.logger.Debug("leases collected", "num_existing", len(existing))
 
 	// Make the channels used for the worker pool
 	broker := make(chan string)
@@ -361,7 +383,7 @@ func (m *ExpirationManager) Restore(errorFunc func()) (retErr error) {
 		defer wg.Done()
 		for i, leaseID := range existing {
 			if i > 0 && i%500 == 0 {
-				m.logger.Trace("expiration: leases loading", "progress", i)
+				m.logger.Debug("leases loading", "progress", i)
 			}
 
 			select {
@@ -402,10 +424,10 @@ func (m *ExpirationManager) Restore(errorFunc func()) (retErr error) {
 	m.restoreModeLock.Lock()
 	m.restoreLoaded = sync.Map{}
 	m.restoreLocks = nil
-	atomic.StoreInt32(&m.restoreMode, 0)
+	atomic.StoreInt32(m.restoreMode, 0)
 	m.restoreModeLock.Unlock()
 
-	m.logger.Info("expiration: lease restore complete")
+	m.logger.Info("lease restore complete")
 	return nil
 }
 
@@ -429,7 +451,7 @@ func (m *ExpirationManager) processRestore(leaseID string) error {
 	}
 
 	// Load lease and restore expiration timer
-	_, err := m.loadEntryInternal(leaseID, true, false)
+	_, err := m.loadEntryInternal(m.quitContext, leaseID, true, false)
 	if err != nil {
 		return err
 	}
@@ -440,18 +462,18 @@ func (m *ExpirationManager) processRestore(leaseID string) error {
 // This must be called before sealing the view.
 func (m *ExpirationManager) Stop() error {
 	// Stop all the pending expiration timers
-	m.logger.Debug("expiration: stop triggered")
-	defer m.logger.Debug("expiration: finished stopping")
+	m.logger.Debug("stop triggered")
+	defer m.logger.Debug("finished stopping")
 
 	// Do this before stopping pending timers to avoid potential races with
 	// expiring timers
 	close(m.quitCh)
 
 	m.pendingLock.Lock()
-	for _, timer := range m.pending {
-		timer.Stop()
+	for _, pending := range m.pending {
+		pending.timer.Stop()
 	}
-	m.pending = make(map[string]*time.Timer)
+	m.pending = make(map[string]pendingInfo)
 	m.pendingLock.Unlock()
 
 	if m.inRestoreMode() {
@@ -467,19 +489,51 @@ func (m *ExpirationManager) Stop() error {
 }
 
 // Revoke is used to revoke a secret named by the given LeaseID
-func (m *ExpirationManager) Revoke(leaseID string) error {
+func (m *ExpirationManager) Revoke(ctx context.Context, leaseID string) error {
 	defer metrics.MeasureSince([]string{"expire", "revoke"}, time.Now())
 
-	return m.revokeCommon(leaseID, false, false)
+	return m.revokeCommon(ctx, leaseID, false, false)
+}
+
+// LazyRevoke is used to queue revocation for a secret named by the given
+// LeaseID. If the lease was not found it returns nil; if the lease was found
+// it triggers a return of a 202.
+func (m *ExpirationManager) LazyRevoke(ctx context.Context, leaseID string) error {
+	defer metrics.MeasureSince([]string{"expire", "lazy-revoke"}, time.Now())
+
+	// Load the entry
+	le, err := m.loadEntry(ctx, leaseID)
+	if err != nil {
+		return err
+	}
+
+	// If there is no entry, nothing to revoke
+	if le == nil {
+		return nil
+	}
+
+	le.ExpireTime = time.Now()
+	{
+		m.pendingLock.Lock()
+		if err := m.persistEntry(ctx, le); err != nil {
+			m.pendingLock.Unlock()
+			return err
+		}
+
+		m.updatePendingInternal(le, 0)
+		m.pendingLock.Unlock()
+	}
+
+	return nil
 }
 
 // revokeCommon does the heavy lifting. If force is true, we ignore a problem
 // during revocation and still remove entries/index/lease timers
-func (m *ExpirationManager) revokeCommon(leaseID string, force, skipToken bool) error {
+func (m *ExpirationManager) revokeCommon(ctx context.Context, leaseID string, force, skipToken bool) error {
 	defer metrics.MeasureSince([]string{"expire", "revoke-common"}, time.Now())
 
 	// Load the entry
-	le, err := m.loadEntry(leaseID)
+	le, err := m.loadEntry(ctx, leaseID)
 	if err != nil {
 		return err
 	}
@@ -491,7 +545,7 @@ func (m *ExpirationManager) revokeCommon(leaseID string, force, skipToken bool) 
 
 	// Revoke the entry
 	if !skipToken || le.Auth == nil {
-		if err := m.revokeEntry(le); err != nil {
+		if err := m.revokeEntry(ctx, le); err != nil {
 			if !force {
 				return err
 			}
@@ -503,67 +557,92 @@ func (m *ExpirationManager) revokeCommon(leaseID string, force, skipToken bool) 
 	}
 
 	// Delete the entry
-	if err := m.deleteEntry(leaseID); err != nil {
+	if err := m.deleteEntry(ctx, leaseID); err != nil {
 		return err
 	}
 
 	// Delete the secondary index, but only if it's a leased secret (not auth)
 	if le.Secret != nil {
-		if err := m.removeIndexByToken(le.ClientToken, le.LeaseID); err != nil {
+		if err := m.removeIndexByToken(ctx, le.ClientToken, le.LeaseID); err != nil {
 			return err
 		}
 	}
 
 	// Clear the expiration handler
 	m.pendingLock.Lock()
-	if timer, ok := m.pending[leaseID]; ok {
-		timer.Stop()
+	if pending, ok := m.pending[leaseID]; ok {
+		pending.timer.Stop()
 		delete(m.pending, leaseID)
 	}
 	m.pendingLock.Unlock()
+
+	if m.logger.IsInfo() && !skipToken && m.logLeaseExpirations {
+		m.logger.Info("revoked lease", "lease_id", leaseID)
+	}
+
 	return nil
 }
 
 // RevokeForce works similarly to RevokePrefix but continues in the case of a
 // revocation error; this is mostly meant for recovery operations
-func (m *ExpirationManager) RevokeForce(prefix string) error {
+func (m *ExpirationManager) RevokeForce(ctx context.Context, prefix string) error {
 	defer metrics.MeasureSince([]string{"expire", "revoke-force"}, time.Now())
 
-	return m.revokePrefixCommon(prefix, true)
+	return m.revokePrefixCommon(ctx, prefix, true, true)
 }
 
 // RevokePrefix is used to revoke all secrets with a given prefix.
 // The prefix maps to that of the mount table to make this simpler
 // to reason about.
-func (m *ExpirationManager) RevokePrefix(prefix string) error {
+func (m *ExpirationManager) RevokePrefix(ctx context.Context, prefix string, sync bool) error {
 	defer metrics.MeasureSince([]string{"expire", "revoke-prefix"}, time.Now())
 
-	return m.revokePrefixCommon(prefix, false)
+	return m.revokePrefixCommon(ctx, prefix, false, sync)
 }
 
 // RevokeByToken is used to revoke all the secrets issued with a given token.
 // This is done by using the secondary index. It also removes the lease entry
 // for the token itself. As a result it should *ONLY* ever be called from the
 // token store's revokeSalted function.
-func (m *ExpirationManager) RevokeByToken(te *TokenEntry) error {
+func (m *ExpirationManager) RevokeByToken(ctx context.Context, te *logical.TokenEntry) error {
 	defer metrics.MeasureSince([]string{"expire", "revoke-by-token"}, time.Now())
 
 	// Lookup the leases
-	existing, err := m.lookupByToken(te.ID)
+	existing, err := m.lookupLeasesByToken(ctx, te.ID)
 	if err != nil {
-		return fmt.Errorf("failed to scan for leases: %v", err)
+		return errwrap.Wrapf("failed to scan for leases: {{err}}", err)
 	}
 
 	// Revoke all the keys
-	for idx, leaseID := range existing {
-		if err := m.revokeCommon(leaseID, false, false); err != nil {
-			return fmt.Errorf("failed to revoke '%s' (%d / %d): %v",
-				leaseID, idx+1, len(existing), err)
+	for _, leaseID := range existing {
+		// Load the entry
+		le, err := m.loadEntry(ctx, leaseID)
+		if err != nil {
+			return err
+		}
+
+		// If there's a lease, set expiration to now, persist, and call
+		// updatePending to hand off revocation to the expiration manager's pending
+		// timer map
+		if le != nil {
+			le.ExpireTime = time.Now()
+
+			{
+				m.pendingLock.Lock()
+				if err := m.persistEntry(ctx, le); err != nil {
+					m.pendingLock.Unlock()
+					return err
+				}
+
+				m.updatePendingInternal(le, 0)
+				m.pendingLock.Unlock()
+			}
 		}
 	}
 
+	// te.Path should never be empty, but we check just in case
 	if te.Path != "" {
-		saltedID, err := m.tokenStore.SaltID(te.ID)
+		saltedID, err := m.tokenStore.SaltID(ctx, te.ID)
 		if err != nil {
 			return err
 		}
@@ -576,48 +655,66 @@ func (m *ExpirationManager) RevokeByToken(te *TokenEntry) error {
 		// we're already revoking the token, so we just want to clean up the lease.
 		// This avoids spurious revocations later in the log when the timer runs
 		// out, and eases up resource usage.
-		return m.revokeCommon(tokenLeaseID, false, true)
+		return m.revokeCommon(ctx, tokenLeaseID, false, true)
 	}
 
 	return nil
 }
 
-func (m *ExpirationManager) revokePrefixCommon(prefix string, force bool) error {
+func (m *ExpirationManager) revokePrefixCommon(ctx context.Context, prefix string, force, sync bool) error {
 	if m.inRestoreMode() {
 		m.restoreRequestLock.Lock()
 		defer m.restoreRequestLock.Unlock()
 	}
 
-	// Ensure there is a trailing slash
+	// Ensure there is a trailing slash; or, if there is no slash, see if there
+	// is a matching specific ID
 	if !strings.HasSuffix(prefix, "/") {
+		le, err := m.loadEntry(ctx, prefix)
+		if err == nil && le != nil {
+			if sync {
+				if err := m.revokeCommon(ctx, prefix, force, false); err != nil {
+					return errwrap.Wrapf(fmt.Sprintf("failed to revoke %q: {{err}}", prefix), err)
+				}
+				return nil
+			}
+			return m.LazyRevoke(ctx, prefix)
+		}
 		prefix = prefix + "/"
 	}
 
 	// Accumulate existing leases
 	sub := m.idView.SubView(prefix)
-	existing, err := logical.CollectKeys(m.quitContext, sub)
+	existing, err := logical.CollectKeys(ctx, sub)
 	if err != nil {
-		return fmt.Errorf("failed to scan for leases: %v", err)
+		return errwrap.Wrapf("failed to scan for leases: {{err}}", err)
 	}
 
 	// Revoke all the keys
 	for idx, suffix := range existing {
 		leaseID := prefix + suffix
-		if err := m.revokeCommon(leaseID, force, false); err != nil {
-			return fmt.Errorf("failed to revoke '%s' (%d / %d): %v",
-				leaseID, idx+1, len(existing), err)
+		switch {
+		case sync:
+			if err := m.revokeCommon(ctx, leaseID, force, false); err != nil {
+				return errwrap.Wrapf(fmt.Sprintf("failed to revoke %q (%d / %d): {{err}}", leaseID, idx+1, len(existing)), err)
+			}
+		default:
+			if err := m.LazyRevoke(ctx, leaseID); err != nil {
+				return errwrap.Wrapf(fmt.Sprintf("failed to revoke %q (%d / %d): {{err}}", leaseID, idx+1, len(existing)), err)
+			}
 		}
 	}
+
 	return nil
 }
 
 // Renew is used to renew a secret using the given leaseID
 // and a renew interval. The increment may be ignored.
-func (m *ExpirationManager) Renew(leaseID string, increment time.Duration) (*logical.Response, error) {
+func (m *ExpirationManager) Renew(ctx context.Context, leaseID string, increment time.Duration) (*logical.Response, error) {
 	defer metrics.MeasureSince([]string{"expire", "renew"}, time.Now())
 
 	// Load the entry
-	le, err := m.loadEntry(leaseID)
+	le, err := m.loadEntry(ctx, leaseID)
 	if err != nil {
 		return nil, err
 	}
@@ -634,21 +731,36 @@ func (m *ExpirationManager) Renew(leaseID string, increment time.Duration) (*log
 		return logical.ErrorResponse("lease does not correspond to a secret"), nil
 	}
 
+	sysView := m.router.MatchingSystemView(le.Path)
+	if sysView == nil {
+		return nil, fmt.Errorf("unable to retrieve system view from router")
+	}
+
 	// Attempt to renew the entry
-	resp, err := m.renewEntry(le, increment)
+	resp, err := m.renewEntry(ctx, le, increment)
 	if err != nil {
 		return nil, err
 	}
-
-	// Fast-path if there is no lease
-	if resp == nil || resp.Secret == nil || !resp.Secret.LeaseEnabled() {
-		return resp, nil
+	if resp == nil {
+		return nil, nil
+	}
+	if resp.IsError() {
+		return &logical.Response{
+			Data: resp.Data,
+		}, nil
+	}
+	if resp.Secret == nil {
+		return nil, nil
 	}
 
-	// Validate the lease
-	if err := resp.Secret.Validate(); err != nil {
+	ttl, warnings, err := framework.CalculateTTL(sysView, increment, resp.Secret.TTL, 0, resp.Secret.MaxTTL, 0, le.IssueTime)
+	if err != nil {
 		return nil, err
 	}
+	for _, warning := range warnings {
+		resp.AddWarning(warning)
+	}
+	resp.Secret.TTL = ttl
 
 	// Attach the LeaseID
 	resp.Secret.LeaseID = leaseID
@@ -658,71 +770,38 @@ func (m *ExpirationManager) Renew(leaseID string, increment time.Duration) (*log
 	le.Secret = resp.Secret
 	le.ExpireTime = resp.Secret.ExpirationTime()
 	le.LastRenewalTime = time.Now()
-	if err := m.persistEntry(le); err != nil {
-		return nil, err
-	}
 
-	// Update the expiration time
-	m.updatePending(le, resp.Secret.LeaseTotal())
+	{
+		m.pendingLock.Lock()
+		if err := m.persistEntry(ctx, le); err != nil {
+			m.pendingLock.Unlock()
+			return nil, err
+		}
+
+		// Update the expiration time
+		m.updatePendingInternal(le, resp.Secret.LeaseTotal())
+		m.pendingLock.Unlock()
+	}
 
 	// Return the response
 	return resp, nil
 }
 
-// RestoreSaltedTokenCheck verifies that the token is not expired while running
-// in restore mode.  If we are not in restore mode, the lease has already been
-// restored or the lease still has time left, it returns true.
-func (m *ExpirationManager) RestoreSaltedTokenCheck(source string, saltedID string) (bool, error) {
-	defer metrics.MeasureSince([]string{"expire", "restore-token-check"}, time.Now())
-
-	// Return immediately if we are not in restore mode, expiration manager is
-	// already loaded
-	if !m.inRestoreMode() {
-		return true, nil
-	}
-
-	m.restoreModeLock.RLock()
-	defer m.restoreModeLock.RUnlock()
-
-	// Check again after we obtain the lock
-	if !m.inRestoreMode() {
-		return true, nil
-	}
-
-	leaseID := path.Join(source, saltedID)
-
-	m.lockLease(leaseID)
-	defer m.unlockLease(leaseID)
-
-	le, err := m.loadEntryInternal(leaseID, true, true)
-	if err != nil {
-		return false, err
-	}
-	if le != nil && !le.ExpireTime.IsZero() {
-		expires := le.ExpireTime.Sub(time.Now())
-		if expires <= 0 {
-			return false, nil
-		}
-	}
-
-	return true, nil
-}
-
 // RenewToken is used to renew a token which does not need to
 // invoke a logical backend.
-func (m *ExpirationManager) RenewToken(req *logical.Request, source string, token string,
+func (m *ExpirationManager) RenewToken(ctx context.Context, req *logical.Request, source string, token string,
 	increment time.Duration) (*logical.Response, error) {
 	defer metrics.MeasureSince([]string{"expire", "renew-token"}, time.Now())
 
 	// Compute the Lease ID
-	saltedID, err := m.tokenStore.SaltID(token)
+	saltedID, err := m.tokenStore.SaltID(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 	leaseID := path.Join(source, saltedID)
 
 	// Load the entry
-	le, err := m.loadEntry(leaseID)
+	le, err := m.loadEntry(ctx, leaseID)
 	if err != nil {
 		return nil, err
 	}
@@ -734,66 +813,67 @@ func (m *ExpirationManager) RenewToken(req *logical.Request, source string, toke
 	}
 
 	// Attempt to renew the auth entry
-	resp, err := m.renewAuthEntry(req, le, increment)
+	resp, err := m.renewAuthEntry(ctx, req, le, increment)
 	if err != nil {
 		return nil, err
 	}
-
 	if resp == nil {
 		return nil, nil
 	}
-
 	if resp.IsError() {
 		return &logical.Response{
 			Data: resp.Data,
 		}, nil
 	}
-
-	if resp.Auth == nil || !resp.Auth.LeaseEnabled() {
-		return &logical.Response{
-			Auth: resp.Auth,
-		}, nil
+	if resp.Auth == nil {
+		return nil, nil
 	}
 
 	sysView := m.router.MatchingSystemView(le.Path)
 	if sysView == nil {
-		return nil, fmt.Errorf("expiration: unable to retrieve system view from router")
+		return nil, fmt.Errorf("unable to retrieve system view from router")
 	}
 
-	retResp := &logical.Response{}
-	switch {
-	case resp.Auth.Period > time.Duration(0):
-		// If it resp.Period is non-zero, use that as the TTL and override backend's
-		// call on TTL modification, such as a TTL value determined by
-		// framework.LeaseExtend call against the request. Also, cap period value to
-		// the sys/mount max value.
-		if resp.Auth.Period > sysView.MaxLeaseTTL() {
-			retResp.AddWarning(fmt.Sprintf("Period of %d seconds is greater than current mount/system default of %d seconds, value will be truncated.", resp.Auth.TTL, sysView.MaxLeaseTTL()))
-			resp.Auth.Period = sysView.MaxLeaseTTL()
-		}
-		resp.Auth.TTL = resp.Auth.Period
-	case resp.Auth.TTL > time.Duration(0):
-		// Cap TTL value to the sys/mount max value
-		if resp.Auth.TTL > sysView.MaxLeaseTTL() {
-			retResp.AddWarning(fmt.Sprintf("TTL of %d seconds is greater than current mount/system default of %d seconds, value will be truncated.", resp.Auth.TTL, sysView.MaxLeaseTTL()))
-			resp.Auth.TTL = sysView.MaxLeaseTTL()
-		}
+	ttl, warnings, err := framework.CalculateTTL(sysView, increment, resp.Auth.TTL, resp.Auth.Period, resp.Auth.MaxTTL, resp.Auth.ExplicitMaxTTL, le.IssueTime)
+	if err != nil {
+		return nil, err
 	}
+	retResp := &logical.Response{}
+	for _, warning := range warnings {
+		retResp.AddWarning(warning)
+	}
+	resp.Auth.TTL = ttl
 
 	// Attach the ClientToken
 	resp.Auth.ClientToken = token
-	resp.Auth.Increment = 0
+
+	// Refresh groups
+	if resp.Auth.EntityID != "" &&
+		resp.Auth.GroupAliases != nil &&
+		m.core.identityStore != nil {
+		validAliases, err := m.core.identityStore.refreshExternalGroupMembershipsByEntityID(resp.Auth.EntityID, resp.Auth.GroupAliases)
+		if err != nil {
+			return nil, err
+		}
+		resp.Auth.GroupAliases = validAliases
+	}
 
 	// Update the lease entry
 	le.Auth = resp.Auth
 	le.ExpireTime = resp.Auth.ExpirationTime()
 	le.LastRenewalTime = time.Now()
-	if err := m.persistEntry(le); err != nil {
-		return nil, err
-	}
 
-	// Update the expiration time
-	m.updatePending(le, resp.Auth.LeaseTotal())
+	{
+		m.pendingLock.Lock()
+		if err := m.persistEntry(ctx, le); err != nil {
+			m.pendingLock.Unlock()
+			return nil, err
+		}
+
+		// Update the expiration time
+		m.updatePendingInternal(le, resp.Auth.LeaseTotal())
+		m.pendingLock.Unlock()
+	}
 
 	retResp.Auth = resp.Auth
 	return retResp, nil
@@ -802,11 +882,11 @@ func (m *ExpirationManager) RenewToken(req *logical.Request, source string, toke
 // Register is used to take a request and response with an associated
 // lease. The secret gets assigned a LeaseID and the management of
 // of lease is assumed by the expiration manager.
-func (m *ExpirationManager) Register(req *logical.Request, resp *logical.Response) (id string, retErr error) {
+func (m *ExpirationManager) Register(ctx context.Context, req *logical.Request, resp *logical.Response) (id string, retErr error) {
 	defer metrics.MeasureSince([]string{"expire", "register"}, time.Now())
 
 	if req.ClientToken == "" {
-		return "", fmt.Errorf("expiration: cannot register a lease with an empty client token")
+		return "", fmt.Errorf("cannot register a lease with an empty client token")
 	}
 
 	// Ignore if there is no leased secret
@@ -840,11 +920,11 @@ func (m *ExpirationManager) Register(req *logical.Request, resp *logical.Respons
 				retErr = multierror.Append(retErr, errwrap.Wrapf("an additional error was encountered revoking the newly-generated secret: {{err}}", revResp.Error()))
 			}
 
-			if err := m.deleteEntry(leaseID); err != nil {
+			if err := m.deleteEntry(ctx, leaseID); err != nil {
 				retErr = multierror.Append(retErr, errwrap.Wrapf("an additional error was encountered deleting any lease associated with the newly-generated secret: {{err}}", err))
 			}
 
-			if err := m.removeIndexByToken(req.ClientToken, leaseID); err != nil {
+			if err := m.removeIndexByToken(ctx, req.ClientToken, leaseID); err != nil {
 				retErr = multierror.Append(retErr, errwrap.Wrapf("an additional error was encountered removing lease indexes associated with the newly-generated secret: {{err}}", err))
 			}
 		}
@@ -861,12 +941,12 @@ func (m *ExpirationManager) Register(req *logical.Request, resp *logical.Respons
 	}
 
 	// Encode the entry
-	if err := m.persistEntry(&le); err != nil {
+	if err := m.persistEntry(ctx, &le); err != nil {
 		return "", err
 	}
 
 	// Maintain secondary index by token
-	if err := m.createIndexByToken(le.ClientToken, le.LeaseID); err != nil {
+	if err := m.createIndexByToken(ctx, le.ClientToken, le.LeaseID); err != nil {
 		return "", err
 	}
 
@@ -880,26 +960,20 @@ func (m *ExpirationManager) Register(req *logical.Request, resp *logical.Respons
 // RegisterAuth is used to take an Auth response with an associated lease.
 // The token does not get a LeaseID, but the lease management is handled by
 // the expiration manager.
-func (m *ExpirationManager) RegisterAuth(source string, auth *logical.Auth) error {
+func (m *ExpirationManager) RegisterAuth(ctx context.Context, source string, auth *logical.Auth) error {
 	defer metrics.MeasureSince([]string{"expire", "register-auth"}, time.Now())
 
 	if auth.ClientToken == "" {
-		return fmt.Errorf("expiration: cannot register an auth lease with an empty token")
+		return fmt.Errorf("cannot register an auth lease with an empty token")
 	}
 
 	if strings.Contains(source, "..") {
-		return fmt.Errorf("expiration: %s", consts.ErrPathContainsParentReferences)
+		return consts.ErrPathContainsParentReferences
 	}
 
-	saltedID, err := m.tokenStore.SaltID(auth.ClientToken)
+	saltedID, err := m.tokenStore.SaltID(ctx, auth.ClientToken)
 	if err != nil {
 		return err
-	}
-
-	// If it resp.Period is non-zero, override the TTL value determined
-	// by the backend.
-	if auth.Period > time.Duration(0) {
-		auth.TTL = auth.Period
 	}
 
 	// Create a lease entry
@@ -913,37 +987,46 @@ func (m *ExpirationManager) RegisterAuth(source string, auth *logical.Auth) erro
 	}
 
 	// Encode the entry
-	if err := m.persistEntry(&le); err != nil {
+	if err := m.persistEntry(ctx, &le); err != nil {
 		return err
 	}
 
 	// Setup revocation timer
 	m.updatePending(&le, auth.LeaseTotal())
+
 	return nil
 }
 
 // FetchLeaseTimesByToken is a helper function to use token values to compute
 // the leaseID, rather than pushing that logic back into the token store.
-func (m *ExpirationManager) FetchLeaseTimesByToken(source, token string) (*leaseEntry, error) {
+func (m *ExpirationManager) FetchLeaseTimesByToken(ctx context.Context, source, token string) (*leaseEntry, error) {
 	defer metrics.MeasureSince([]string{"expire", "fetch-lease-times-by-token"}, time.Now())
 
 	// Compute the Lease ID
-	saltedID, err := m.tokenStore.SaltID(token)
+	saltedID, err := m.tokenStore.SaltID(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 	leaseID := path.Join(source, saltedID)
-	return m.FetchLeaseTimes(leaseID)
+	return m.FetchLeaseTimes(ctx, leaseID)
 }
 
 // FetchLeaseTimes is used to fetch the issue time, expiration time, and last
 // renewed time of a lease entry. It returns a leaseEntry itself, but with only
 // those values copied over.
-func (m *ExpirationManager) FetchLeaseTimes(leaseID string) (*leaseEntry, error) {
+func (m *ExpirationManager) FetchLeaseTimes(ctx context.Context, leaseID string) (*leaseEntry, error) {
 	defer metrics.MeasureSince([]string{"expire", "fetch-lease-times"}, time.Now())
 
+	m.pendingLock.RLock()
+	val := m.pending[leaseID]
+	m.pendingLock.RUnlock()
+
+	if val.exportLeaseTimes != nil {
+		return val.exportLeaseTimes, nil
+	}
+
 	// Load the entry
-	le, err := m.loadEntry(leaseID)
+	le, err := m.loadEntry(ctx, leaseID)
 	if err != nil {
 		return nil, err
 	}
@@ -951,6 +1034,11 @@ func (m *ExpirationManager) FetchLeaseTimes(leaseID string) (*leaseEntry, error)
 		return nil, nil
 	}
 
+	return m.leaseTimesForExport(le), nil
+}
+
+// Returns lease times for outside callers based on the full leaseEntry passed in
+func (m *ExpirationManager) leaseTimesForExport(le *leaseEntry) *leaseEntry {
 	ret := &leaseEntry{
 		IssueTime:       le.IssueTime,
 		ExpireTime:      le.ExpireTime,
@@ -967,7 +1055,7 @@ func (m *ExpirationManager) FetchLeaseTimes(leaseID string) (*leaseEntry, error)
 		ret.Auth.TTL = le.Auth.TTL
 	}
 
-	return ret, nil
+	return ret
 }
 
 // updatePending is used to update a pending invocation for a lease
@@ -975,31 +1063,42 @@ func (m *ExpirationManager) updatePending(le *leaseEntry, leaseTotal time.Durati
 	m.pendingLock.Lock()
 	defer m.pendingLock.Unlock()
 
+	m.updatePendingInternal(le, leaseTotal)
+}
+
+// updatePendingInternal is the locked version of updatePending; do not call
+// this without a write lock on m.pending
+func (m *ExpirationManager) updatePendingInternal(le *leaseEntry, leaseTotal time.Duration) {
 	// Check for an existing timer
-	timer, ok := m.pending[le.LeaseID]
+	pending, ok := m.pending[le.LeaseID]
 
 	// If there is no expiry time, don't do anything
 	if le.ExpireTime.IsZero() {
 		// if the timer happened to exist, stop the time and delete it from the
 		// pending timers.
 		if ok {
-			timer.Stop()
+			pending.timer.Stop()
 			delete(m.pending, le.LeaseID)
 		}
 		return
 	}
 
-	// Create entry if it does not exist
-	if !ok {
+	// Create entry if it does not exist or reset if it does
+	if ok {
+		pending.timer.Reset(leaseTotal)
+	} else {
 		timer := time.AfterFunc(leaseTotal, func() {
 			m.expireID(le.LeaseID)
 		})
-		m.pending[le.LeaseID] = timer
-		return
+		pending = pendingInfo{
+			timer: timer,
+		}
 	}
 
 	// Extend the timer by the lease total
-	timer.Reset(leaseTotal)
+	pending.exportLeaseTimes = m.leaseTimesForExport(le)
+
+	m.pending[le.LeaseID] = pending
 }
 
 // expireID is invoked when a given ID is expired
@@ -1010,43 +1109,47 @@ func (m *ExpirationManager) expireID(leaseID string) {
 	m.pendingLock.Unlock()
 
 	for attempt := uint(0); attempt < maxRevokeAttempts; attempt++ {
+		ctx, cancel := context.WithTimeout(m.quitContext, DefaultMaxRequestDuration)
+
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-m.quitCh:
+				cancel()
+			}
+		}()
+
 		select {
 		case <-m.quitCh:
-			m.logger.Error("expiration: shutting down, not attempting further revocation of lease", "lease_id", leaseID)
+			m.logger.Error("shutting down, not attempting further revocation of lease", "lease_id", leaseID)
+			return
+		case <-m.quitContext.Done():
+			m.logger.Error("core context canceled, not attempting further revocation of lease", "lease_id", leaseID)
 			return
 		default:
 		}
 
 		m.coreStateLock.RLock()
-		if m.quitContext.Err() == context.Canceled {
-			m.logger.Error("expiration: core context canceled, not attempting further revocation of lease", "lease_id", leaseID)
-			m.coreStateLock.RUnlock()
-			return
-		}
-
-		err := m.Revoke(leaseID)
-		if err == nil {
-			if m.logger.IsInfo() {
-				m.logger.Info("expiration: revoked lease", "lease_id", leaseID)
-			}
-			m.coreStateLock.RUnlock()
-			return
-		}
-
+		err := m.Revoke(ctx, leaseID)
 		m.coreStateLock.RUnlock()
-		m.logger.Error("expiration: failed to revoke lease", "lease_id", leaseID, "error", err)
+		cancel()
+		if err == nil {
+			return
+		}
+
+		m.logger.Error("failed to revoke lease", "lease_id", leaseID, "error", err)
 		time.Sleep((1 << attempt) * revokeRetryBase)
 	}
-	m.logger.Error("expiration: maximum revoke attempts reached", "lease_id", leaseID)
+	m.logger.Error("maximum revoke attempts reached", "lease_id", leaseID)
 }
 
 // revokeEntry is used to attempt revocation of an internal entry
-func (m *ExpirationManager) revokeEntry(le *leaseEntry) error {
+func (m *ExpirationManager) revokeEntry(ctx context.Context, le *leaseEntry) error {
 	// Revocation of login tokens is special since we can by-pass the
 	// backend and directly interact with the token store
 	if le.Auth != nil {
-		if err := m.tokenStore.RevokeTree(m.quitContext, le.ClientToken); err != nil {
-			return fmt.Errorf("failed to revoke token: %v", err)
+		if err := m.tokenStore.revokeTree(ctx, le.ClientToken); err != nil {
+			return errwrap.Wrapf("failed to revoke token: {{err}}", err)
 		}
 
 		return nil
@@ -1055,29 +1158,28 @@ func (m *ExpirationManager) revokeEntry(le *leaseEntry) error {
 	// Handle standard revocation via backends
 	resp, err := m.router.Route(m.quitContext, logical.RevokeRequest(le.Path, le.Secret, le.Data))
 	if err != nil || (resp != nil && resp.IsError()) {
-		return fmt.Errorf("failed to revoke entry: resp:%#v err:%s", resp, err)
+		return errwrap.Wrapf(fmt.Sprintf("failed to revoke entry: resp: %#v err: {{err}}", resp), err)
 	}
 	return nil
 }
 
 // renewEntry is used to attempt renew of an internal entry
-func (m *ExpirationManager) renewEntry(le *leaseEntry, increment time.Duration) (*logical.Response, error) {
+func (m *ExpirationManager) renewEntry(ctx context.Context, le *leaseEntry, increment time.Duration) (*logical.Response, error) {
 	secret := *le.Secret
 	secret.IssueTime = le.IssueTime
 	secret.Increment = increment
 	secret.LeaseID = ""
-
 	req := logical.RenewRequest(le.Path, &secret, le.Data)
-	resp, err := m.router.Route(m.quitContext, req)
+	resp, err := m.router.Route(ctx, req)
 	if err != nil || (resp != nil && resp.IsError()) {
-		return nil, fmt.Errorf("failed to renew entry: resp:%#v err:%s", resp, err)
+		return nil, errwrap.Wrapf(fmt.Sprintf("failed to renew entry: resp: %#v err: {{err}}", resp), err)
 	}
 	return resp, nil
 }
 
 // renewAuthEntry is used to attempt renew of an auth entry. Only the token
 // store should get the actual token ID intact.
-func (m *ExpirationManager) renewAuthEntry(req *logical.Request, le *leaseEntry, increment time.Duration) (*logical.Response, error) {
+func (m *ExpirationManager) renewAuthEntry(ctx context.Context, req *logical.Request, le *leaseEntry, increment time.Duration) (*logical.Response, error) {
 	auth := *le.Auth
 	auth.IssueTime = le.IssueTime
 	auth.Increment = increment
@@ -1089,15 +1191,15 @@ func (m *ExpirationManager) renewAuthEntry(req *logical.Request, le *leaseEntry,
 
 	authReq := logical.RenewAuthRequest(le.Path, &auth, nil)
 	authReq.Connection = req.Connection
-	resp, err := m.router.Route(m.quitContext, authReq)
+	resp, err := m.router.Route(ctx, authReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to renew entry: %v", err)
+		return nil, errwrap.Wrapf("failed to renew entry: {{err}}", err)
 	}
 	return resp, nil
 }
 
 // loadEntry is used to read a lease entry
-func (m *ExpirationManager) loadEntry(leaseID string) (*leaseEntry, error) {
+func (m *ExpirationManager) loadEntry(ctx context.Context, leaseID string) (*leaseEntry, error) {
 	// Take out the lease locks after we ensure we are in restore mode
 	restoreMode := m.inRestoreMode()
 	if restoreMode {
@@ -1110,22 +1212,22 @@ func (m *ExpirationManager) loadEntry(leaseID string) (*leaseEntry, error) {
 			defer m.unlockLease(leaseID)
 		}
 	}
-	return m.loadEntryInternal(leaseID, restoreMode, true)
+	return m.loadEntryInternal(ctx, leaseID, restoreMode, true)
 }
 
 // loadEntryInternal is used when you need to load an entry but also need to
 // control the lifecycle of the restoreLock
-func (m *ExpirationManager) loadEntryInternal(leaseID string, restoreMode bool, checkRestored bool) (*leaseEntry, error) {
-	out, err := m.idView.Get(m.quitContext, leaseID)
+func (m *ExpirationManager) loadEntryInternal(ctx context.Context, leaseID string, restoreMode bool, checkRestored bool) (*leaseEntry, error) {
+	out, err := m.idView.Get(ctx, leaseID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read lease entry: %v", err)
+		return nil, errwrap.Wrapf("failed to read lease entry: {{err}}", err)
 	}
 	if out == nil {
 		return nil, nil
 	}
 	le, err := decodeLeaseEntry(out.Value)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode lease entry: %v", err)
+		return nil, errwrap.Wrapf("failed to decode lease entry: {{err}}", err)
 	}
 
 	if restoreMode {
@@ -1149,11 +1251,11 @@ func (m *ExpirationManager) loadEntryInternal(leaseID string, restoreMode bool, 
 }
 
 // persistEntry is used to persist a lease entry
-func (m *ExpirationManager) persistEntry(le *leaseEntry) error {
+func (m *ExpirationManager) persistEntry(ctx context.Context, le *leaseEntry) error {
 	// Encode the entry
 	buf, err := le.encode()
 	if err != nil {
-		return fmt.Errorf("failed to encode lease entry: %v", err)
+		return errwrap.Wrapf("failed to encode lease entry: {{err}}", err)
 	}
 
 	// Write out to the view
@@ -1164,28 +1266,28 @@ func (m *ExpirationManager) persistEntry(le *leaseEntry) error {
 	if le.Auth != nil && len(le.Auth.Policies) == 1 && le.Auth.Policies[0] == "root" {
 		ent.SealWrap = true
 	}
-	if err := m.idView.Put(m.quitContext, &ent); err != nil {
-		return fmt.Errorf("failed to persist lease entry: %v", err)
+	if err := m.idView.Put(ctx, &ent); err != nil {
+		return errwrap.Wrapf("failed to persist lease entry: {{err}}", err)
 	}
 	return nil
 }
 
 // deleteEntry is used to delete a lease entry
-func (m *ExpirationManager) deleteEntry(leaseID string) error {
-	if err := m.idView.Delete(m.quitContext, leaseID); err != nil {
-		return fmt.Errorf("failed to delete lease entry: %v", err)
+func (m *ExpirationManager) deleteEntry(ctx context.Context, leaseID string) error {
+	if err := m.idView.Delete(ctx, leaseID); err != nil {
+		return errwrap.Wrapf("failed to delete lease entry: {{err}}", err)
 	}
 	return nil
 }
 
 // createIndexByToken creates a secondary index from the token to a lease entry
-func (m *ExpirationManager) createIndexByToken(token, leaseID string) error {
-	saltedID, err := m.tokenStore.SaltID(token)
+func (m *ExpirationManager) createIndexByToken(ctx context.Context, token, leaseID string) error {
+	saltedID, err := m.tokenStore.SaltID(ctx, token)
 	if err != nil {
 		return err
 	}
 
-	leaseSaltedID, err := m.tokenStore.SaltID(leaseID)
+	leaseSaltedID, err := m.tokenStore.SaltID(ctx, leaseID)
 	if err != nil {
 		return err
 	}
@@ -1194,26 +1296,26 @@ func (m *ExpirationManager) createIndexByToken(token, leaseID string) error {
 		Key:   saltedID + "/" + leaseSaltedID,
 		Value: []byte(leaseID),
 	}
-	if err := m.tokenView.Put(m.quitContext, &ent); err != nil {
-		return fmt.Errorf("failed to persist lease index entry: %v", err)
+	if err := m.tokenView.Put(ctx, &ent); err != nil {
+		return errwrap.Wrapf("failed to persist lease index entry: {{err}}", err)
 	}
 	return nil
 }
 
 // indexByToken looks up the secondary index from the token to a lease entry
-func (m *ExpirationManager) indexByToken(token, leaseID string) (*logical.StorageEntry, error) {
-	saltedID, err := m.tokenStore.SaltID(token)
+func (m *ExpirationManager) indexByToken(ctx context.Context, token, leaseID string) (*logical.StorageEntry, error) {
+	saltedID, err := m.tokenStore.SaltID(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 
-	leaseSaltedID, err := m.tokenStore.SaltID(leaseID)
+	leaseSaltedID, err := m.tokenStore.SaltID(ctx, leaseID)
 	if err != nil {
 		return nil, err
 	}
 
 	key := saltedID + "/" + leaseSaltedID
-	entry, err := m.tokenView.Get(m.quitContext, key)
+	entry, err := m.tokenView.Get(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to look up secondary index entry")
 	}
@@ -1221,44 +1323,94 @@ func (m *ExpirationManager) indexByToken(token, leaseID string) (*logical.Storag
 }
 
 // removeIndexByToken removes the secondary index from the token to a lease entry
-func (m *ExpirationManager) removeIndexByToken(token, leaseID string) error {
-	saltedID, err := m.tokenStore.SaltID(token)
+func (m *ExpirationManager) removeIndexByToken(ctx context.Context, token, leaseID string) error {
+	saltedID, err := m.tokenStore.SaltID(ctx, token)
 	if err != nil {
 		return err
 	}
 
-	leaseSaltedID, err := m.tokenStore.SaltID(leaseID)
+	leaseSaltedID, err := m.tokenStore.SaltID(ctx, leaseID)
 	if err != nil {
 		return err
 	}
 
 	key := saltedID + "/" + leaseSaltedID
-	if err := m.tokenView.Delete(m.quitContext, key); err != nil {
-		return fmt.Errorf("failed to delete lease index entry: %v", err)
+	if err := m.tokenView.Delete(ctx, key); err != nil {
+		return errwrap.Wrapf("failed to delete lease index entry: {{err}}", err)
 	}
 	return nil
 }
 
-// lookupByToken is used to lookup all the leaseID's via the
-func (m *ExpirationManager) lookupByToken(token string) ([]string, error) {
-	saltedID, err := m.tokenStore.SaltID(token)
+// CreateOrFetchRevocationLeaseByToken is used to create or fetch the matching
+// leaseID for a particular token. The lease is set to expire immediately after
+// it's created.
+func (m *ExpirationManager) CreateOrFetchRevocationLeaseByToken(ctx context.Context, te *logical.TokenEntry) (string, error) {
+	// Fetch the saltedID of the token and construct the leaseID
+	saltedID, err := m.tokenStore.SaltID(ctx, te.ID)
+	if err != nil {
+		return "", err
+	}
+	leaseID := path.Join(te.Path, saltedID)
+
+	// Load the entry
+	le, err := m.loadEntry(ctx, leaseID)
+	if err != nil {
+		return "", err
+	}
+
+	// If there's no associated leaseEntry for the token, we create one
+	if le == nil {
+		auth := &logical.Auth{
+			ClientToken: te.ID,
+			LeaseOptions: logical.LeaseOptions{
+				TTL: time.Nanosecond,
+			},
+		}
+
+		if strings.Contains(te.Path, "..") {
+			return "", consts.ErrPathContainsParentReferences
+		}
+
+		// Create a lease entry
+		now := time.Now()
+		le = &leaseEntry{
+			LeaseID:     leaseID,
+			ClientToken: auth.ClientToken,
+			Auth:        auth,
+			Path:        te.Path,
+			IssueTime:   now,
+			ExpireTime:  now.Add(time.Nanosecond),
+		}
+
+		// Encode the entry
+		if err := m.persistEntry(ctx, le); err != nil {
+			return "", err
+		}
+	}
+
+	return le.LeaseID, nil
+}
+
+// lookupLeasesByToken is used to lookup all the leaseID's via the tokenID
+func (m *ExpirationManager) lookupLeasesByToken(ctx context.Context, token string) ([]string, error) {
+	saltedID, err := m.tokenStore.SaltID(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 
 	// Scan via the index for sub-leases
 	prefix := saltedID + "/"
-	subKeys, err := m.tokenView.List(m.quitContext, prefix)
+	subKeys, err := m.tokenView.List(ctx, prefix)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list leases: %v", err)
+		return nil, errwrap.Wrapf("failed to list leases: {{err}}", err)
 	}
 
 	// Read each index entry
 	leaseIDs := make([]string, 0, len(subKeys))
 	for _, sub := range subKeys {
-		out, err := m.tokenView.Get(m.quitContext, prefix+sub)
+		out, err := m.tokenView.Get(ctx, prefix+sub)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read lease index: %v", err)
+			return nil, errwrap.Wrapf("failed to read lease index: {{err}}", err)
 		}
 		if out == nil {
 			continue
@@ -1276,11 +1428,11 @@ func (m *ExpirationManager) emitMetrics() {
 	metrics.SetGauge([]string{"expire", "num_leases"}, float32(num))
 	// Check if lease count is greater than the threshold
 	if num > maxLeaseThreshold {
-		if atomic.LoadUint32(&m.leaseCheckCounter) > 59 {
-			m.logger.Warn("expiration: lease count exceeds warning lease threshold")
-			atomic.StoreUint32(&m.leaseCheckCounter, 0)
+		if atomic.LoadUint32(m.leaseCheckCounter) > 59 {
+			m.logger.Warn("lease count exceeds warning lease threshold")
+			atomic.StoreUint32(m.leaseCheckCounter, 0)
 		} else {
-			atomic.AddUint32(&m.leaseCheckCounter, 1)
+			atomic.AddUint32(m.leaseCheckCounter, 1)
 		}
 	}
 }

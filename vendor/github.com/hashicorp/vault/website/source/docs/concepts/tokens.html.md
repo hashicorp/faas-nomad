@@ -13,7 +13,7 @@ can be used directly or [auth methods](/docs/concepts/auth.html)
 can be used to dynamically generate tokens based on external identities.
 
 If you've gone through the getting started guide, you probably noticed that
-`vault server -dev` (or `vault init` for a non-dev server) outputs an
+`vault server -dev` (or `vault operator init` for a non-dev server) outputs an
 initial "root token." This is the first method of authentication for Vault.
 It is also the only auth method that cannot be disabled.
 
@@ -50,11 +50,11 @@ type of token within Vault that can be set to never expire without any renewal
 needed. As a result, it is purposefully hard to create root tokens; in fact, as
 of version 0.6.1, there are only three ways to create root tokens:
 
-1. The initial root token generated at `vault init` time -- this token has no
+1. The initial root token generated at `vault operator init` time -- this token has no
    expiration
 2. By using another root token; a root token with an expiration cannot create a
    root token that never expires
-3. By using `vault generate-root` ([example](/guides/operations/generate-root.html))
+3. By using `vault operator generate-root` ([example](/guides/operations/generate-root.html))
    with the permission of a quorum of unseal key holders
 
 Root tokens are useful in development but should be extremely carefully guarded
@@ -62,9 +62,8 @@ in production. In fact, the Vault team recommends that root tokens are only
 used for just enough initial setup (usually, setting up auth methods
 and policies necessary to allow administrators to acquire more limited tokens)
 or in emergencies, and are revoked immediately after they are no longer needed.
-If a new root token is needed, the `generate-root` command and associated [API
-endpoint](/api/system/generate-root.html) can be
-used to generate one on-the-fly.
+If a new root token is needed, the `operator generate-root` command and associated
+[API endpoint](/api/system/generate-root.html) can be used to generate one on-the-fly.
 
 It is also good security practice for there to be multiple eyes on a terminal
 whenever a root token is live. This way multiple people can verify as to the
@@ -205,5 +204,14 @@ to be given periodic tokens.
 
 There are a few important things to know when using periodic tokens:
 
-* When a periodic token is created via a token store role, the _current_ value of the role's period setting will be used at renewal time
-* A token with both a period and an explicit max TTL will act like a periodic token but will be revoked when the explicit max TTL is reached
+* When a periodic token is created via a token store role, the _current_ value
+  of the role's period setting will be used at renewal time
+* A token with both a period and an explicit max TTL will act like a periodic
+  token but will be revoked when the explicit max TTL is reached
+
+### CIDR-Bound Tokens
+
+Some tokens are able to be bound to CIDR(s) that restrict the range of client
+IPs allowed to use them. These affect all tokens except for non-expiring root
+tokens (those with a TTL of zero). If a root token has an expiration, it also
+is affected by CIDR-binding.
