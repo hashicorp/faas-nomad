@@ -206,7 +206,7 @@ func (b *backend) awsPublicCertificates(ctx context.Context, s logical.Storage, 
 			return nil, err
 		}
 		if certEntry == nil {
-			return nil, fmt.Errorf("certificate storage has a nil entry under the name:%s\n", cert)
+			return nil, fmt.Errorf("certificate storage has a nil entry under the name: %q", cert)
 		}
 		// Append relevant certificates only
 		if (isPkcs && certEntry.Type == "pkcs7") ||
@@ -416,14 +416,14 @@ func (b *backend) pathConfigCertificateCreateUpdate(ctx context.Context, req *lo
 }
 
 // Struct awsPublicCert holds the AWS Public Key that is used to verify the PKCS#7 signature
-// of the instnace identity document.
+// of the instance identity document.
 type awsPublicCert struct {
-	AWSPublicCert string `json:"aws_public_cert" structs:"aws_public_cert" mapstructure:"aws_public_cert"`
-	Type          string `json:"type" structs:"type" mapstructure:"type"`
+	AWSPublicCert string `json:"aws_public_cert"`
+	Type          string `json:"type"`
 }
 
 const pathConfigCertificateSyn = `
-Adds the AWS Public Key that is used to verify the PKCS#7 signature of the identidy document.
+Adds the AWS Public Key that is used to verify the PKCS#7 signature of the identity document.
 `
 
 const pathConfigCertificateDesc = `

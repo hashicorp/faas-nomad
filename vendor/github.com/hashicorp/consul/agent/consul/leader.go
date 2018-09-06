@@ -4,16 +4,20 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/armon/go-metrics"
 	"github.com/hashicorp/consul/acl"
+	"github.com/hashicorp/consul/agent/connect"
+	ca "github.com/hashicorp/consul/agent/connect/ca"
 	"github.com/hashicorp/consul/agent/consul/autopilot"
 	"github.com/hashicorp/consul/agent/metadata"
 	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/types"
+	uuid "github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/go-version"
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
@@ -24,7 +28,14 @@ const (
 	barrierWriteTimeout = 2 * time.Minute
 )
 
-var minAutopilotVersion = version.Must(version.NewVersion("0.8.0"))
+var (
+	// caRootPruneInterval is how often we check for stale CARoots to remove.
+	caRootPruneInterval = time.Hour
+
+	// minAutopilotVersion is the minimum Consul version in which Autopilot features
+	// are supported.
+	minAutopilotVersion = version.Must(version.NewVersion("0.8.0"))
+)
 
 // monitorLeadership is used to monitor if we acquire or lose our role
 // as the leader in the Raft cluster. There is some work the leader is
@@ -116,13 +127,17 @@ RECONCILE:
 		s.logger.Printf("[ERR] consul: failed to wait for barrier: %v", err)
 		goto WAIT
 	}
-	metrics.MeasureSince([]string{"consul", "leader", "barrier"}, start)
 	metrics.MeasureSince([]string{"leader", "barrier"}, start)
 
 	// Check if we need to handle initial leadership actions
 	if !establishedLeader {
 		if err := s.establishLeadership(); err != nil {
 			s.logger.Printf("[ERR] consul: failed to establish leadership: %v", err)
+			// Immediately revoke leadership since we didn't successfully
+			// establish leadership.
+			if err := s.revokeLeadership(); err != nil {
+				s.logger.Printf("[ERR] consul: failed to revoke leadership: %v", err)
+			}
 			goto WAIT
 		}
 		establishedLeader = true
@@ -206,6 +221,14 @@ func (s *Server) establishLeadership() error {
 
 	s.getOrCreateAutopilotConfig()
 	s.autopilot.Start()
+
+	// todo(kyhavlov): start a goroutine here for handling periodic CA rotation
+	if err := s.initializeCA(); err != nil {
+		return err
+	}
+
+	s.startCARootPruning()
+
 	s.setConsistentReadReady()
 	return nil
 }
@@ -221,6 +244,10 @@ func (s *Server) revokeLeadership() error {
 	if err := s.clearAllSessionTimers(); err != nil {
 		return err
 	}
+
+	s.stopCARootPruning()
+
+	s.setCAProvider(nil, nil)
 
 	s.resetConsistentReadReady()
 	s.autopilot.Stop()
@@ -355,6 +382,281 @@ func (s *Server) getOrCreateAutopilotConfig() *autopilot.Config {
 	return config
 }
 
+// initializeCAConfig is used to initialize the CA config if necessary
+// when setting up the CA during establishLeadership
+func (s *Server) initializeCAConfig() (*structs.CAConfiguration, error) {
+	state := s.fsm.State()
+	_, config, err := state.CAConfig()
+	if err != nil {
+		return nil, err
+	}
+	if config != nil {
+		return config, nil
+	}
+
+	config = s.config.CAConfig
+	if config.ClusterID == "" {
+		id, err := uuid.GenerateUUID()
+		if err != nil {
+			return nil, err
+		}
+		config.ClusterID = id
+	}
+
+	req := structs.CARequest{
+		Op:     structs.CAOpSetConfig,
+		Config: config,
+	}
+	if _, err = s.raftApply(structs.ConnectCARequestType, req); err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
+// initializeCA sets up the CA provider when gaining leadership, bootstrapping
+// the root in the state store if necessary.
+func (s *Server) initializeCA() error {
+	// Bail if connect isn't enabled.
+	if !s.config.ConnectEnabled {
+		return nil
+	}
+
+	conf, err := s.initializeCAConfig()
+	if err != nil {
+		return err
+	}
+
+	// Initialize the right provider based on the config
+	provider, err := s.createCAProvider(conf)
+	if err != nil {
+		return err
+	}
+
+	// Get the active root cert from the CA
+	rootPEM, err := provider.ActiveRoot()
+	if err != nil {
+		return fmt.Errorf("error getting root cert: %v", err)
+	}
+
+	rootCA, err := parseCARoot(rootPEM, conf.Provider)
+	if err != nil {
+		return err
+	}
+
+	// Check if the CA root is already initialized and exit if it is,
+	// adding on any existing intermediate certs since they aren't directly
+	// tied to the provider.
+	// Every change to the CA after this initial bootstrapping should
+	// be done through the rotation process.
+	state := s.fsm.State()
+	_, activeRoot, err := state.CARootActive(nil)
+	if err != nil {
+		return err
+	}
+	if activeRoot != nil {
+		// This state shouldn't be possible to get into because we update the root and
+		// CA config in the same FSM operation.
+		if activeRoot.ID != rootCA.ID {
+			return fmt.Errorf("stored CA root %q is not the active root (%s)", rootCA.ID, activeRoot.ID)
+		}
+
+		rootCA.IntermediateCerts = activeRoot.IntermediateCerts
+		s.setCAProvider(provider, rootCA)
+
+		return nil
+	}
+
+	// Get the highest index
+	idx, _, err := state.CARoots(nil)
+	if err != nil {
+		return err
+	}
+
+	// Store the root cert in raft
+	resp, err := s.raftApply(structs.ConnectCARequestType, &structs.CARequest{
+		Op:    structs.CAOpSetRoots,
+		Index: idx,
+		Roots: []*structs.CARoot{rootCA},
+	})
+	if err != nil {
+		s.logger.Printf("[ERR] connect: Apply failed %v", err)
+		return err
+	}
+	if respErr, ok := resp.(error); ok {
+		return respErr
+	}
+
+	s.setCAProvider(provider, rootCA)
+
+	s.logger.Printf("[INFO] connect: initialized CA with provider %q", conf.Provider)
+
+	return nil
+}
+
+// parseCARoot returns a filled-in structs.CARoot from a raw PEM value.
+func parseCARoot(pemValue, provider string) (*structs.CARoot, error) {
+	id, err := connect.CalculateCertFingerprint(pemValue)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing root fingerprint: %v", err)
+	}
+	rootCert, err := connect.ParseCert(pemValue)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing root cert: %v", err)
+	}
+	return &structs.CARoot{
+		ID:           id,
+		Name:         fmt.Sprintf("%s CA Root Cert", strings.Title(provider)),
+		SerialNumber: rootCert.SerialNumber.Uint64(),
+		SigningKeyID: connect.HexString(rootCert.AuthorityKeyId),
+		NotBefore:    rootCert.NotBefore,
+		NotAfter:     rootCert.NotAfter,
+		RootCert:     pemValue,
+		Active:       true,
+	}, nil
+}
+
+// createProvider returns a connect CA provider from the given config.
+func (s *Server) createCAProvider(conf *structs.CAConfiguration) (ca.Provider, error) {
+	switch conf.Provider {
+	case structs.ConsulCAProvider:
+		return ca.NewConsulProvider(conf.Config, &consulCADelegate{s})
+	case structs.VaultCAProvider:
+		return ca.NewVaultProvider(conf.Config, conf.ClusterID)
+	default:
+		return nil, fmt.Errorf("unknown CA provider %q", conf.Provider)
+	}
+}
+
+func (s *Server) getCAProvider() (ca.Provider, *structs.CARoot) {
+	retries := 0
+	var result ca.Provider
+	var resultRoot *structs.CARoot
+	for result == nil {
+		s.caProviderLock.RLock()
+		result = s.caProvider
+		resultRoot = s.caProviderRoot
+		s.caProviderLock.RUnlock()
+
+		// In cases where an agent is started with managed proxies, we may ask
+		// for the provider before establishLeadership completes. If we're the
+		// leader, then wait and get the provider again
+		if result == nil && s.IsLeader() && retries < 10 {
+			retries++
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+
+		break
+	}
+
+	return result, resultRoot
+}
+
+func (s *Server) setCAProvider(newProvider ca.Provider, root *structs.CARoot) {
+	s.caProviderLock.Lock()
+	defer s.caProviderLock.Unlock()
+	s.caProvider = newProvider
+	s.caProviderRoot = root
+}
+
+// startCARootPruning starts a goroutine that looks for stale CARoots
+// and removes them from the state store.
+func (s *Server) startCARootPruning() {
+	s.caPruningLock.Lock()
+	defer s.caPruningLock.Unlock()
+
+	if s.caPruningEnabled {
+		return
+	}
+
+	s.caPruningCh = make(chan struct{})
+
+	go func() {
+		ticker := time.NewTicker(caRootPruneInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-s.caPruningCh:
+				return
+			case <-ticker.C:
+				if err := s.pruneCARoots(); err != nil {
+					s.logger.Printf("[ERR] connect: error pruning CA roots: %v", err)
+				}
+			}
+		}
+	}()
+
+	s.caPruningEnabled = true
+}
+
+// pruneCARoots looks for any CARoots that have been rotated out and expired.
+func (s *Server) pruneCARoots() error {
+	if !s.config.ConnectEnabled {
+		return nil
+	}
+
+	state := s.fsm.State()
+	idx, roots, err := state.CARoots(nil)
+	if err != nil {
+		return err
+	}
+
+	_, caConf, err := state.CAConfig()
+	if err != nil {
+		return err
+	}
+
+	common, err := caConf.GetCommonConfig()
+	if err != nil {
+		return err
+	}
+
+	var newRoots structs.CARoots
+	for _, r := range roots {
+		if !r.Active && !r.RotatedOutAt.IsZero() && time.Now().Sub(r.RotatedOutAt) > common.LeafCertTTL*2 {
+			s.logger.Printf("[INFO] connect: pruning old unused root CA (ID: %s)", r.ID)
+			continue
+		}
+		newRoot := *r
+		newRoots = append(newRoots, &newRoot)
+	}
+
+	// Return early if there's nothing to remove.
+	if len(newRoots) == len(roots) {
+		return nil
+	}
+
+	// Commit the new root state.
+	var args structs.CARequest
+	args.Op = structs.CAOpSetRoots
+	args.Index = idx
+	args.Roots = newRoots
+	resp, err := s.raftApply(structs.ConnectCARequestType, args)
+	if err != nil {
+		return err
+	}
+	if respErr, ok := resp.(error); ok {
+		return respErr
+	}
+
+	return nil
+}
+
+// stopCARootPruning stops the CARoot pruning process.
+func (s *Server) stopCARootPruning() {
+	s.caPruningLock.Lock()
+	defer s.caPruningLock.Unlock()
+
+	if !s.caPruningEnabled {
+		return
+	}
+
+	close(s.caPruningCh)
+	s.caPruningEnabled = false
+}
+
 // reconcileReaped is used to reconcile nodes that have failed and been reaped
 // from Serf but remain in the catalog. This is done by looking for unknown nodes with serfHealth checks registered.
 // We generate a "reap" event to cause the node to be cleaned up.
@@ -437,7 +739,6 @@ func (s *Server) reconcileMember(member serf.Member) error {
 		s.logger.Printf("[WARN] consul: skipping reconcile of node %v", member)
 		return nil
 	}
-	defer metrics.MeasureSince([]string{"consul", "leader", "reconcileMember"}, time.Now())
 	defer metrics.MeasureSince([]string{"leader", "reconcileMember"}, time.Now())
 	var err error
 	switch member.Status {
@@ -798,7 +1099,6 @@ func (s *Server) removeConsulServer(m serf.Member, port int) error {
 // through Raft to ensure consistency. We do this outside the leader loop
 // to avoid blocking.
 func (s *Server) reapTombstones(index uint64) {
-	defer metrics.MeasureSince([]string{"consul", "leader", "reapTombstones"}, time.Now())
 	defer metrics.MeasureSince([]string{"leader", "reapTombstones"}, time.Now())
 	req := structs.TombstoneRequest{
 		Datacenter: s.config.Datacenter,

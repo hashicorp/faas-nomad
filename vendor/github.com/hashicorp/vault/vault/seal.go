@@ -3,11 +3,13 @@ package vault
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
 
+	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/physical"
 
@@ -86,8 +88,11 @@ type Seal interface {
 }
 
 type defaultSeal struct {
-	config atomic.Value
-	core   *Core
+	config                     atomic.Value
+	core                       *Core
+	PretendToAllowStoredShares bool
+	PretendToAllowRecoveryKeys bool
+	PretendRecoveryKey         []byte
 }
 
 func NewDefaultSeal() Seal {
@@ -120,19 +125,19 @@ func (d *defaultSeal) BarrierType() string {
 }
 
 func (d *defaultSeal) StoredKeysSupported() bool {
-	return false
+	return d.PretendToAllowStoredShares
 }
 
 func (d *defaultSeal) RecoveryKeySupported() bool {
-	return false
+	return d.PretendToAllowRecoveryKeys
 }
 
 func (d *defaultSeal) SetStoredKeys(ctx context.Context, keys [][]byte) error {
-	return fmt.Errorf("core: stored keys are not supported")
+	return fmt.Errorf("stored keys are not supported")
 }
 
 func (d *defaultSeal) GetStoredKeys(ctx context.Context) ([][]byte, error) {
-	return nil, fmt.Errorf("core: stored keys are not supported")
+	return nil, fmt.Errorf("stored keys are not supported")
 }
 
 func (d *defaultSeal) BarrierConfig(ctx context.Context) (*SealConfig, error) {
@@ -147,13 +152,13 @@ func (d *defaultSeal) BarrierConfig(ctx context.Context) (*SealConfig, error) {
 	// Fetch the core configuration
 	pe, err := d.core.physical.Get(ctx, barrierSealConfigPath)
 	if err != nil {
-		d.core.logger.Error("core: failed to read seal configuration", "error", err)
-		return nil, fmt.Errorf("failed to check seal configuration: %v", err)
+		d.core.logger.Error("failed to read seal configuration", "error", err)
+		return nil, errwrap.Wrapf("failed to check seal configuration: {{err}}", err)
 	}
 
 	// If the seal configuration is missing, we are not initialized
 	if pe == nil {
-		d.core.logger.Info("core: seal configuration missing, not initialized")
+		d.core.logger.Info("seal configuration missing, not initialized")
 		return nil, nil
 	}
 
@@ -161,8 +166,8 @@ func (d *defaultSeal) BarrierConfig(ctx context.Context) (*SealConfig, error) {
 
 	// Decode the barrier entry
 	if err := jsonutil.DecodeJSON(pe.Value, &conf); err != nil {
-		d.core.logger.Error("core: failed to decode seal configuration", "error", err)
-		return nil, fmt.Errorf("failed to decode seal configuration: %v", err)
+		d.core.logger.Error("failed to decode seal configuration", "error", err)
+		return nil, errwrap.Wrapf("failed to decode seal configuration: {{err}}", err)
 	}
 
 	switch conf.Type {
@@ -171,14 +176,14 @@ func (d *defaultSeal) BarrierConfig(ctx context.Context) (*SealConfig, error) {
 		conf.Type = d.BarrierType()
 	case d.BarrierType():
 	default:
-		d.core.logger.Error("core: barrier seal type does not match loaded type", "barrier_seal_type", conf.Type, "loaded_seal_type", d.BarrierType())
-		return nil, fmt.Errorf("barrier seal type of %s does not match loaded type of %s", conf.Type, d.BarrierType())
+		d.core.logger.Error("barrier seal type does not match loaded type", "barrier_seal_type", conf.Type, "loaded_seal_type", d.BarrierType())
+		return nil, fmt.Errorf("barrier seal type of %q does not match loaded type of %q", conf.Type, d.BarrierType())
 	}
 
 	// Check for a valid seal configuration
 	if err := conf.Validate(); err != nil {
-		d.core.logger.Error("core: invalid seal configuration", "error", err)
-		return nil, fmt.Errorf("seal validation failed: %v", err)
+		d.core.logger.Error("invalid seal configuration", "error", err)
+		return nil, errwrap.Wrapf("seal validation failed: {{err}}", err)
 	}
 
 	d.config.Store(&conf)
@@ -202,7 +207,7 @@ func (d *defaultSeal) SetBarrierConfig(ctx context.Context, config *SealConfig) 
 	// Encode the seal configuration
 	buf, err := json.Marshal(config)
 	if err != nil {
-		return fmt.Errorf("failed to encode seal configuration: %v", err)
+		return errwrap.Wrapf("failed to encode seal configuration: {{err}}", err)
 	}
 
 	// Store the seal configuration
@@ -212,8 +217,8 @@ func (d *defaultSeal) SetBarrierConfig(ctx context.Context, config *SealConfig) 
 	}
 
 	if err := d.core.physical.Put(ctx, pe); err != nil {
-		d.core.logger.Error("core: failed to write seal configuration", "error", err)
-		return fmt.Errorf("failed to write seal configuration: %v", err)
+		d.core.logger.Error("failed to write seal configuration", "error", err)
+		return errwrap.Wrapf("failed to write seal configuration: {{err}}", err)
 	}
 
 	d.config.Store(config.Clone())
@@ -222,22 +227,44 @@ func (d *defaultSeal) SetBarrierConfig(ctx context.Context, config *SealConfig) 
 }
 
 func (d *defaultSeal) RecoveryType() string {
+	if d.PretendToAllowRecoveryKeys {
+		return RecoveryTypeShamir
+	}
 	return RecoveryTypeUnsupported
 }
 
 func (d *defaultSeal) RecoveryConfig(ctx context.Context) (*SealConfig, error) {
+	if d.PretendToAllowRecoveryKeys {
+		return &SealConfig{
+			SecretShares:    5,
+			SecretThreshold: 3,
+		}, nil
+	}
 	return nil, fmt.Errorf("recovery not supported")
 }
 
 func (d *defaultSeal) SetRecoveryConfig(ctx context.Context, config *SealConfig) error {
+	if d.PretendToAllowRecoveryKeys {
+		return nil
+	}
 	return fmt.Errorf("recovery not supported")
 }
 
-func (d *defaultSeal) VerifyRecoveryKey(context.Context, []byte) error {
+func (d *defaultSeal) VerifyRecoveryKey(ctx context.Context, key []byte) error {
+	if d.PretendToAllowRecoveryKeys {
+		if subtle.ConstantTimeCompare(key, d.PretendRecoveryKey) == 1 {
+			return nil
+		}
+		return fmt.Errorf("mismatch")
+	}
 	return fmt.Errorf("recovery not supported")
 }
 
 func (d *defaultSeal) SetRecoveryKey(ctx context.Context, key []byte) error {
+	if d.PretendToAllowRecoveryKeys {
+		d.PretendRecoveryKey = key
+		return nil
+	}
 	return fmt.Errorf("recovery not supported")
 }
 
@@ -271,6 +298,25 @@ type SealConfig struct {
 
 	// How many keys to store, for seals that support storage.
 	StoredShares int `json:"stored_shares"`
+
+	// Stores the progress of the rekey operation (key shares)
+	RekeyProgress [][]byte `json:"-"`
+
+	// VerificationRequired indicates that after a rekey validation must be
+	// performed (via providing shares from the new key) before the new key is
+	// actually installed. This is omitted from JSON as we don't persist the
+	// new key, it lives only in memory.
+	VerificationRequired bool `json:"-"`
+
+	// VerificationKey is the new key that we will roll to after successful
+	// validation
+	VerificationKey []byte `json:"-"`
+
+	// VerificationNonce stores the current operation nonce for verification
+	VerificationNonce string `json:"-"`
+
+	// Stores the progress of the verification operation (key shares)
+	VerificationProgress [][]byte `json:"-"`
 }
 
 // Validate is used to sanity check the seal configuration
@@ -303,11 +349,11 @@ func (s *SealConfig) Validate() error {
 		for _, keystring := range s.PGPKeys {
 			data, err := base64.StdEncoding.DecodeString(keystring)
 			if err != nil {
-				return fmt.Errorf("Error decoding given PGP key: %s", err)
+				return errwrap.Wrapf("error decoding given PGP key: {{err}}", err)
 			}
 			_, err = openpgp.ReadEntity(packet.NewReader(bytes.NewBuffer(data)))
 			if err != nil {
-				return fmt.Errorf("Error parsing given PGP key: %s", err)
+				return errwrap.Wrapf("error parsing given PGP key: {{err}}", err)
 			}
 		}
 	}
@@ -316,16 +362,22 @@ func (s *SealConfig) Validate() error {
 
 func (s *SealConfig) Clone() *SealConfig {
 	ret := &SealConfig{
-		Type:            s.Type,
-		SecretShares:    s.SecretShares,
-		SecretThreshold: s.SecretThreshold,
-		Nonce:           s.Nonce,
-		Backup:          s.Backup,
-		StoredShares:    s.StoredShares,
+		Type:                 s.Type,
+		SecretShares:         s.SecretShares,
+		SecretThreshold:      s.SecretThreshold,
+		Nonce:                s.Nonce,
+		Backup:               s.Backup,
+		StoredShares:         s.StoredShares,
+		VerificationRequired: s.VerificationRequired,
+		VerificationNonce:    s.VerificationNonce,
 	}
 	if len(s.PGPKeys) > 0 {
 		ret.PGPKeys = make([]string, len(s.PGPKeys))
 		copy(ret.PGPKeys, s.PGPKeys)
+	}
+	if len(s.VerificationKey) > 0 {
+		ret.VerificationKey = make([]byte, len(s.VerificationKey))
+		copy(ret.VerificationKey, s.VerificationKey)
 	}
 	return ret
 }

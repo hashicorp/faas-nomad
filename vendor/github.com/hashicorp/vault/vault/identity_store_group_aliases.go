@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/errwrap"
 	memdb "github.com/hashicorp/go-memdb"
 	"github.com/hashicorp/vault/helper/identity"
 	"github.com/hashicorp/vault/logical"
@@ -61,12 +62,13 @@ func groupAliasPaths(i *IdentityStore) []*framework.Path {
 				},
 			},
 			Callbacks: map[logical.Operation]framework.OperationFunc{
+				logical.UpdateOperation: i.pathGroupAliasIDUpdate(),
 				logical.ReadOperation:   i.pathGroupAliasIDRead(),
 				logical.DeleteOperation: i.pathGroupAliasIDDelete(),
 			},
 
 			HelpSynopsis:    strings.TrimSpace(groupAliasHelp["group-alias-by-id"][0]),
-			HelpDescription: strings.TrimSpace(groupHelp["group-alias-by-id"][1]),
+			HelpDescription: strings.TrimSpace(groupAliasHelp["group-alias-by-id"][1]),
 		},
 		{
 			Pattern: "group-alias/id/?$",
@@ -74,8 +76,8 @@ func groupAliasPaths(i *IdentityStore) []*framework.Path {
 				logical.ListOperation: i.pathGroupAliasIDList(),
 			},
 
-			HelpSynopsis:    strings.TrimSpace(entityHelp["group-alias-id-list"][0]),
-			HelpDescription: strings.TrimSpace(entityHelp["group-alias-id-list"][1]),
+			HelpSynopsis:    strings.TrimSpace(groupAliasHelp["group-alias-id-list"][0]),
+			HelpDescription: strings.TrimSpace(groupAliasHelp["group-alias-id-list"][1]),
 		},
 	}
 }
@@ -151,9 +153,13 @@ func (i *IdentityStore) handleGroupAliasUpdateCommon(req *logical.Request, d *fr
 		return logical.ErrorResponse("missing mount_accessor"), nil
 	}
 
-	mountValidationResp := i.validateMountAccessorFunc(mountAccessor)
+	mountValidationResp := i.core.router.validateMountByAccessor(mountAccessor)
 	if mountValidationResp == nil {
 		return logical.ErrorResponse(fmt.Sprintf("invalid mount accessor %q", mountAccessor)), nil
+	}
+
+	if mountValidationResp.MountLocal {
+		return logical.ErrorResponse(fmt.Sprintf("mount_accessor %q is of a local mount", mountAccessor)), nil
 	}
 
 	groupAliasByFactors, err := i.MemDBAliasByFactors(mountValidationResp.MountAccessor, groupAliasName, false, true)
@@ -204,8 +210,9 @@ func (i *IdentityStore) handleGroupAliasUpdateCommon(req *logical.Request, d *fr
 	}
 
 	group.Alias.Name = groupAliasName
-	group.Alias.MountType = mountValidationResp.MountType
 	group.Alias.MountAccessor = mountValidationResp.MountAccessor
+	// Explicitly correct for previous versions that persisted this
+	group.Alias.MountType = ""
 
 	err = i.sanitizeAndUpsertGroup(group, nil)
 	if err != nil {
@@ -246,7 +253,48 @@ func (i *IdentityStore) pathGroupAliasIDDelete() framework.OperationFunc {
 			return logical.ErrorResponse("missing group alias ID"), nil
 		}
 
-		return nil, i.deleteGroupAlias(groupAliasID)
+		i.groupLock.Lock()
+		defer i.groupLock.Unlock()
+
+		txn := i.db.Txn(true)
+		defer txn.Abort()
+
+		alias, err := i.MemDBAliasByIDInTxn(txn, groupAliasID, false, true)
+		if err != nil {
+			return nil, err
+		}
+
+		if alias == nil {
+			return nil, nil
+		}
+
+		group, err := i.MemDBGroupByAliasIDInTxn(txn, alias.ID, true)
+		if err != nil {
+			return nil, err
+		}
+
+		// If there is no group tied to a valid alias, something is wrong
+		if group == nil {
+			return nil, fmt.Errorf("alias not associated to a group")
+		}
+
+		// Delete group alias in memdb
+		err = i.MemDBDeleteAliasByIDInTxn(txn, group.Alias.ID, true)
+		if err != nil {
+			return nil, err
+		}
+
+		// Delete the alias
+		group.Alias = nil
+
+		err = i.UpsertGroupInTxn(txn, group, true)
+		if err != nil {
+			return nil, err
+		}
+
+		txn.Commit()
+
+		return nil, nil
 	}
 }
 
@@ -257,19 +305,50 @@ func (i *IdentityStore) pathGroupAliasIDList() framework.OperationFunc {
 		ws := memdb.NewWatchSet()
 		iter, err := i.MemDBAliases(ws, true)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch iterator for group aliases in memdb: %v", err)
+			return nil, errwrap.Wrapf("failed to fetch iterator for group aliases in memdb: {{err}}", err)
 		}
 
 		var groupAliasIDs []string
+		aliasInfo := map[string]interface{}{}
+
+		type mountInfo struct {
+			MountType string
+			MountPath string
+		}
+		mountAccessorMap := map[string]mountInfo{}
+
 		for {
 			raw := iter.Next()
 			if raw == nil {
 				break
 			}
-			groupAliasIDs = append(groupAliasIDs, raw.(*identity.Alias).ID)
+			alias := raw.(*identity.Alias)
+			groupAliasIDs = append(groupAliasIDs, alias.ID)
+			entry := map[string]interface{}{
+				"name":           alias.Name,
+				"canonical_id":   alias.CanonicalID,
+				"mount_accessor": alias.MountAccessor,
+			}
+
+			mi, ok := mountAccessorMap[alias.MountAccessor]
+			if ok {
+				entry["mount_type"] = mi.MountType
+				entry["mount_path"] = mi.MountPath
+			} else {
+				mi = mountInfo{}
+				if mountValidationResp := i.core.router.validateMountByAccessor(alias.MountAccessor); mountValidationResp != nil {
+					mi.MountType = mountValidationResp.MountType
+					mi.MountPath = mountValidationResp.MountPath
+					entry["mount_type"] = mi.MountType
+					entry["mount_path"] = mi.MountPath
+				}
+				mountAccessorMap[alias.MountAccessor] = mi
+			}
+
+			aliasInfo[alias.ID] = entry
 		}
 
-		return logical.ListResponse(groupAliasIDs), nil
+		return logical.ListResponseWithInfo(groupAliasIDs, aliasInfo), nil
 	}
 }
 
@@ -283,7 +362,7 @@ var groupAliasHelp = map[string][2]string{
 		"",
 	},
 	"group-alias-id-list": {
-		"List all the entity IDs.",
+		"List all the group alias IDs.",
 		"",
 	},
 }

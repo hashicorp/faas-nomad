@@ -25,6 +25,8 @@ plugin has additional, database plugin specific,  parameters for this endpoint.
 Please read the HTTP API for the plugin you'd wish to configure to see the full
 list of additional parameters.
 
+~> This endpoint distinguishes between `create` and `update` ACL capabilities.
+
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `POST`   | `/database/config/:name`     | `204 (empty body)` |
@@ -39,9 +41,12 @@ list of additional parameters.
 - `verify_connection` `(bool: true)` – Specifies if the connection is verified
   during initial configuration. Defaults to true.
 
-- `allowed_roles` `(slice: [])` - Array or comma separated string of the roles
-  allowed to use this connection. Defaults to empty (no roles), if contains a
-  "*" any role can use this connection.
+- `allowed_roles` `(list: [])` - List of the roles allowed to use this connection. 
+  Defaults to empty (no roles), if contains a "*" any role can use this connection.
+
+- `root_rotation_statements` `(list: [])` - Specifies the database statements to be 
+  executed to rotate the root user's credentials. See the plugin's API page for more 
+  information on support and formatting for this parameter.
 
 ### Sample Payload
 
@@ -49,7 +54,9 @@ list of additional parameters.
 {
   "plugin_name": "mysql-database-plugin",
   "allowed_roles": "readonly",
-  "connection_url": "root:mysql@tcp(127.0.0.1:3306)/"
+  "connection_url": "{{username}}:{{password}}@tcp(127.0.0.1:3306)/",
+  "username": "root",
+  "password": "mysql"
 }
 ```
 
@@ -60,7 +67,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/database/config/mysql
+    http://127.0.0.1:8200/v1/database/config/mysql
 ```
 
 ## Read Connection
@@ -82,7 +89,7 @@ This endpoint returns the configuration settings for a connection.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request GET \
-    https://vault.rocks/v1/database/config/mysql
+    http://127.0.0.1:8200/v1/database/config/mysql
 ```
 
 ### Sample Response
@@ -94,7 +101,8 @@ $ curl \
 			"readonly"
 		],
 		"connection_details": {
-			"connection_url": "root:mysql@tcp(127.0.0.1:3306)/",
+			"connection_url": "{{username}}:{{password}}@tcp(127.0.0.1:3306)/",
+      "username": "root"
 		},
 		"plugin_name": "mysql-database-plugin"
 	},
@@ -116,7 +124,7 @@ are returned, not any values.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/database/config
+    http://127.0.0.1:8200/v1/database/config
 ```
 
 ### Sample Response
@@ -148,7 +156,7 @@ This endpoint deletes a connection.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/database/config/mysql
+    http://127.0.0.1:8200/v1/database/config/mysql
 ```
 
 ## Reset Connection
@@ -171,12 +179,38 @@ with the configuration stored in the barrier.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
-    https://vault.rocks/v1/database/reset/mysql
+    http://127.0.0.1:8200/v1/database/reset/mysql
+```
+
+## Rotate Root Credentials
+
+This endpoint is used to rotate the root superuser credentials stored for
+the database connection.  This user must have permissions to update its own
+password.
+
+| Method   | Path                          | Produces               |
+| :------- | :---------------------------- | :--------------------- |
+| `POST`   | `/database/rotate-root/:name` | `204 (empty body)`     |
+
+### Parameters
+
+- `name` `(string: <required>)` – Specifies the name of the connection to rotate.
+  This is specified as part of the URL.
+
+### Sample Request
+
+```
+$ curl \
+    --header "X-Vault-Token: ..." \
+    --request POST \
+    http://127.0.0.1:8200/v1/database/rotate-root/mysql
 ```
 
 ## Create Role
 
 This endpoint creates or updates a role definition.
+
+~> This endpoint distinguishes between `create` and `update` ACL capabilities.
 
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
@@ -198,20 +232,20 @@ This endpoint creates or updates a role definition.
   associated with this role. Accepts time suffixed strings ("1h") or an integer
   number of seconds. Defaults to system/engine default TTL time.
 
-- `creation_statements` `(string: <required>)` – Specifies the database
+- `creation_statements` `(list: <required>)` – Specifies the database
   statements executed to create and configure a user. See the plugin's API page
   for more information on support and formatting for this parameter.
 
-- `revocation_statements` `(string: "")` – Specifies the database statements to
+- `revocation_statements` `(list: [])` – Specifies the database statements to
   be executed to revoke a user. See the plugin's API page for more information
   on support and formatting for this parameter.
 
-- `rollback_statements` `(string: "")` – Specifies the database statements to be
+- `rollback_statements` `(list: [])` – Specifies the database statements to be
   executed rollback a create operation in the event of an error. Not every
   plugin type will support this functionality. See the plugin's API page for
   more information on support and formatting for this parameter.
 
-- `renew_statements` `(string: "")` – Specifies the database statements to be
+- `renew_statements` `(list: [])` – Specifies the database statements to be
   executed to renew a user. Not every plugin type will support this
   functionality. See the plugin's API page for more information on support and
   formatting for this parameter.
@@ -223,7 +257,7 @@ This endpoint creates or updates a role definition.
 ```json
 {
     "db_name": "mysql",
-    "creation_statements": "CREATE USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';GRANT SELECT ON *.* TO '{{name}}'@'%';",
+    "creation_statements": ["CREATE USER '{{name}}'@'%' IDENTIFIED BY '{{password}}'", "GRANT SELECT ON *.* TO '{{name}}'@'%'"],
     "default_ttl": "1h",
     "max_ttl": "24h"
 }
@@ -236,7 +270,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/database/roles/my-role
+    http://127.0.0.1:8200/v1/database/roles/my-role
 ```
 
 ## Read Role
@@ -257,7 +291,7 @@ This endpoint queries the role definition.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/database/roles/my-role
+    http://127.0.0.1:8200/v1/database/roles/my-role
 ```
 
 ### Sample Response
@@ -265,13 +299,13 @@ $ curl \
 ```json
 {
     "data": {
-		"creation_statements": "CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';         GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{name}}\";",
+		"creation_statements": ["CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';"], "GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{name}}\";"],
 		"db_name": "mysql",
 		"default_ttl": 3600,
 		"max_ttl": 86400,
-		"renew_statements": "",
-		"revocation_statements": "",
-		"rollback_statements": ""
+		"renew_statements": [],
+		"revocation_statements": [],
+		"rollback_statements": []
 	},
 }
 ```
@@ -291,7 +325,7 @@ returned, not any values.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/database/roles
+    http://127.0.0.1:8200/v1/database/roles
 ```
 
 ### Sample Response
@@ -327,7 +361,7 @@ This endpoint deletes the role definition.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/database/roles/my-role
+    http://127.0.0.1:8200/v1/database/roles/my-role
 ```
 
 ## Generate Credentials
@@ -349,7 +383,7 @@ role.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/database/creds/my-role
+    http://127.0.0.1:8200/v1/database/creds/my-role
 ```
 
 ### Sample Response

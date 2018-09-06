@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/agent/consul/autopilot"
+	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/lib"
 	"github.com/hashicorp/consul/tlsutil"
 	"github.com/hashicorp/consul/types"
@@ -234,8 +235,9 @@ type Config struct {
 
 	// ACLDownPolicy controls the behavior of ACLs if the ACLDatacenter
 	// cannot be contacted. It can be either "deny" to deny all requests,
-	// or "extend-cache" which ignores the ACLCacheInterval and uses
-	// cached policies. If a policy is not in the cache, it acts like deny.
+	// "extend-cache" or "async-cache" which ignores the ACLCacheInterval and
+	// uses cached policies.
+	// If a policy is not in the cache, it acts like deny.
 	// "allow" can be used to allow all requests. This is not recommended.
 	ACLDownPolicy string
 
@@ -346,6 +348,13 @@ type Config struct {
 	// autopilot tasks, such as promoting eligible non-voters and removing
 	// dead servers.
 	AutopilotInterval time.Duration
+
+	// ConnectEnabled is whether to enable Connect features such as the CA.
+	ConnectEnabled bool
+
+	// CAConfig is used to apply the initial Connect CA configuration when
+	// bootstrapping.
+	CAConfig *structs.CAConfiguration
 }
 
 // CheckProtocolVersion validates the protocol version.
@@ -370,7 +379,7 @@ func (c *Config) CheckACL() error {
 	switch c.ACLDownPolicy {
 	case "allow":
 	case "deny":
-	case "extend-cache":
+	case "async-cache", "extend-cache":
 	default:
 		return fmt.Errorf("Unsupported down ACL policy: %s", c.ACLDownPolicy)
 	}
@@ -425,6 +434,14 @@ func DefaultConfig() *Config {
 			ServerStabilizationTime: 10 * time.Second,
 		},
 
+		CAConfig: &structs.CAConfiguration{
+			Provider: "consul",
+			Config: map[string]interface{}{
+				"RotationPeriod": "2160h",
+				"LeafCertTTL":    "72h",
+			},
+		},
+
 		ServerHealthInterval: 2 * time.Second,
 		AutopilotInterval:    10 * time.Second,
 	}
@@ -448,8 +465,11 @@ func DefaultConfig() *Config {
 	// Disable shutdown on removal
 	conf.RaftConfig.ShutdownOnRemove = false
 
-	// Check every 5 seconds to see if there are enough new entries for a snapshot
-	conf.RaftConfig.SnapshotInterval = 5 * time.Second
+	// Check every 5 seconds to see if there are enough new entries for a snapshot, can be overridden
+	conf.RaftConfig.SnapshotInterval = 30 * time.Second
+
+	// Snapshots are created every 16384 entries by default, can be overridden
+	conf.RaftConfig.SnapshotThreshold = 16384
 
 	return conf
 }

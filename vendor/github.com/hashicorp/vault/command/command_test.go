@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	log "github.com/hashicorp/go-hclog"
+	kv "github.com/hashicorp/vault-plugin-secrets-kv"
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/audit"
 	"github.com/hashicorp/vault/builtin/logical/pki"
@@ -22,11 +24,10 @@ import (
 	auditFile "github.com/hashicorp/vault/builtin/audit/file"
 	credUserpass "github.com/hashicorp/vault/builtin/credential/userpass"
 	vaulthttp "github.com/hashicorp/vault/http"
-	logxi "github.com/mgutz/logxi/v1"
 )
 
 var (
-	defaultVaultLogger = logxi.NullLog
+	defaultVaultLogger = log.NewNullLogger()
 
 	defaultVaultCredentialBackends = map[string]logical.Factory{
 		"userpass": credUserpass.Factory,
@@ -41,6 +42,7 @@ var (
 		"pki":            pki.Factory,
 		"ssh":            ssh.Factory,
 		"transit":        transit.Factory,
+		"kv":             kv.Factory,
 	}
 )
 
@@ -88,6 +90,23 @@ func testVaultServerUnseal(tb testing.TB) (*api.Client, []string, func()) {
 		CredentialBackends: defaultVaultCredentialBackends,
 		AuditBackends:      defaultVaultAuditBackends,
 		LogicalBackends:    defaultVaultLogicalBackends,
+	})
+}
+
+// testVaultServerUnseal creates a test vault cluster and returns a configured
+// API client, list of unseal keys (as strings), and a closer function
+// configured with the given plugin directory.
+func testVaultServerPluginDir(tb testing.TB, pluginDir string) (*api.Client, []string, func()) {
+	tb.Helper()
+
+	return testVaultServerCoreConfig(tb, &vault.CoreConfig{
+		DisableMlock:       true,
+		DisableCache:       true,
+		Logger:             defaultVaultLogger,
+		CredentialBackends: defaultVaultCredentialBackends,
+		AuditBackends:      defaultVaultAuditBackends,
+		LogicalBackends:    defaultVaultLogicalBackends,
+		PluginDirectory:    pluginDir,
 	})
 }
 

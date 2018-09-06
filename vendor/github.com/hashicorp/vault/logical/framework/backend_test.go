@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"net/http"
+
 	"github.com/hashicorp/vault/logical"
 )
 
@@ -203,9 +205,9 @@ func TestBackendHandleRequest_renewAuth(t *testing.T) {
 }
 
 func TestBackendHandleRequest_renewAuthCallback(t *testing.T) {
-	var called uint32
+	called := new(uint32)
 	callback := func(context.Context, *logical.Request, *FieldData) (*logical.Response, error) {
-		atomic.AddUint32(&called, 1)
+		atomic.AddUint32(called, 1)
 		return nil, nil
 	}
 
@@ -217,14 +219,14 @@ func TestBackendHandleRequest_renewAuthCallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
-	if v := atomic.LoadUint32(&called); v != 1 {
+	if v := atomic.LoadUint32(called); v != 1 {
 		t.Fatalf("bad: %#v", v)
 	}
 }
 func TestBackendHandleRequest_renew(t *testing.T) {
-	var called uint32
+	called := new(uint32)
 	callback := func(context.Context, *logical.Request, *FieldData) (*logical.Response, error) {
-		atomic.AddUint32(&called, 1)
+		atomic.AddUint32(called, 1)
 		return nil, nil
 	}
 
@@ -240,46 +242,15 @@ func TestBackendHandleRequest_renew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
-	if v := atomic.LoadUint32(&called); v != 1 {
+	if v := atomic.LoadUint32(called); v != 1 {
 		t.Fatalf("bad: %#v", v)
 	}
 }
 
-func TestBackendHandleRequest_renewExtend(t *testing.T) {
-	sysView := logical.StaticSystemView{
-		DefaultLeaseTTLVal: 5 * time.Minute,
-		MaxLeaseTTLVal:     30 * time.Hour,
-	}
-
-	secret := &Secret{
-		Type:            "foo",
-		Renew:           LeaseExtend(0, 0, sysView),
-		DefaultDuration: 5 * time.Minute,
-	}
-	b := &Backend{
-		Secrets: []*Secret{secret},
-	}
-
-	req := logical.RenewRequest("/foo", secret.Response(nil, nil).Secret, nil)
-	req.Secret.IssueTime = time.Now()
-	req.Secret.Increment = 1 * time.Hour
-	resp, err := b.HandleRequest(context.Background(), req)
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
-	if resp == nil || resp.Secret == nil {
-		t.Fatal("should have secret")
-	}
-
-	if resp.Secret.TTL < 59*time.Minute || resp.Secret.TTL > 61*time.Minute {
-		t.Fatalf("bad: %s", resp.Secret.TTL)
-	}
-}
-
 func TestBackendHandleRequest_revoke(t *testing.T) {
-	var called uint32
+	called := new(uint32)
 	callback := func(context.Context, *logical.Request, *FieldData) (*logical.Response, error) {
-		atomic.AddUint32(&called, 1)
+		atomic.AddUint32(called, 1)
 		return nil, nil
 	}
 
@@ -295,16 +266,16 @@ func TestBackendHandleRequest_revoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
-	if v := atomic.LoadUint32(&called); v != 1 {
+	if v := atomic.LoadUint32(called); v != 1 {
 		t.Fatalf("bad: %#v", v)
 	}
 }
 
 func TestBackendHandleRequest_rollback(t *testing.T) {
-	var called uint32
+	called := new(uint32)
 	callback := func(_ context.Context, req *logical.Request, kind string, data interface{}) error {
 		if data == "foo" {
-			atomic.AddUint32(&called, 1)
+			atomic.AddUint32(called, 1)
 		}
 		return nil
 	}
@@ -329,16 +300,16 @@ func TestBackendHandleRequest_rollback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
-	if v := atomic.LoadUint32(&called); v != 1 {
+	if v := atomic.LoadUint32(called); v != 1 {
 		t.Fatalf("bad: %#v", v)
 	}
 }
 
 func TestBackendHandleRequest_rollbackMinAge(t *testing.T) {
-	var called uint32
+	called := new(uint32)
 	callback := func(_ context.Context, req *logical.Request, kind string, data interface{}) error {
 		if data == "foo" {
-			atomic.AddUint32(&called, 1)
+			atomic.AddUint32(called, 1)
 		}
 		return nil
 	}
@@ -361,7 +332,7 @@ func TestBackendHandleRequest_rollbackMinAge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
-	if v := atomic.LoadUint32(&called); v != 0 {
+	if v := atomic.LoadUint32(called); v != 0 {
 		t.Fatalf("bad: %#v", v)
 	}
 }
@@ -562,6 +533,11 @@ func TestFieldSchemaDefaultOrZero(t *testing.T) {
 		"default duration not set": {
 			&FieldSchema{Type: TypeDurationSecond},
 			0,
+		},
+
+		"default header not set": {
+			&FieldSchema{Type: TypeHeader},
+			http.Header{},
 		},
 	}
 

@@ -20,6 +20,9 @@ func init() {
 	registerRestorer(structs.CoordinateBatchUpdateType, restoreCoordinates)
 	registerRestorer(structs.PreparedQueryRequestType, restorePreparedQuery)
 	registerRestorer(structs.AutopilotRequestType, restoreAutopilot)
+	registerRestorer(structs.IntentionRequestType, restoreIntention)
+	registerRestorer(structs.ConnectCARequestType, restoreConnectCA)
+	registerRestorer(structs.ConnectCAProviderStateType, restoreConnectCAProviderState)
 }
 
 func persistOSS(s *snapshot, sink raft.SnapshotSink, encoder *codec.Encoder) error {
@@ -42,6 +45,15 @@ func persistOSS(s *snapshot, sink raft.SnapshotSink, encoder *codec.Encoder) err
 		return err
 	}
 	if err := s.persistAutopilot(sink, encoder); err != nil {
+		return err
+	}
+	if err := s.persistIntentions(sink, encoder); err != nil {
+		return err
+	}
+	if err := s.persistConnectCA(sink, encoder); err != nil {
+		return err
+	}
+	if err := s.persistConnectCAProviderState(sink, encoder); err != nil {
 		return err
 	}
 	return nil
@@ -258,6 +270,60 @@ func (s *snapshot) persistAutopilot(sink raft.SnapshotSink,
 	return nil
 }
 
+func (s *snapshot) persistConnectCA(sink raft.SnapshotSink,
+	encoder *codec.Encoder) error {
+	roots, err := s.state.CARoots()
+	if err != nil {
+		return err
+	}
+
+	for _, r := range roots {
+		if _, err := sink.Write([]byte{byte(structs.ConnectCARequestType)}); err != nil {
+			return err
+		}
+		if err := encoder.Encode(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *snapshot) persistConnectCAProviderState(sink raft.SnapshotSink,
+	encoder *codec.Encoder) error {
+	state, err := s.state.CAProviderState()
+	if err != nil {
+		return err
+	}
+
+	for _, r := range state {
+		if _, err := sink.Write([]byte{byte(structs.ConnectCAProviderStateType)}); err != nil {
+			return err
+		}
+		if err := encoder.Encode(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *snapshot) persistIntentions(sink raft.SnapshotSink,
+	encoder *codec.Encoder) error {
+	ixns, err := s.state.Intentions()
+	if err != nil {
+		return err
+	}
+
+	for _, ixn := range ixns {
+		if _, err := sink.Write([]byte{byte(structs.IntentionRequestType)}); err != nil {
+			return err
+		}
+		if err := encoder.Encode(ixn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func restoreRegistration(header *snapshotHeader, restore *state.Restore, decoder *codec.Decoder) error {
 	var req structs.RegisterRequest
 	if err := decoder.Decode(&req); err != nil {
@@ -360,6 +426,39 @@ func restoreAutopilot(header *snapshotHeader, restore *state.Restore, decoder *c
 		return err
 	}
 	if err := restore.Autopilot(&req); err != nil {
+		return err
+	}
+	return nil
+}
+
+func restoreIntention(header *snapshotHeader, restore *state.Restore, decoder *codec.Decoder) error {
+	var req structs.Intention
+	if err := decoder.Decode(&req); err != nil {
+		return err
+	}
+	if err := restore.Intention(&req); err != nil {
+		return err
+	}
+	return nil
+}
+
+func restoreConnectCA(header *snapshotHeader, restore *state.Restore, decoder *codec.Decoder) error {
+	var req structs.CARoot
+	if err := decoder.Decode(&req); err != nil {
+		return err
+	}
+	if err := restore.CARoot(&req); err != nil {
+		return err
+	}
+	return nil
+}
+
+func restoreConnectCAProviderState(header *snapshotHeader, restore *state.Restore, decoder *codec.Decoder) error {
+	var req structs.CAConsulProviderState
+	if err := decoder.Decode(&req); err != nil {
+		return err
+	}
+	if err := restore.CAProviderState(&req); err != nil {
 		return err
 	}
 	return nil

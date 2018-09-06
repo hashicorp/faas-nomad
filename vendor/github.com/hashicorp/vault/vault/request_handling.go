@@ -2,30 +2,288 @@ package vault
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/armon/go-metrics"
+	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/go-multierror"
+	sockaddr "github.com/hashicorp/go-sockaddr"
+	"github.com/hashicorp/vault/audit"
 	"github.com/hashicorp/vault/helper/consts"
+	"github.com/hashicorp/vault/helper/errutil"
 	"github.com/hashicorp/vault/helper/identity"
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/helper/policyutil"
 	"github.com/hashicorp/vault/helper/strutil"
 	"github.com/hashicorp/vault/helper/wrapping"
 	"github.com/hashicorp/vault/logical"
+	"github.com/hashicorp/vault/logical/framework"
 )
 
 const (
 	replTimeout = 10 * time.Second
 )
 
+var (
+	// DefaultMaxRequestDuration is the amount of time we'll wait for a request
+	// to complete, unless overridden on a per-handler basis
+	DefaultMaxRequestDuration = 90 * time.Second
+)
+
+// HandlerProperties is used to seed configuration into a vaulthttp.Handler.
+// It's in this package to avoid a circular dependency
+type HandlerProperties struct {
+	Core                  *Core
+	MaxRequestSize        int64
+	MaxRequestDuration    time.Duration
+	DisablePrintableCheck bool
+}
+
+// fetchEntityAndDerivedPolicies returns the entity object for the given entity
+// ID. If the entity is merged into a different entity object, the entity into
+// which the given entity ID is merged into will be returned. This function
+// also returns the cumulative list of policies that the entity is entitled to.
+// This list includes the policies from the entity itself and from all the
+// groups in which the given entity ID is a member of.
+func (c *Core) fetchEntityAndDerivedPolicies(entityID string) (*identity.Entity, []string, error) {
+	if entityID == "" || c.identityStore == nil {
+		return nil, nil, nil
+	}
+
+	//c.logger.Debug("entity set on the token", "entity_id", te.EntityID)
+
+	// Fetch the entity
+	entity, err := c.identityStore.MemDBEntityByID(entityID, false)
+	if err != nil {
+		c.logger.Error("failed to lookup entity using its ID", "error", err)
+		return nil, nil, err
+	}
+
+	if entity == nil {
+		// If there was no corresponding entity object found, it is
+		// possible that the entity got merged into another entity. Try
+		// finding entity based on the merged entity index.
+		entity, err = c.identityStore.MemDBEntityByMergedEntityID(entityID, false)
+		if err != nil {
+			c.logger.Error("failed to lookup entity in merged entity ID index", "error", err)
+			return nil, nil, err
+		}
+	}
+
+	var policies []string
+	if entity != nil {
+		//c.logger.Debug("entity successfully fetched; adding entity policies to token's policies to create ACL")
+
+		// Attach the policies on the entity
+		policies = append(policies, entity.Policies...)
+
+		groupPolicies, err := c.identityStore.groupPoliciesByEntityID(entity.ID)
+		if err != nil {
+			c.logger.Error("failed to fetch group policies", "error", err)
+			return nil, nil, err
+		}
+
+		// Attach the policies from all the groups
+		policies = append(policies, groupPolicies...)
+	}
+
+	return entity, policies, err
+}
+
+func (c *Core) fetchACLTokenEntryAndEntity(req *logical.Request) (*ACL, *logical.TokenEntry, *identity.Entity, []string, error) {
+	defer metrics.MeasureSince([]string{"core", "fetch_acl_and_token"}, time.Now())
+
+	// Ensure there is a client token
+	if req.ClientToken == "" {
+		return nil, nil, nil, nil, fmt.Errorf("missing client token")
+	}
+
+	if c.tokenStore == nil {
+		c.logger.Error("token store is unavailable")
+		return nil, nil, nil, nil, ErrInternalError
+	}
+
+	// Resolve the token policy
+	var te *logical.TokenEntry
+	switch req.TokenEntry() {
+	case nil:
+		var err error
+		te, err = c.tokenStore.Lookup(c.activeContext, req.ClientToken)
+		if err != nil {
+			c.logger.Error("failed to lookup token", "error", err)
+			return nil, nil, nil, nil, ErrInternalError
+		}
+	default:
+		te = req.TokenEntry()
+	}
+
+	// Ensure the token is valid
+	if te == nil {
+		return nil, nil, nil, nil, logical.ErrPermissionDenied
+	}
+
+	// CIDR checks bind all tokens except non-expiring root tokens
+	if te.TTL != 0 && len(te.BoundCIDRs) > 0 {
+		var valid bool
+		remoteSockAddr, err := sockaddr.NewSockAddr(req.Connection.RemoteAddr)
+		if err != nil {
+			if c.Logger().IsDebug() {
+				c.Logger().Debug("could not parse remote addr into sockaddr", "error", err, "remote_addr", req.Connection.RemoteAddr)
+			}
+			return nil, nil, nil, nil, logical.ErrPermissionDenied
+		}
+		for _, cidr := range te.BoundCIDRs {
+			if cidr.Contains(remoteSockAddr) {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return nil, nil, nil, nil, logical.ErrPermissionDenied
+		}
+	}
+
+	entity, identityPolicies, err := c.fetchEntityAndDerivedPolicies(te.EntityID)
+	if err != nil {
+		return nil, nil, nil, nil, ErrInternalError
+	}
+
+	allPolicies := append(te.Policies, identityPolicies...)
+
+	// Construct the corresponding ACL object
+	acl, err := c.policyStore.ACL(c.activeContext, entity, allPolicies...)
+	if err != nil {
+		if errwrap.ContainsType(err, new(TemplateError)) {
+			return nil, nil, nil, nil, err
+		}
+		c.logger.Error("failed to construct ACL", "error", err)
+		return nil, nil, nil, nil, ErrInternalError
+	}
+
+	return acl, te, entity, identityPolicies, nil
+}
+
+func (c *Core) checkToken(ctx context.Context, req *logical.Request, unauth bool) (*logical.Auth, *logical.TokenEntry, error) {
+	defer metrics.MeasureSince([]string{"core", "check_token"}, time.Now())
+
+	var acl *ACL
+	var te *logical.TokenEntry
+	var entity *identity.Entity
+	var identityPolicies []string
+	var err error
+
+	// Even if unauth, if a token is provided, there's little reason not to
+	// gather as much info as possible for the audit log and to e.g. control
+	// trace mode for EGPs.
+	if !unauth || (unauth && req.ClientToken != "") {
+		acl, te, entity, identityPolicies, err = c.fetchACLTokenEntryAndEntity(req)
+		// In the unauth case we don't want to fail the command, since it's
+		// unauth, we just have no information to attach to the request, so
+		// ignore errors...this was best-effort anyways
+		if err != nil && !unauth {
+			if errwrap.ContainsType(err, new(TemplateError)) {
+				c.logger.Warn("permission denied due to a templated policy being invalid or containing directives not satisfied by the requestor")
+				err = logical.ErrPermissionDenied
+			}
+			return nil, te, err
+		}
+	}
+
+	if entity != nil && entity.Disabled {
+		c.logger.Warn("permission denied as the entity on the token is disabled")
+		return nil, te, logical.ErrPermissionDenied
+	}
+	if te != nil && te.EntityID != "" && entity == nil {
+		c.logger.Warn("permission denied as the entity on the token is invalid")
+		return nil, te, logical.ErrPermissionDenied
+	}
+
+	// Check if this is a root protected path
+	rootPath := c.router.RootPath(req.Path)
+
+	if rootPath && unauth {
+		return nil, nil, errors.New("cannot access root path in unauthenticated request")
+	}
+
+	// When we receive a write of either type, rather than require clients to
+	// PUT/POST and trust the operation, we ask the backend to give us the real
+	// skinny -- if the backend implements an existence check, it can tell us
+	// whether a particular resource exists. Then we can mark it as an update
+	// or creation as appropriate.
+	if req.Operation == logical.CreateOperation || req.Operation == logical.UpdateOperation {
+		checkExists, resourceExists, err := c.router.RouteExistenceCheck(ctx, req)
+		switch err {
+		case logical.ErrUnsupportedPath:
+			// fail later via bad path to avoid confusing items in the log
+			checkExists = false
+		case nil:
+			// Continue on
+		default:
+			c.logger.Error("failed to run existence check", "error", err)
+			if _, ok := err.(errutil.UserError); ok {
+				return nil, nil, err
+			} else {
+				return nil, nil, ErrInternalError
+			}
+		}
+
+		switch {
+		case checkExists == false:
+			// No existence check, so always treat it as an update operation, which is how it is pre 0.5
+			req.Operation = logical.UpdateOperation
+		case resourceExists == true:
+			// It exists, so force an update operation
+			req.Operation = logical.UpdateOperation
+		case resourceExists == false:
+			// It doesn't exist, force a create operation
+			req.Operation = logical.CreateOperation
+		default:
+			panic("unreachable code")
+		}
+	}
+	// Create the auth response
+	auth := &logical.Auth{
+		ClientToken:      req.ClientToken,
+		Accessor:         req.ClientTokenAccessor,
+		Policies:         identityPolicies,
+		IdentityPolicies: identityPolicies,
+	}
+
+	if te != nil {
+		auth.TokenPolicies = te.Policies
+		auth.Policies = append(te.Policies, identityPolicies...)
+		auth.Metadata = te.Meta
+		auth.DisplayName = te.DisplayName
+		auth.EntityID = te.EntityID
+		// Store the entity ID in the request object
+		req.EntityID = te.EntityID
+	}
+
+	// Check the standard non-root ACLs. Return the token entry if it's not
+	// allowed so we can decrement the use count.
+	authResults := c.performPolicyChecks(ctx, acl, te, req, entity, &PolicyCheckOpts{
+		Unauth:            unauth,
+		RootPrivsRequired: rootPath,
+	})
+	if !authResults.Allowed {
+		retErr := authResults.Error
+		if authResults.Error.ErrorOrNil() == nil || authResults.DeniedError {
+			retErr = multierror.Append(retErr, logical.ErrPermissionDenied)
+		}
+		return auth, te, retErr
+	}
+
+	return auth, te, nil
+}
+
 // HandleRequest is used to handle a new incoming request
-func (c *Core) HandleRequest(req *logical.Request) (resp *logical.Response, err error) {
+func (c *Core) HandleRequest(httpCtx context.Context, req *logical.Request) (resp *logical.Response, err error) {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
-	if c.sealed {
+	if c.Sealed() {
 		return nil, consts.ErrSealed
 	}
 	if c.standby {
@@ -34,6 +292,14 @@ func (c *Core) HandleRequest(req *logical.Request) (resp *logical.Response, err 
 
 	ctx, cancel := context.WithCancel(c.activeContext)
 	defer cancel()
+
+	go func(ctx context.Context, httpCtx context.Context) {
+		select {
+		case <-ctx.Done():
+		case <-httpCtx.Done():
+			cancel()
+		}
+	}(ctx, httpCtx)
 
 	// Allowing writing to a path ending in / makes it extremely difficult to
 	// understand user intent for the filesystem-like backends (kv,
@@ -103,19 +369,48 @@ func (c *Core) HandleRequest(req *logical.Request) (resp *logical.Response, err 
 		resp.Data[logical.HTTPRawBody] != nil {
 
 		// Decode the JSON
-		httpResp := &logical.HTTPResponse{}
-		err := jsonutil.DecodeJSON(resp.Data[logical.HTTPRawBody].([]byte), httpResp)
-		if err != nil {
-			c.logger.Error("core: failed to unmarshal wrapped HTTP response for audit logging", "error", err)
-			return nil, ErrInternalError
+		if resp.Data[logical.HTTPRawBodyAlreadyJSONDecoded] != nil {
+			delete(resp.Data, logical.HTTPRawBodyAlreadyJSONDecoded)
+		} else {
+			httpResp := &logical.HTTPResponse{}
+			err := jsonutil.DecodeJSON(resp.Data[logical.HTTPRawBody].([]byte), httpResp)
+			if err != nil {
+				c.logger.Error("failed to unmarshal wrapped HTTP response for audit logging", "error", err)
+				return nil, ErrInternalError
+			}
+
+			auditResp = logical.HTTPResponseToLogicalResponse(httpResp)
+		}
+	}
+
+	var nonHMACReqDataKeys []string
+	var nonHMACRespDataKeys []string
+	entry := c.router.MatchingMountEntry(req.Path)
+	if entry != nil {
+		// Get and set ignored HMAC'd value. Reset those back to empty afterwards.
+		if rawVals, ok := entry.synthesizedConfigCache.Load("audit_non_hmac_request_keys"); ok {
+			nonHMACReqDataKeys = rawVals.([]string)
 		}
 
-		auditResp = logical.HTTPResponseToLogicalResponse(httpResp)
+		// Get and set ignored HMAC'd value. Reset those back to empty afterwards.
+		if auditResp != nil {
+			if rawVals, ok := entry.synthesizedConfigCache.Load("audit_non_hmac_response_keys"); ok {
+				nonHMACRespDataKeys = rawVals.([]string)
+			}
+		}
 	}
 
 	// Create an audit trail of the response
-	if auditErr := c.auditBroker.LogResponse(ctx, auth, req, auditResp, c.auditedHeaders, err); auditErr != nil {
-		c.logger.Error("core: failed to audit response", "request_path", req.Path, "error", auditErr)
+	logInput := &audit.LogInput{
+		Auth:                auth,
+		Request:             req,
+		Response:            auditResp,
+		OuterErr:            err,
+		NonHMACReqDataKeys:  nonHMACReqDataKeys,
+		NonHMACRespDataKeys: nonHMACRespDataKeys,
+	}
+	if auditErr := c.auditBroker.LogResponse(ctx, logInput, c.auditedHeaders); auditErr != nil {
+		c.logger.Error("failed to audit response", "request_path", req.Path, "error", auditErr)
 		return nil, ErrInternalError
 	}
 
@@ -125,6 +420,15 @@ func (c *Core) HandleRequest(req *logical.Request) (resp *logical.Response, err 
 func (c *Core) handleRequest(ctx context.Context, req *logical.Request) (retResp *logical.Response, retAuth *logical.Auth, retErr error) {
 	defer metrics.MeasureSince([]string{"core", "handle_request"}, time.Now())
 
+	var nonHMACReqDataKeys []string
+	entry := c.router.MatchingMountEntry(req.Path)
+	if entry != nil {
+		// Get and set ignored HMAC'd value.
+		if rawVals, ok := entry.synthesizedConfigCache.Load("audit_non_hmac_request_keys"); ok {
+			nonHMACReqDataKeys = rawVals.([]string)
+		}
+	}
+
 	// Validate the token
 	auth, te, ctErr := c.checkToken(ctx, req, false)
 	// We run this logic first because we want to decrement the use count even in the case of an error
@@ -133,7 +437,7 @@ func (c *Core) handleRequest(ctx context.Context, req *logical.Request) (retResp
 		var err error
 		te, err = c.tokenStore.UseToken(ctx, te)
 		if err != nil {
-			c.logger.Error("core: failed to use token", "error", err)
+			c.logger.Error("failed to use token", "error", err)
 			retErr = multierror.Append(retErr, ErrInternalError)
 			return nil, nil, retErr
 		}
@@ -142,14 +446,17 @@ func (c *Core) handleRequest(ctx context.Context, req *logical.Request) (retResp
 			retErr = multierror.Append(retErr, logical.ErrPermissionDenied)
 			return nil, nil, retErr
 		}
-		if te.NumUses == -1 {
+		if te.NumUses == tokenRevocationPending {
 			// We defer a revocation until after logic has run, since this is a
 			// valid request (this is the token's final use). We pass the ID in
 			// directly just to be safe in case something else modifies te later.
 			defer func(id string) {
-				err = c.tokenStore.Revoke(ctx, id)
+				leaseID, err := c.expiration.CreateOrFetchRevocationLeaseByToken(c.activeContext, te)
+				if err == nil {
+					err = c.expiration.LazyRevoke(ctx, leaseID)
+				}
 				if err != nil {
-					c.logger.Error("core: failed to revoke token", "error", err)
+					c.logger.Error("failed to revoke token", "error", err)
 					retResp = nil
 					retAuth = nil
 					retErr = multierror.Append(retErr, ErrInternalError)
@@ -166,20 +473,32 @@ func (c *Core) handleRequest(ctx context.Context, req *logical.Request) (retResp
 	if ctErr != nil {
 		// If it is an internal error we return that, otherwise we
 		// return invalid request so that the status codes can be correct
-		errType := logical.ErrInvalidRequest
-		switch ctErr {
-		case ErrInternalError, logical.ErrPermissionDenied:
-			errType = ctErr
+		switch {
+		case ctErr == ErrInternalError,
+			errwrap.Contains(ctErr, ErrInternalError.Error()),
+			ctErr == logical.ErrPermissionDenied,
+			errwrap.Contains(ctErr, logical.ErrPermissionDenied.Error()):
+			switch ctErr.(type) {
+			case *multierror.Error:
+				retErr = ctErr
+			default:
+				retErr = multierror.Append(retErr, ctErr)
+			}
+		default:
+			retErr = multierror.Append(retErr, logical.ErrInvalidRequest)
 		}
 
-		if err := c.auditBroker.LogRequest(ctx, auth, req, c.auditedHeaders, ctErr); err != nil {
-			c.logger.Error("core: failed to audit request", "path", req.Path, "error", err)
+		logInput := &audit.LogInput{
+			Auth:               auth,
+			Request:            req,
+			OuterErr:           ctErr,
+			NonHMACReqDataKeys: nonHMACReqDataKeys,
+		}
+		if err := c.auditBroker.LogRequest(ctx, logInput, c.auditedHeaders); err != nil {
+			c.logger.Error("failed to audit request", "path", req.Path, "error", err)
 		}
 
-		if errType != nil {
-			retErr = multierror.Append(retErr, errType)
-		}
-		if ctErr == ErrInternalError {
+		if errwrap.Contains(retErr, ErrInternalError.Error()) {
 			return nil, auth, retErr
 		}
 		return logical.ErrorResponse(ctErr.Error()), auth, retErr
@@ -189,8 +508,13 @@ func (c *Core) handleRequest(ctx context.Context, req *logical.Request) (retResp
 	req.DisplayName = auth.DisplayName
 
 	// Create an audit trail of the request
-	if err := c.auditBroker.LogRequest(ctx, auth, req, c.auditedHeaders, nil); err != nil {
-		c.logger.Error("core: failed to audit request", "path", req.Path, "error", err)
+	logInput := &audit.LogInput{
+		Auth:               auth,
+		Request:            req,
+		NonHMACReqDataKeys: nonHMACReqDataKeys,
+	}
+	if err := c.auditBroker.LogRequest(ctx, logInput, c.auditedHeaders); err != nil {
+		c.logger.Error("failed to audit request", "path", req.Path, "error", err)
 		retErr = multierror.Append(retErr, ErrInternalError)
 		return nil, auth, retErr
 	}
@@ -244,64 +568,70 @@ func (c *Core) handleRequest(ctx context.Context, req *logical.Request) (retResp
 	// We exclude renewal of a lease, since it does not need to be re-registered
 	if resp != nil && resp.Secret != nil && !strings.HasPrefix(req.Path, "sys/renew") &&
 		!strings.HasPrefix(req.Path, "sys/leases/renew") {
-		// Get the SystemView for the mount
-		sysView := c.router.MatchingSystemView(req.Path)
-		if sysView == nil {
-			c.logger.Error("core: unable to retrieve system view from router")
-			retErr = multierror.Append(retErr, ErrInternalError)
-			return nil, auth, retErr
-		}
-
-		// Apply the default lease if none given
-		if resp.Secret.TTL == 0 {
-			resp.Secret.TTL = sysView.DefaultLeaseTTL()
-		}
-
-		// Limit the lease duration
-		maxTTL := sysView.MaxLeaseTTL()
-		if resp.Secret.TTL > maxTTL {
-			resp.Secret.TTL = maxTTL
-		}
-
 		// KV mounts should return the TTL but not register
 		// for a lease as this provides a massive slowdown
 		registerLease := true
-		matchingBackend := c.router.MatchingBackend(req.Path)
-		if matchingBackend == nil {
-			c.logger.Error("core: unable to retrieve kv backend from router")
+
+		matchingMountEntry := c.router.MatchingMountEntry(req.Path)
+		if matchingMountEntry == nil {
+			c.logger.Error("unable to retrieve kv mount entry from router")
 			retErr = multierror.Append(retErr, ErrInternalError)
 			return nil, auth, retErr
 		}
-		if ptbe, ok := matchingBackend.(*PassthroughBackend); ok {
-			if !ptbe.GeneratesLeases() {
+
+		switch matchingMountEntry.Type {
+		case "kv", "generic":
+			// If we are kv type, first see if we are an older passthrough
+			// backend, and otherwise check the mount entry options.
+			matchingBackend := c.router.MatchingBackend(req.Path)
+			if matchingBackend == nil {
+				c.logger.Error("unable to retrieve kv backend from router")
+				retErr = multierror.Append(retErr, ErrInternalError)
+				return nil, auth, retErr
+			}
+
+			if ptbe, ok := matchingBackend.(*PassthroughBackend); ok {
+				if !ptbe.GeneratesLeases() {
+					registerLease = false
+					resp.Secret.Renewable = false
+				}
+			} else if matchingMountEntry.Options == nil || matchingMountEntry.Options["leased_passthrough"] != "true" {
+				registerLease = false
+				resp.Secret.Renewable = false
+			}
+
+		case "plugin":
+			// If we are a plugin type and the plugin name is "kv" check the
+			// mount entry options.
+			if matchingMountEntry.Config.PluginName == "kv" && (matchingMountEntry.Options == nil || matchingMountEntry.Options["leased_passthrough"] != "true") {
 				registerLease = false
 				resp.Secret.Renewable = false
 			}
 		}
 
 		if registerLease {
-			leaseID, err := c.expiration.Register(req, resp)
+			sysView := c.router.MatchingSystemView(req.Path)
+			if sysView == nil {
+				c.logger.Error("unable to look up sys view for login path", "request_path", req.Path)
+				return nil, nil, ErrInternalError
+			}
+
+			ttl, warnings, err := framework.CalculateTTL(sysView, 0, resp.Secret.TTL, 0, resp.Secret.MaxTTL, 0, time.Time{})
 			if err != nil {
-				c.logger.Error("core: failed to register lease", "request_path", req.Path, "error", err)
+				return nil, nil, err
+			}
+			for _, warning := range warnings {
+				resp.AddWarning(warning)
+			}
+			resp.Secret.TTL = ttl
+
+			leaseID, err := c.expiration.Register(ctx, req, resp)
+			if err != nil {
+				c.logger.Error("failed to register lease", "request_path", req.Path, "error", err)
 				retErr = multierror.Append(retErr, ErrInternalError)
 				return nil, auth, retErr
 			}
 			resp.Secret.LeaseID = leaseID
-		}
-	}
-
-	// If the request was to renew a token, and if there are group aliases set
-	// in the auth object, then the group memberships should be refreshed
-	if strings.HasPrefix(req.Path, "auth/token/renew") &&
-		resp != nil &&
-		resp.Auth != nil &&
-		resp.Auth.EntityID != "" &&
-		resp.Auth.GroupAliases != nil {
-		err := c.identityStore.refreshExternalGroupMembershipsByEntityID(resp.Auth.EntityID, resp.Auth.GroupAliases)
-		if err != nil {
-			c.logger.Error("core: failed to refresh external group memberships", "error", err)
-			retErr = multierror.Append(retErr, ErrInternalError)
-			return nil, auth, retErr
 		}
 	}
 
@@ -310,26 +640,31 @@ func (c *Core) handleRequest(ctx context.Context, req *logical.Request) (retResp
 	// since it does not need to be re-registered
 	if resp != nil && resp.Auth != nil && !strings.HasPrefix(req.Path, "auth/token/renew") {
 		if !strings.HasPrefix(req.Path, "auth/token/") {
-			c.logger.Error("core: unexpected Auth response for non-token backend", "request_path", req.Path)
+			c.logger.Error("unexpected Auth response for non-token backend", "request_path", req.Path)
 			retErr = multierror.Append(retErr, ErrInternalError)
 			return nil, auth, retErr
 		}
 
-		// Register with the expiration manager. We use the token's actual path
-		// here because roles allow suffixes.
-		te, err := c.tokenStore.Lookup(ctx, resp.Auth.ClientToken)
+		_, identityPolicies, err := c.fetchEntityAndDerivedPolicies(resp.Auth.EntityID)
 		if err != nil {
-			c.logger.Error("core: failed to look up token", "error", err)
+			c.tokenStore.revokeOrphan(ctx, te.ID)
+			return nil, nil, ErrInternalError
+		}
+
+		resp.Auth.TokenPolicies = policyutil.SanitizePolicies(resp.Auth.Policies, policyutil.DoNotAddDefaultPolicy)
+		if err := c.expiration.RegisterAuth(ctx, resp.Auth.CreationPath, resp.Auth); err != nil {
+			c.tokenStore.revokeOrphan(ctx, te.ID)
+			c.logger.Error("failed to register token lease", "request_path", req.Path, "error", err)
 			retErr = multierror.Append(retErr, ErrInternalError)
 			return nil, auth, retErr
 		}
 
-		if err := c.expiration.RegisterAuth(te.Path, resp.Auth); err != nil {
-			c.tokenStore.Revoke(ctx, te.ID)
-			c.logger.Error("core: failed to register token lease", "request_path", req.Path, "error", err)
-			retErr = multierror.Append(retErr, ErrInternalError)
-			return nil, auth, retErr
-		}
+		// We do these later since it's not meaningful for backends/expmgr to
+		// have what is purely a snapshot of current identity policies, and
+		// plugins can be confused if they are checking contents of
+		// Auth.Policies instead of Auth.TokenPolicies
+		resp.Auth.IdentityPolicies = policyutil.SanitizePolicies(identityPolicies, policyutil.DoNotAddDefaultPolicy)
+		resp.Auth.Policies = policyutil.SanitizePolicies(append(resp.Auth.Policies, identityPolicies...), policyutil.DoNotAddDefaultPolicy)
 	}
 
 	if resp != nil &&
@@ -358,15 +693,19 @@ func (c *Core) handleLoginRequest(ctx context.Context, req *logical.Request) (re
 	// Create an audit trail of the request, auth is not available on login requests
 	// Create an audit trail of the request. Attach auth if it was returned,
 	// e.g. if a token was provided.
-	if err := c.auditBroker.LogRequest(ctx, auth, req, c.auditedHeaders, nil); err != nil {
-		c.logger.Error("core: failed to audit request", "path", req.Path, "error", err)
+	logInput := &audit.LogInput{
+		Auth:    auth,
+		Request: req,
+	}
+	if err := c.auditBroker.LogRequest(ctx, logInput, c.auditedHeaders); err != nil {
+		c.logger.Error("failed to audit request", "path", req.Path, "error", err)
 		return nil, nil, ErrInternalError
 	}
 
 	// The token store uses authentication even when creating a new token,
 	// so it's handled in handleRequest. It should not be reached here.
 	if strings.HasPrefix(req.Path, "auth/token/") {
-		c.logger.Error("core: unexpected login request for token backend", "request_path", req.Path)
+		c.logger.Error("unexpected login request for token backend", "request_path", req.Path)
 		return nil, nil, ErrInternalError
 	}
 
@@ -415,16 +754,22 @@ func (c *Core) handleLoginRequest(ctx context.Context, req *logical.Request) (re
 
 	// A login request should never return a secret!
 	if resp != nil && resp.Secret != nil {
-		c.logger.Error("core: unexpected Secret response for login path", "request_path", req.Path)
+		c.logger.Error("unexpected Secret response for login path", "request_path", req.Path)
 		return nil, nil, ErrInternalError
 	}
 
 	// If the response generated an authentication, then generate the token
 	if resp != nil && resp.Auth != nil {
+
 		var entity *identity.Entity
 		auth = resp.Auth
 
-		if auth.Alias != nil {
+		mEntry := c.router.MatchingMountEntry(req.Path)
+
+		if auth.Alias != nil &&
+			mEntry != nil &&
+			!mEntry.Local &&
+			c.identityStore != nil {
 			// Overwrite the mount type and mount path in the alias
 			// information
 			auth.Alias.MountType = req.MountType
@@ -447,17 +792,18 @@ func (c *Core) handleLoginRequest(ctx context.Context, req *logical.Request) (re
 				return nil, nil, fmt.Errorf("failed to create an entity for the authenticated alias")
 			}
 
+			if entity.Disabled {
+				return nil, nil, logical.ErrPermissionDenied
+			}
+
 			auth.EntityID = entity.ID
 			if auth.GroupAliases != nil {
-				err = c.identityStore.refreshExternalGroupMembershipsByEntityID(auth.EntityID, auth.GroupAliases)
+				validAliases, err := c.identityStore.refreshExternalGroupMembershipsByEntityID(auth.EntityID, auth.GroupAliases)
 				if err != nil {
 					return nil, nil, err
 				}
+				auth.GroupAliases = validAliases
 			}
-		}
-
-		if strutil.StrListSubset(auth.Policies, []string{"root"}) {
-			return logical.ErrorResponse("auth methods cannot create root tokens"), nil, logical.ErrInvalidRequest
 		}
 
 		// Determine the source of the login
@@ -470,71 +816,77 @@ func (c *Core) handleLoginRequest(ctx context.Context, req *logical.Request) (re
 
 		sysView := c.router.MatchingSystemView(req.Path)
 		if sysView == nil {
-			c.logger.Error("core: unable to look up sys view for login path", "request_path", req.Path)
+			c.logger.Error("unable to look up sys view for login path", "request_path", req.Path)
 			return nil, nil, ErrInternalError
 		}
 
-		// Start off with the sys default value, and update according to period/TTL
-		// from resp.Auth
-		tokenTTL := sysView.DefaultLeaseTTL()
-
-		switch {
-		case auth.Period > time.Duration(0):
-			// Cap the period value to the sys max_ttl value. The auth backend should
-			// have checked for it on its login path, but we check here again for
-			// sanity.
-			if auth.Period > sysView.MaxLeaseTTL() {
-				auth.Period = sysView.MaxLeaseTTL()
-			}
-			tokenTTL = auth.Period
-		case auth.TTL > time.Duration(0):
-			// Cap the TTL value. The auth backend should have checked for it on its
-			// login path (e.g. a call to b.SanitizeTTL), but we check here again for
-			// sanity.
-			if auth.TTL > sysView.MaxLeaseTTL() {
-				auth.TTL = sysView.MaxLeaseTTL()
-			}
-			tokenTTL = auth.TTL
+		tokenTTL, warnings, err := framework.CalculateTTL(sysView, 0, auth.TTL, auth.Period, auth.MaxTTL, auth.ExplicitMaxTTL, time.Time{})
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, warning := range warnings {
+			resp.AddWarning(warning)
 		}
 
+		// We first assign token policies to what was returned from the backend
+		// via auth.Policies. Then, we get the full set of policies into
+		// auth.Policies from the backend + entity information -- this is not
+		// stored in the token, but we perform sanity checks on it and return
+		// that information to the user.
+
 		// Generate a token
-		te := TokenEntry{
+		te := logical.TokenEntry{
 			Path:         req.Path,
-			Policies:     auth.Policies,
 			Meta:         auth.Metadata,
 			DisplayName:  auth.DisplayName,
 			CreationTime: time.Now().Unix(),
 			TTL:          tokenTTL,
 			NumUses:      auth.NumUses,
 			EntityID:     auth.EntityID,
+			BoundCIDRs:   auth.BoundCIDRs,
 		}
 
-		te.Policies = policyutil.SanitizePolicies(te.Policies, true)
+		te.Policies = policyutil.SanitizePolicies(auth.Policies, policyutil.AddDefaultPolicy)
 
-		// Prevent internal policies from being assigned to tokens
-		for _, policy := range te.Policies {
+		_, identityPolicies, err := c.fetchEntityAndDerivedPolicies(auth.EntityID)
+		if err != nil {
+			return nil, nil, ErrInternalError
+		}
+
+		auth.TokenPolicies = te.Policies
+		allPolicies := policyutil.SanitizePolicies(append(te.Policies, identityPolicies...), policyutil.DoNotAddDefaultPolicy)
+
+		// Prevent internal policies from being assigned to tokens. We check
+		// this on auth.Policies including derived ones from Identity before
+		// actually making the token.
+		for _, policy := range allPolicies {
+			if policy == "root" {
+				return logical.ErrorResponse("auth methods cannot create root tokens"), nil, logical.ErrInvalidRequest
+			}
 			if strutil.StrListContains(nonAssignablePolicies, policy) {
 				return logical.ErrorResponse(fmt.Sprintf("cannot assign policy %q", policy)), nil, logical.ErrInvalidRequest
 			}
 		}
 
 		if err := c.tokenStore.create(ctx, &te); err != nil {
-			c.logger.Error("core: failed to create token", "error", err)
+			c.logger.Error("failed to create token", "error", err)
 			return nil, auth, ErrInternalError
 		}
 
 		// Populate the client token, accessor, and TTL
 		auth.ClientToken = te.ID
 		auth.Accessor = te.Accessor
-		auth.Policies = te.Policies
 		auth.TTL = te.TTL
 
 		// Register with the expiration manager
-		if err := c.expiration.RegisterAuth(te.Path, auth); err != nil {
-			c.tokenStore.Revoke(ctx, te.ID)
-			c.logger.Error("core: failed to register token lease", "request_path", req.Path, "error", err)
+		if err := c.expiration.RegisterAuth(ctx, te.Path, auth); err != nil {
+			c.tokenStore.revokeOrphan(ctx, te.ID)
+			c.logger.Error("failed to register token lease", "request_path", req.Path, "error", err)
 			return nil, auth, ErrInternalError
 		}
+
+		auth.IdentityPolicies = policyutil.SanitizePolicies(identityPolicies, policyutil.DoNotAddDefaultPolicy)
+		auth.Policies = allPolicies
 
 		// Attach the display name, might be used by audit backends
 		req.DisplayName = auth.DisplayName

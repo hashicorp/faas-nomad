@@ -32,7 +32,7 @@ var BuiltinListeners = map[string]ListenerFactory{
 func NewListener(t string, config map[string]interface{}, logger io.Writer, ui cli.Ui) (net.Listener, map[string]string, reload.ReloadFunc, error) {
 	f, ok := BuiltinListeners[t]
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("unknown listener type: %s", t)
+		return nil, nil, nil, fmt.Errorf("unknown listener type: %q", t)
 	}
 
 	return f(config, logger, ui)
@@ -49,21 +49,24 @@ func listenerWrapProxy(ln net.Listener, config map[string]interface{}) (net.List
 		return nil, fmt.Errorf("failed parsing proxy_protocol_behavior value: not a string")
 	}
 
-	authorizedAddrsRaw, ok := config["proxy_protocol_authorized_addrs"]
-	if !ok {
-		return nil, fmt.Errorf("proxy_protocol_behavior set but no proxy_protocol_authorized_addrs value")
-	}
-
 	proxyProtoConfig := &proxyutil.ProxyProtoConfig{
 		Behavior: behavior,
 	}
-	if err := proxyProtoConfig.SetAuthorizedAddrs(authorizedAddrsRaw); err != nil {
-		return nil, fmt.Errorf("failed parsing proxy_protocol_authorized_addrs: %v", err)
+
+	if proxyProtoConfig.Behavior == "allow_authorized" || proxyProtoConfig.Behavior == "deny_unauthorized" {
+		authorizedAddrsRaw, ok := config["proxy_protocol_authorized_addrs"]
+		if !ok {
+			return nil, fmt.Errorf("proxy_protocol_behavior set but no proxy_protocol_authorized_addrs value")
+		}
+
+		if err := proxyProtoConfig.SetAuthorizedAddrs(authorizedAddrsRaw); err != nil {
+			return nil, errwrap.Wrapf("failed parsing proxy_protocol_authorized_addrs: {{err}}", err)
+		}
 	}
 
 	newLn, err := proxyutil.WrapInProxyProto(ln, proxyProtoConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed configuring PROXY protocol wrapper: %s", err)
+		return nil, errwrap.Wrapf("failed configuring PROXY protocol wrapper: {{err}}", err)
 	}
 
 	return newLn, nil
@@ -79,7 +82,7 @@ func listenerWrapTLS(
 	if v, ok := config["tls_disable"]; ok {
 		disabled, err := parseutil.ParseBool(v)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("invalid value for 'tls_disable': %v", err)
+			return nil, nil, nil, errwrap.Wrapf("invalid value for 'tls_disable': {{err}}", err)
 		}
 		if disabled {
 			return ln, props, nil, nil
@@ -128,21 +131,21 @@ PASSPHRASECORRECT:
 	tlsConf.NextProtos = []string{"h2", "http/1.1"}
 	tlsConf.MinVersion, ok = tlsutil.TLSLookup[tlsvers]
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("'tls_min_version' value %s not supported, please specify one of [tls10,tls11,tls12]", tlsvers)
+		return nil, nil, nil, fmt.Errorf("'tls_min_version' value %q not supported, please specify one of [tls10,tls11,tls12]", tlsvers)
 	}
 	tlsConf.ClientAuth = tls.RequestClientCert
 
 	if v, ok := config["tls_cipher_suites"]; ok {
 		ciphers, err := tlsutil.ParseCiphers(v.(string))
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("invalid value for 'tls_cipher_suites': %v", err)
+			return nil, nil, nil, errwrap.Wrapf("invalid value for 'tls_cipher_suites': {{err}}", err)
 		}
 		tlsConf.CipherSuites = ciphers
 	}
 	if v, ok := config["tls_prefer_server_cipher_suites"]; ok {
 		preferServer, err := parseutil.ParseBool(v)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("invalid value for 'tls_prefer_server_cipher_suites': %v", err)
+			return nil, nil, nil, errwrap.Wrapf("invalid value for 'tls_prefer_server_cipher_suites': {{err}}", err)
 		}
 		tlsConf.PreferServerCipherSuites = preferServer
 	}
@@ -151,7 +154,7 @@ PASSPHRASECORRECT:
 	if v, ok := config["tls_require_and_verify_client_cert"]; ok {
 		requireVerifyCerts, err = parseutil.ParseBool(v)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("invalid value for 'tls_require_and_verify_client_cert': %v", err)
+			return nil, nil, nil, errwrap.Wrapf("invalid value for 'tls_require_and_verify_client_cert': {{err}}", err)
 		}
 		if requireVerifyCerts {
 			tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
@@ -160,7 +163,7 @@ PASSPHRASECORRECT:
 			caPool := x509.NewCertPool()
 			data, err := ioutil.ReadFile(tlsClientCaFile.(string))
 			if err != nil {
-				return nil, nil, nil, fmt.Errorf("failed to read tls_client_ca_file: %v", err)
+				return nil, nil, nil, errwrap.Wrapf("failed to read tls_client_ca_file: {{err}}", err)
 			}
 
 			if !caPool.AppendCertsFromPEM(data) {
@@ -172,12 +175,14 @@ PASSPHRASECORRECT:
 	if v, ok := config["tls_disable_client_certs"]; ok {
 		disableClientCerts, err := parseutil.ParseBool(v)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("invalid value for 'tls_disable_client_certs': %v", err)
+			return nil, nil, nil, errwrap.Wrapf("invalid value for 'tls_disable_client_certs': {{err}}", err)
 		}
 		if disableClientCerts && requireVerifyCerts {
 			return nil, nil, nil, fmt.Errorf("'tls_disable_client_certs' and 'tls_require_and_verify_client_cert' are mutually exclusive")
 		}
-		tlsConf.ClientAuth = tls.NoClientCert
+		if disableClientCerts {
+			tlsConf.ClientAuth = tls.NoClientCert
+		}
 	}
 
 	ln = tls.NewListener(ln, tlsConf)

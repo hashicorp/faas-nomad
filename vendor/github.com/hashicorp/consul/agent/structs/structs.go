@@ -6,13 +6,17 @@ import (
 	"math/rand"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/hashicorp/consul/agent/cache"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/types"
 	"github.com/hashicorp/go-msgpack/codec"
+	"github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/serf/coordinate"
+	"github.com/mitchellh/hashstructure"
 )
 
 type MessageType uint8
@@ -27,18 +31,21 @@ type RaftIndex struct {
 // These are serialized between Consul servers and stored in Consul snapshots,
 // so entries must only ever be added.
 const (
-	RegisterRequestType       MessageType = 0
-	DeregisterRequestType                 = 1
-	KVSRequestType                        = 2
-	SessionRequestType                    = 3
-	ACLRequestType                        = 4
-	TombstoneRequestType                  = 5
-	CoordinateBatchUpdateType             = 6
-	PreparedQueryRequestType              = 7
-	TxnRequestType                        = 8
-	AutopilotRequestType                  = 9
-	AreaRequestType                       = 10
-	ACLBootstrapRequestType               = 11 // FSM snapshots only.
+	RegisterRequestType        MessageType = 0
+	DeregisterRequestType                  = 1
+	KVSRequestType                         = 2
+	SessionRequestType                     = 3
+	ACLRequestType                         = 4
+	TombstoneRequestType                   = 5
+	CoordinateBatchUpdateType              = 6
+	PreparedQueryRequestType               = 7
+	TxnRequestType                         = 8
+	AutopilotRequestType                   = 9
+	AreaRequestType                        = 10
+	ACLBootstrapRequestType                = 11 // FSM snapshots only.
+	IntentionRequestType                   = 12
+	ConnectCARequestType                   = 13
+	ConnectCAProviderStateType             = 14
 )
 
 const (
@@ -110,11 +117,27 @@ type QueryOptions struct {
 	// If set, the leader must verify leadership prior to
 	// servicing the request. Prevents a stale read.
 	RequireConsistent bool
+
+	// If set and AllowStale is true, will try first a stale
+	// read, and then will perform a consistent read if stale
+	// read is older than value
+	MaxStaleDuration time.Duration
 }
 
 // IsRead is always true for QueryOption.
 func (q QueryOptions) IsRead() bool {
 	return true
+}
+
+// ConsistencyLevel display the consistency required by a request
+func (q QueryOptions) ConsistencyLevel() string {
+	if q.RequireConsistent {
+		return "consistent"
+	} else if q.AllowStale {
+		return "stale"
+	} else {
+		return "leader"
+	}
 }
 
 func (q QueryOptions) AllowStaleRead() bool {
@@ -157,6 +180,11 @@ type QueryMeta struct {
 
 	// Used to indicate if there is a known leader node
 	KnownLeader bool
+
+	// Consistencylevel returns the consistency used to serve the query
+	// Having `discovery_max_stale` on the agent can affect whether
+	// the request was served by a leader.
+	ConsistencyLevel string
 }
 
 // RegisterRequest is used for the Catalog.Register endpoint
@@ -237,6 +265,7 @@ type QuerySource struct {
 	Datacenter string
 	Segment    string
 	Node       string
+	Ip         string
 }
 
 // DCSpecificRequest is used to query about a specific DC
@@ -251,14 +280,45 @@ func (r *DCSpecificRequest) RequestDatacenter() string {
 	return r.Datacenter
 }
 
+func (r *DCSpecificRequest) CacheInfo() cache.RequestInfo {
+	info := cache.RequestInfo{
+		Token:      r.Token,
+		Datacenter: r.Datacenter,
+		MinIndex:   r.MinQueryIndex,
+		Timeout:    r.MaxQueryTime,
+	}
+
+	// To calculate the cache key we only hash the node filters. The
+	// datacenter is handled by the cache framework. The other fields are
+	// not, but should not be used in any cache types.
+	v, err := hashstructure.Hash(r.NodeMetaFilters, nil)
+	if err == nil {
+		// If there is an error, we don't set the key. A blank key forces
+		// no cache for this request so the request is forwarded directly
+		// to the server.
+		info.Key = strconv.FormatUint(v, 10)
+	}
+
+	return info
+}
+
+func (r *DCSpecificRequest) CacheMinIndex() uint64 {
+	return r.QueryOptions.MinQueryIndex
+}
+
 // ServiceSpecificRequest is used to query about a specific service
 type ServiceSpecificRequest struct {
 	Datacenter      string
 	NodeMetaFilters map[string]string
 	ServiceName     string
 	ServiceTag      string
+	ServiceAddress  string
 	TagFilter       bool // Controls tag filtering
 	Source          QuerySource
+
+	// Connect if true will only search for Connect-compatible services.
+	Connect bool
+
 	QueryOptions
 }
 
@@ -364,12 +424,16 @@ type ServiceNode struct {
 	Datacenter               string
 	TaggedAddresses          map[string]string
 	NodeMeta                 map[string]string
+	ServiceKind              ServiceKind
 	ServiceID                string
 	ServiceName              string
 	ServiceTags              []string
 	ServiceAddress           string
+	ServiceMeta              map[string]string
 	ServicePort              int
 	ServiceEnableTagOverride bool
+	ServiceProxyDestination  string
+	ServiceConnect           ServiceConnect
 
 	RaftIndex
 }
@@ -379,18 +443,26 @@ type ServiceNode struct {
 func (s *ServiceNode) PartialClone() *ServiceNode {
 	tags := make([]string, len(s.ServiceTags))
 	copy(tags, s.ServiceTags)
+	nsmeta := make(map[string]string)
+	for k, v := range s.ServiceMeta {
+		nsmeta[k] = v
+	}
 
 	return &ServiceNode{
 		// Skip ID, see above.
 		Node: s.Node,
 		// Skip Address, see above.
 		// Skip TaggedAddresses, see above.
+		ServiceKind:              s.ServiceKind,
 		ServiceID:                s.ServiceID,
 		ServiceName:              s.ServiceName,
 		ServiceTags:              tags,
 		ServiceAddress:           s.ServiceAddress,
 		ServicePort:              s.ServicePort,
+		ServiceMeta:              nsmeta,
 		ServiceEnableTagOverride: s.ServiceEnableTagOverride,
+		ServiceProxyDestination:  s.ServiceProxyDestination,
+		ServiceConnect:           s.ServiceConnect,
 		RaftIndex: RaftIndex{
 			CreateIndex: s.CreateIndex,
 			ModifyIndex: s.ModifyIndex,
@@ -401,12 +473,16 @@ func (s *ServiceNode) PartialClone() *ServiceNode {
 // ToNodeService converts the given service node to a node service.
 func (s *ServiceNode) ToNodeService() *NodeService {
 	return &NodeService{
+		Kind:              s.ServiceKind,
 		ID:                s.ServiceID,
 		Service:           s.ServiceName,
 		Tags:              s.ServiceTags,
 		Address:           s.ServiceAddress,
 		Port:              s.ServicePort,
+		Meta:              s.ServiceMeta,
 		EnableTagOverride: s.ServiceEnableTagOverride,
+		ProxyDestination:  s.ServiceProxyDestination,
+		Connect:           s.ServiceConnect,
 		RaftIndex: RaftIndex{
 			CreateIndex: s.CreateIndex,
 			ModifyIndex: s.ModifyIndex,
@@ -416,16 +492,91 @@ func (s *ServiceNode) ToNodeService() *NodeService {
 
 type ServiceNodes []*ServiceNode
 
+// ServiceKind is the kind of service being registered.
+type ServiceKind string
+
+const (
+	// ServiceKindTypical is a typical, classic Consul service. This is
+	// represented by the absence of a value. This was chosen for ease of
+	// backwards compatibility: existing services in the catalog would
+	// default to the typical service.
+	ServiceKindTypical ServiceKind = ""
+
+	// ServiceKindConnectProxy is a proxy for the Connect feature. This
+	// service proxies another service within Consul and speaks the connect
+	// protocol.
+	ServiceKindConnectProxy ServiceKind = "connect-proxy"
+)
+
 // NodeService is a service provided by a node
 type NodeService struct {
+	// Kind is the kind of service this is. Different kinds of services may
+	// have differing validation, DNS behavior, etc. An empty kind will default
+	// to the Default kind. See ServiceKind for the full list of kinds.
+	Kind ServiceKind `json:",omitempty"`
+
 	ID                string
 	Service           string
 	Tags              []string
 	Address           string
+	Meta              map[string]string
 	Port              int
 	EnableTagOverride bool
 
+	// ProxyDestination is the name of the service that this service is
+	// a Connect proxy for. This is only valid if Kind is "connect-proxy".
+	// The destination may be a service that isn't present in the catalog.
+	// This is expected and allowed to allow for proxies to come up
+	// earlier than their target services.
+	ProxyDestination string
+
+	// Connect are the Connect settings for a service. This is purposely NOT
+	// a pointer so that we never have to nil-check this.
+	Connect ServiceConnect
+
 	RaftIndex
+}
+
+// ServiceConnect are the shared Connect settings between all service
+// definitions from the agent to the state store.
+type ServiceConnect struct {
+	// Native is true when this service can natively understand Connect.
+	Native bool
+
+	// Proxy configures a connect proxy instance for the service. This is
+	// only used for agent service definitions and is invalid for non-agent
+	// (catalog API) definitions.
+	Proxy *ServiceDefinitionConnectProxy
+}
+
+// Validate validates the node service configuration.
+//
+// NOTE(mitchellh): This currently only validates fields for a ConnectProxy.
+// Historically validation has been directly in the Catalog.Register RPC.
+// ConnectProxy validation was moved here for easier table testing, but
+// other validation still exists in Catalog.Register.
+func (s *NodeService) Validate() error {
+	var result error
+
+	// ConnectProxy validation
+	if s.Kind == ServiceKindConnectProxy {
+		if strings.TrimSpace(s.ProxyDestination) == "" {
+			result = multierror.Append(result, fmt.Errorf(
+				"ProxyDestination must be non-empty for Connect proxy services"))
+		}
+
+		if s.Port == 0 {
+			result = multierror.Append(result, fmt.Errorf(
+				"Port must be set for a Connect proxy"))
+		}
+
+		if s.Connect.Native {
+			result = multierror.Append(result, fmt.Errorf(
+				"A Proxy cannot also be ConnectNative, only typical services"))
+		}
+	}
+
+	return result
 }
 
 // IsSame checks if one NodeService is the same as another, without looking
@@ -438,7 +589,11 @@ func (s *NodeService) IsSame(other *NodeService) bool {
 		!reflect.DeepEqual(s.Tags, other.Tags) ||
 		s.Address != other.Address ||
 		s.Port != other.Port ||
-		s.EnableTagOverride != other.EnableTagOverride {
+		!reflect.DeepEqual(s.Meta, other.Meta) ||
+		s.EnableTagOverride != other.EnableTagOverride ||
+		s.Kind != other.Kind ||
+		s.ProxyDestination != other.ProxyDestination ||
+		s.Connect != other.Connect {
 		return false
 	}
 
@@ -452,12 +607,16 @@ func (s *NodeService) ToServiceNode(node string) *ServiceNode {
 		Node: node,
 		// Skip Address, see ServiceNode definition.
 		// Skip TaggedAddresses, see ServiceNode definition.
+		ServiceKind:              s.Kind,
 		ServiceID:                s.ID,
 		ServiceName:              s.Service,
 		ServiceTags:              s.Tags,
 		ServiceAddress:           s.Address,
 		ServicePort:              s.Port,
+		ServiceMeta:              s.Meta,
 		ServiceEnableTagOverride: s.EnableTagOverride,
+		ServiceProxyDestination:  s.ProxyDestination,
+		ServiceConnect:           s.Connect,
 		RaftIndex: RaftIndex{
 			CreateIndex: s.CreateIndex,
 			ModifyIndex: s.ModifyIndex,
@@ -549,16 +708,33 @@ func (nodes CheckServiceNodes) Shuffle() {
 // check if that option is selected). Note that this returns the filtered
 // results AND modifies the receiver for performance.
 func (nodes CheckServiceNodes) Filter(onlyPassing bool) CheckServiceNodes {
+	return nodes.FilterIgnore(onlyPassing, nil)
+}
+
+// FilterIgnore removes nodes that are failing health checks just like Filter.
+// It also ignores the status of any check with an ID present in ignoreCheckIDs
+// as if that check didn't exist. Note that this returns the filtered results
+// AND modifies the receiver for performance.
+func (nodes CheckServiceNodes) FilterIgnore(onlyPassing bool,
+	ignoreCheckIDs []types.CheckID) CheckServiceNodes {
 	n := len(nodes)
 OUTER:
 	for i := 0; i < n; i++ {
 		node := nodes[i]
+	INNER:
 		for _, check := range node.Checks {
+			for _, ignore := range ignoreCheckIDs {
+				if check.CheckID == ignore {
+					// Skip this _check_ but keep looking at other checks for this node.
+					continue INNER
+				}
+			}
 			if check.Status == api.HealthCritical ||
 				(onlyPassing && check.Status != api.HealthPassing) {
 				nodes[i], nodes[n-1] = nodes[n-1], CheckServiceNode{}
 				n--
 				i--
+				// Skip this _node_ now we've swapped it off the end of the list.
 				continue OUTER
 			}
 		}

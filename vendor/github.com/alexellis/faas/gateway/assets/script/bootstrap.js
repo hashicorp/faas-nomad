@@ -4,9 +4,12 @@
 
 var app = angular.module('faasGateway', ['ngMaterial', 'faasGateway.funcStore']);
 
-app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$mdDialog', '$mdToast', '$mdSidenav',
-    function($scope, $log, $http, $location, $timeout, $mdDialog, $mdToast, $mdSidenav) {
-        var newFuncTabIdx = 0;
+app.controller("home", ['$scope', '$log', '$http', '$location', '$interval', '$filter', '$mdDialog', '$mdToast', '$mdSidenav',
+    function($scope, $log, $http, $location, $interval, $filter, $mdDialog, $mdToast, $mdSidenav) {
+        var FUNCSTORE_DEPLOY_TAB_INDEX = 0;
+        var MANUAL_DEPLOY_TAB_INDEX = 1;
+
+        var newFuncTabIdx = FUNCSTORE_DEPLOY_TAB_INDEX;
         $scope.functions = [];
         $scope.invocationInProgress = false;
         $scope.invocationRequest = "";
@@ -17,6 +20,25 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
         $scope.invocation = {
             contentType: "text"
         };
+
+        $scope.baseUrl = $location.absUrl().replace(/\ui\/$/, '');
+        try {
+            $scope.canCopyToClipboard = document.queryCommandSupported('copy');
+        } catch (err) {
+            console.error(err);
+            $scope.canCopyToClipboard = false;
+        }
+        $scope.copyClicked = function(e) {
+            e.target.parentElement.querySelector('input').select()
+            var copySuccessful = false;
+            try {
+                copySuccessful = document.execCommand('copy');
+            } catch (err) {
+                console.error(err);
+            }
+            var msg = copySuccessful ? 'Copied to Clipboard' : 'Copy failed. Please copy it manually';
+            showPostInvokedToast(msg);
+        }
 
         $scope.toggleSideNav = function() {
             $mdSidenav('left').toggle();
@@ -32,10 +54,28 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
         };
 
         $scope.invocation.request = "";
-
-        setInterval(function() {
+        var fetchFunctionsDelay = 3500;
+        var queryFunctionDelay = 2500;
+        
+        var fetchFunctionsInterval = $interval(function() {
             refreshData();
-        }, 1000);
+        }, fetchFunctionsDelay);
+
+        var queryFunctionInterval = $interval(function() {
+            if($scope.selectedFunction && $scope.selectedFunction.name) {
+                refreshFunction($scope.selectedFunction);
+            }
+        }, queryFunctionDelay);
+
+        var refreshFunction = function(functionInstance) {
+            $http.get("../system/function/" + functionInstance.name)
+            .then(function(response) {
+                functionInstance.ready = (response.data && response.data.availableReplicas && response.data.availableReplicas > 0);
+            })
+            .catch(function(err) {
+                console.error(err);
+            });
+        };
 
         var showPostInvokedToast = function(message, duration) {
             $mdToast.show(
@@ -69,21 +109,22 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
 
             var tryDownload = function(data, filename) {
                 var caught;
-
-                var linkElement = document.createElement('a');
+            
                 try {
                     var blob = new Blob([data], { type: "binary/octet-stream" });
-                    var url = window.URL.createObjectURL(blob);
-
-                    linkElement.setAttribute('href', url);
-                    linkElement.setAttribute("download", filename);
-         
-                    var clickEvent = new MouseEvent("click", {
-                        "view": window,
-                        "bubbles": true,
-                        "cancelable": false
-                    });
-                    linkElement.dispatchEvent(clickEvent);
+            
+                    if (window.navigator.msSaveBlob) { // // IE hack; see http://msdn.microsoft.com/en-us/library/ie/hh779016.aspx
+                        window.navigator.msSaveOrOpenBlob(blob, filename);
+                    }
+                    else {
+                        var linkElement = window.document.createElement("a");
+                        linkElement.href = window.URL.createObjectURL(blob);
+                        linkElement.download = filename;
+                        document.body.appendChild(linkElement);
+                        linkElement.click();
+                        document.body.removeChild(linkElement);
+                    }
+            
                 } catch (ex) {
                     caught = ex;
                 }
@@ -147,6 +188,14 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
                     if (response && response.data) {
                         if (previousItems.length != response.data.length) {
                             $scope.functions = response.data;
+                            
+                            // update the selected function object because the newly fetched object from the API becomes a different object
+                            var filteredSelectedFunction = $filter('filter')($scope.functions, {name: $scope.selectedFunction.name}, true);
+                            if (filteredSelectedFunction && filteredSelectedFunction.length > 0) {
+                                $scope.selectedFunction = filteredSelectedFunction[0];
+                            } else {
+                                $scope.selectedFunction = undefined;
+                            }
                         } else {
                             for (var i = 0; i < $scope.functions.length; i++) {
                                 for (var j = 0; j < response.data.length; j++) {
@@ -176,7 +225,11 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
                 $scope.invocationResponse = "";
                 $scope.invocationStatus = "";
                 $scope.invocationInProgress = false;
-                $scope.invocation.contentType = "text";
+                if (fn.labels && fn.labels['com.openfaas.ui.ext']) {
+                  $scope.invocation.contentType = "binary";
+                } else {
+                  $scope.invocation.contentType = "text";
+                }
                 $scope.invocation.roundTripDuration = "";
             }
         };
@@ -247,6 +300,8 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
                         $scope.closeDialog();
                         showPostInvokedToast("Function created");
                     }).catch(function(error1) {
+                        showPostInvokedToast("Error");
+                        $scope.selectedTabIdx = MANUAL_DEPLOY_TAB_INDEX;
                         $scope.validationError = error1.data;
                     });
             };
@@ -294,8 +349,9 @@ app.controller("home", ['$scope', '$log', '$http', '$location', '$timeout', '$md
 ]);
 
 function uuidv4() {
-    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-    )
+    var cryptoInstance = window.crypto || window.msCrypto; // for IE11
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, function(c) {
+      return (c ^ cryptoInstance.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    })
   }
   

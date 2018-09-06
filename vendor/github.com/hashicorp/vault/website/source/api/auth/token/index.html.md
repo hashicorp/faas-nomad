@@ -28,7 +28,7 @@ large numbers of tokens and their associated leases at once.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST \
-    https://vault.rocks/v1/auth/token/accessors
+    http://127.0.0.1:8200/v1/auth/token/accessors
 ```
 
 ### Sample Response
@@ -123,7 +123,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/token/create
+    http://127.0.0.1:8200/v1/auth/token/create
 ```
 
 ### Sample Response
@@ -140,7 +140,7 @@ $ curl \
       "user": "armon"
     },
     "lease_duration": 3600,
-    "renewable": true,
+    "renewable": true
   }
 }
 ```
@@ -152,7 +152,6 @@ Returns information about the client token.
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `POST`  | `/auth/token/lookup`          | `200 application/json` |
-| `GET`   | `/auth/token/lookup/:token`   | `200 application/json` |
 
 ### Parameters
 
@@ -173,7 +172,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/token/lookup
+    http://127.0.0.1:8200/v1/auth/token/lookup
 ```
 
 ### Sample Response
@@ -181,18 +180,30 @@ $ curl \
 ```json
 {
   "data": {
-    "id": "ClientToken",
-    "policies": [
-      "web",
-      "stage"
-     ],
-    "path": "auth/github/login",
+    "accessor": "8609694a-cdbc-db9b-d345-e782dbb562ed",
+    "creation_time": 1523979354,
+    "creation_ttl": 2764800,
+    "display_name": "ldap2-tesla",
+    "entity_id": "7d2e3179-f69b-450c-7179-ac8ee8bd8ca9",
+    "expire_time": "2018-05-19T11:35:54.466476215-04:00",
+    "explicit_max_ttl": 0,
+    "id": "cf64a70f-3a12-3f6c-791d-6cef6d390eed",
+    "identity_policies": [
+      "dev-group-policy"
+    ],
+    "issue_time": "2018-04-17T11:35:54.466476078-04:00",
     "meta": {
-      "user": "armon",
-      "organization": "hashicorp"
+      "username": "tesla"
     },
-    "display_name": "github-armon",
     "num_uses": 0,
+    "orphan": true,
+    "path": "auth/ldap2/login/tesla",
+    "policies": [
+      "default",
+      "testgroup2-policy"
+    ],
+    "renewable": true,
+    "ttl": 2764790
   }
 }
 ```
@@ -210,7 +221,7 @@ Returns information about the current client token.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/token/lookup-self
+    http://127.0.0.1:8200/v1/auth/token/lookup-self
 ```
 
 ### Sample Response
@@ -218,18 +229,30 @@ $ curl \
 ```json
 {
   "data": {
-    "id": "ClientToken",
-    "policies": [
-      "web",
-      "stage"
-     ],
-    "path": "auth/github/login",
+    "accessor": "8609694a-cdbc-db9b-d345-e782dbb562ed",
+    "creation_time": 1523979354,
+    "creation_ttl": 2764800,
+    "display_name": "ldap2-tesla",
+    "entity_id": "7d2e3179-f69b-450c-7179-ac8ee8bd8ca9",
+    "expire_time": "2018-05-19T11:35:54.466476215-04:00",
+    "explicit_max_ttl": 0,
+    "id": "cf64a70f-3a12-3f6c-791d-6cef6d390eed",
+    "identity_policies": [
+      "dev-group-policy"
+    ],
+    "issue_time": "2018-04-17T11:35:54.466476078-04:00",
     "meta": {
-      "user": "armon",
-      "organization": "hashicorp"
+      "username": "tesla"
     },
-    "display_name": "github-armon",
     "num_uses": 0,
+    "orphan": true,
+    "path": "auth/ldap2/login/tesla",
+    "policies": [
+      "default",
+      "testgroup2-policy"
+    ],
+    "renewable": true,
+    "ttl": 2764790
   }
 }
 ```
@@ -241,7 +264,6 @@ Returns information about the client token from the accessor.
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `POST`  | `/auth/token/lookup-accessor`          | `200 application/json` |
-| `GET`   | `/auth/token/lookup-accessor/:accessor`   | `200 application/json` |
 
 ### Parameters
 
@@ -251,7 +273,7 @@ Returns information about the client token from the accessor.
 
 ```json
 {
-  "accessor": "2c84f488-2133-4ced-87b0-570f93a76830"
+  "accessor": "8609694a-cdbc-db9b-d345-e782dbb562ed"
 }
 ```
 
@@ -262,32 +284,39 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/token/lookup-accessor
+    http://127.0.0.1:8200/v1/auth/token/lookup-accessor
 ```
 
 ### Sample Response
 
 ```json
 {
-  "lease_id": "",
-  "renewable": false,
-  "lease_duration": 0,
   "data": {
-    "creation_time": 1457533232,
+    "accessor": "8609694a-cdbc-db9b-d345-e782dbb562ed",
+    "creation_time": 1523979354,
     "creation_ttl": 2764800,
-    "display_name": "token",
-    "meta": null,
+    "display_name": "ldap2-tesla",
+    "entity_id": "7d2e3179-f69b-450c-7179-ac8ee8bd8ca9",
+    "expire_time": "2018-05-19T11:35:54.466476215-04:00",
+    "explicit_max_ttl": 0,
+    "id": "",
+    "identity_policies": [
+      "dev-group-policy"
+    ],
+    "issue_time": "2018-04-17T11:35:54.466476078-04:00",
+    "meta": {
+      "username": "tesla"
+    },
     "num_uses": 0,
-    "orphan": false,
-    "path": "auth/token/create",
+    "orphan": true,
+    "path": "auth/ldap2/login/tesla",
     "policies": [
       "default",
-      "web"
+      "testgroup2-policy"
     ],
-    "ttl": 2591976
-  },
-  "warnings": null,
-  "auth": null
+    "renewable": true,
+    "ttl": 2763902
+  }
 }
 ```
 
@@ -300,7 +329,6 @@ if there is a lease associated with it.
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `POST`   | `/auth/token/renew`          | `200 application/json` |
-| `POST`   | `/auth/token/renew/:token`   | `200 application/json` |
 
 ### Parameters
 
@@ -324,7 +352,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/token/renew
+    http://127.0.0.1:8200/v1/auth/token/renew
 ```
 
 ### Sample Response
@@ -341,7 +369,7 @@ $ curl \
       "user": "armon"
     },
     "lease_duration": 3600,
-    "renewable": true,
+    "renewable": true
   }
 }
 ```
@@ -376,7 +404,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/token/renew-self
+    http://127.0.0.1:8200/v1/auth/token/renew-self
 ```
 
 ### Sample Response
@@ -393,14 +421,14 @@ $ curl \
       "user": "armon"
     },
     "lease_duration": 3600,
-    "renewable": true,
+    "renewable": true
   }
 }
 ```
 
 ## Revoke a Token
 
-Revokes a token and all child tokens. When the token is revoked, all secrets
+Revokes a token and all child tokens. When the token is revoked, all dynamic secrets
 generated with it are also revoked.
 
 | Method   | Path                         | Produces               |
@@ -426,7 +454,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/token/revoke
+    http://127.0.0.1:8200/v1/auth/token/revoke
 ```
 
 ## Revoke a Token (Self)
@@ -444,7 +472,7 @@ revoked, all dynamic secrets generated with it are also revoked.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
-    https://vault.rocks/v1/auth/token/revoke-self
+    http://127.0.0.1:8200/v1/auth/token/revoke-self
 ```
 
 ## Revoke a Token Accessor
@@ -476,7 +504,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/token/revoke-accessor
+    http://127.0.0.1:8200/v1/auth/token/revoke-accessor
 ```
 
 ## Revoke Token and Orphan Children
@@ -489,7 +517,6 @@ endpoint.
 | Method   | Path                         | Produces               |
 | :------- | :--------------------------- | :--------------------- |
 | `POST`   | `/auth/token/revoke-orphan`          | `204 (empty body)` |
-| `POST`   | `/auth/token/revoke-orphan/:token`   | `204 (empty body)` |
 
 ### Parameters
 
@@ -511,7 +538,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/auth/token/revoke-orphan
+    http://127.0.0.1:8200/v1/auth/token/revoke-orphan
 ```
 
 ## Read Token Role
@@ -531,7 +558,7 @@ Fetches the named role configuration.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/auth/token/roles/nomad
+    http://127.0.0.1:8200/v1/auth/token/roles/nomad
 ```
 
 ### Sample Response
@@ -572,7 +599,7 @@ List available token roles.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request LIST
-    https://vault.rocks/v1/auth/token/roles
+    http://127.0.0.1:8200/v1/auth/token/roles
 ```
 
 ### Sample Response
@@ -626,11 +653,13 @@ tokens created against a role to be revoked using the
 - `renewable` `(bool: true)` - Set to `false` to disable the ability of the token
   to be renewed past its initial TTL.  Setting the value to `true` will allow
   the token to be renewable up to the system/mount maximum TTL.
-- `explicit_max_ttl` `(string: "")` - If set, the token will have an explicit
-  max TTL set upon it. This maximum token TTL *cannot* be changed later, and
-  unlike with normal tokens, updates to the system/mount max TTL value will
-  have no effect at renewal time -- the token will never be able to be renewed
-  or used past the value set at issue time.
+- `explicit_max_ttl` `(int: 0)` - Provides a maximum lifetime for any
+  tokens issued against this role, including periodic tokens. Unlike direct
+  token creation, where the value for an explicit max TTL is stored in the
+  token, for roles this check will always use the current value set in the
+  role. The main use of this is to provide a hard upper bound on periodic
+  tokens, which otherwise can live forever as long as they are renewed. This is
+  an integer number of seconds.
 - `path_suffix` `(string: "")` - If set, tokens created against this role will
   have the given suffix as part of their path in addition to the role name. This
   can be useful in certain scenarios, such as keeping the same role name in the
@@ -638,6 +667,12 @@ tokens created against a role to be revoked using the
   The suffix can be changed, allowing new callers to have the new suffix as part
   of their path, and then tokens with the old suffix can be revoked via
   `/sys/leases/revoke-prefix`.
+- `bound_cidrs` `(string: "", or list: [])` – If set, restricts usage of the
+  generated token to client IPs falling within the range of the specified
+  CIDR(s). Unlike most other role parameters, this is not reevaluated from the
+  current role value at each usage; it is set on the token itself. Root tokens
+  with no TTL will not be bound by these CIDRs; root tokens with TTLs will be
+  bound by these CIDRs.
 
 ### Sample Payload
 
@@ -647,6 +682,7 @@ tokens created against a role to be revoked using the
   ],
   "name": "nomad",
   "orphan": false,
+  "bound_cidrs": ["127.0.0.1/32", "128.252.0.0/16"],
   "renewable": true
 ```
 
@@ -657,7 +693,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST
     --data @payload.json
-    https://vault.rocks/v1/auth/token/roles/nomad
+    http://127.0.0.1:8200/v1/auth/token/roles/nomad
 ```
 
 ## Delete Token Role
@@ -678,7 +714,7 @@ This endpoint deletes the named token role.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/auth/token/roles/admins
+    http://127.0.0.1:8200/v1/auth/token/roles/admins
 ```
 
 ## Tidy Tokens
@@ -698,5 +734,5 @@ storage method so should be used sparingly.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
-    https://vault.rocks/v1/auth/token/tidy
+    http://127.0.0.1:8200/v1/auth/token/tidy
 ```

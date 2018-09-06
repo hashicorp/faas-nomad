@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/audit"
 	"github.com/hashicorp/vault/helper/salt"
 	"github.com/hashicorp/vault/logical"
@@ -46,7 +47,7 @@ func Factory(ctx context.Context, conf *audit.BackendConfig) (audit.Backend, err
 	switch format {
 	case "json", "jsonx":
 	default:
-		return nil, fmt.Errorf("unknown format type %s", format)
+		return nil, fmt.Errorf("unknown format type %q", format)
 	}
 
 	// Check if hashing of accessor is disabled
@@ -113,7 +114,7 @@ func Factory(ctx context.Context, conf *audit.BackendConfig) (audit.Backend, err
 		// otherwise it will be too late to catch later without problems
 		// (ref: https://github.com/hashicorp/vault/issues/550)
 		if err := b.open(); err != nil {
-			return nil, fmt.Errorf("sanity check failed; unable to open %s for writing: %v", path, err)
+			return nil, errwrap.Wrapf(fmt.Sprintf("sanity check failed; unable to open %q for writing: {{err}}", path), err)
 		}
 	}
 
@@ -141,7 +142,9 @@ type Backend struct {
 	saltView   logical.Storage
 }
 
-func (b *Backend) Salt() (*salt.Salt, error) {
+var _ audit.Backend = (*Backend)(nil)
+
+func (b *Backend) Salt(ctx context.Context) (*salt.Salt, error) {
 	b.saltMutex.RLock()
 	if b.salt != nil {
 		defer b.saltMutex.RUnlock()
@@ -153,7 +156,7 @@ func (b *Backend) Salt() (*salt.Salt, error) {
 	if b.salt != nil {
 		return b.salt, nil
 	}
-	salt, err := salt.NewSalt(b.saltView, b.saltConfig)
+	salt, err := salt.NewSalt(ctx, b.saltView, b.saltConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -161,35 +164,30 @@ func (b *Backend) Salt() (*salt.Salt, error) {
 	return salt, nil
 }
 
-func (b *Backend) GetHash(data string) (string, error) {
-	salt, err := b.Salt()
+func (b *Backend) GetHash(ctx context.Context, data string) (string, error) {
+	salt, err := b.Salt(ctx)
 	if err != nil {
 		return "", err
 	}
 	return audit.HashString(salt, data), nil
 }
 
-func (b *Backend) LogRequest(
-	_ context.Context,
-	auth *logical.Auth,
-	req *logical.Request,
-	outerErr error) error {
-
+func (b *Backend) LogRequest(ctx context.Context, in *audit.LogInput) error {
 	b.fileLock.Lock()
 	defer b.fileLock.Unlock()
 
 	switch b.path {
 	case "stdout":
-		return b.formatter.FormatRequest(os.Stdout, b.formatConfig, auth, req, outerErr)
+		return b.formatter.FormatRequest(ctx, os.Stdout, b.formatConfig, in)
 	case "discard":
-		return b.formatter.FormatRequest(ioutil.Discard, b.formatConfig, auth, req, outerErr)
+		return b.formatter.FormatRequest(ctx, ioutil.Discard, b.formatConfig, in)
 	}
 
 	if err := b.open(); err != nil {
 		return err
 	}
 
-	if err := b.formatter.FormatRequest(b.f, b.formatConfig, auth, req, outerErr); err == nil {
+	if err := b.formatter.FormatRequest(ctx, b.f, b.formatConfig, in); err == nil {
 		return nil
 	}
 
@@ -201,31 +199,26 @@ func (b *Backend) LogRequest(
 		return err
 	}
 
-	return b.formatter.FormatRequest(b.f, b.formatConfig, auth, req, outerErr)
+	return b.formatter.FormatRequest(ctx, b.f, b.formatConfig, in)
 }
 
-func (b *Backend) LogResponse(
-	_ context.Context,
-	auth *logical.Auth,
-	req *logical.Request,
-	resp *logical.Response,
-	err error) error {
+func (b *Backend) LogResponse(ctx context.Context, in *audit.LogInput) error {
 
 	b.fileLock.Lock()
 	defer b.fileLock.Unlock()
 
 	switch b.path {
 	case "stdout":
-		return b.formatter.FormatResponse(os.Stdout, b.formatConfig, auth, req, resp, err)
+		return b.formatter.FormatResponse(ctx, os.Stdout, b.formatConfig, in)
 	case "discard":
-		return b.formatter.FormatResponse(ioutil.Discard, b.formatConfig, auth, req, resp, err)
+		return b.formatter.FormatResponse(ctx, ioutil.Discard, b.formatConfig, in)
 	}
 
 	if err := b.open(); err != nil {
 		return err
 	}
 
-	if err := b.formatter.FormatResponse(b.f, b.formatConfig, auth, req, resp, err); err == nil {
+	if err := b.formatter.FormatResponse(ctx, b.f, b.formatConfig, in); err == nil {
 		return nil
 	}
 
@@ -237,7 +230,7 @@ func (b *Backend) LogResponse(
 		return err
 	}
 
-	return b.formatter.FormatResponse(b.f, b.formatConfig, auth, req, resp, err)
+	return b.formatter.FormatResponse(ctx, b.f, b.formatConfig, in)
 }
 
 // The file lock must be held before calling this

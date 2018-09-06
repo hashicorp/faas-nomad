@@ -22,14 +22,7 @@ func TestTransit_Export_KeyVersion_ExportsCorrectVersion(t *testing.T) {
 }
 
 func verifyExportsCorrectVersion(t *testing.T, exportType, keyType string) {
-	var b *backend
-	sysView := logical.TestSystemView()
-	storage := &logical.InmemStorage{}
-
-	b = Backend(&logical.BackendConfig{
-		StorageView: storage,
-		System:      sysView,
-	})
+	b, storage := createBackendWithSysView(t)
 
 	// First create a key, v1
 	req := &logical.Request{
@@ -119,14 +112,7 @@ func verifyExportsCorrectVersion(t *testing.T, exportType, keyType string) {
 }
 
 func TestTransit_Export_ValidVersionsOnly(t *testing.T) {
-	var b *backend
-	sysView := logical.TestSystemView()
-	storage := &logical.InmemStorage{}
-
-	b = Backend(&logical.BackendConfig{
-		StorageView: storage,
-		System:      sysView,
-	})
+	b, storage := createBackendWithSysView(t)
 
 	// First create a key, v1
 	req := &logical.Request{
@@ -226,14 +212,7 @@ func TestTransit_Export_ValidVersionsOnly(t *testing.T) {
 }
 
 func TestTransit_Export_KeysNotMarkedExportable_ReturnsError(t *testing.T) {
-	var b *backend
-	sysView := logical.TestSystemView()
-	storage := &logical.InmemStorage{}
-
-	b = Backend(&logical.BackendConfig{
-		StorageView: storage,
-		System:      sysView,
-	})
+	b, storage := createBackendWithSysView(t)
 
 	req := &logical.Request{
 		Storage:   storage,
@@ -258,19 +237,12 @@ func TestTransit_Export_KeysNotMarkedExportable_ReturnsError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !rsp.IsError() {
-		t.Fatal("Key not marked as exportble but was exported.")
+		t.Fatal("Key not marked as exportable but was exported.")
 	}
 }
 
 func TestTransit_Export_SigningDoesNotSupportSigning_ReturnsError(t *testing.T) {
-	var b *backend
-	sysView := logical.TestSystemView()
-	storage := &logical.InmemStorage{}
-
-	b = Backend(&logical.BackendConfig{
-		StorageView: storage,
-		System:      sysView,
-	})
+	b, storage := createBackendWithSysView(t)
 
 	req := &logical.Request{
 		Storage:   storage,
@@ -303,14 +275,7 @@ func TestTransit_Export_EncryptionDoesNotSupportEncryption_ReturnsError(t *testi
 }
 
 func testTransit_Export_EncryptionDoesNotSupportEncryption_ReturnsError(t *testing.T, keyType string) {
-	var b *backend
-	sysView := logical.TestSystemView()
-	storage := &logical.InmemStorage{}
-
-	b = Backend(&logical.BackendConfig{
-		StorageView: storage,
-		System:      sysView,
-	})
+	b, storage := createBackendWithSysView(t)
 
 	req := &logical.Request{
 		Storage:   storage,
@@ -338,14 +303,7 @@ func testTransit_Export_EncryptionDoesNotSupportEncryption_ReturnsError(t *testi
 }
 
 func TestTransit_Export_KeysDoesNotExist_ReturnsNotFound(t *testing.T) {
-	var b *backend
-	sysView := logical.TestSystemView()
-	storage := &logical.InmemStorage{}
-
-	b = Backend(&logical.BackendConfig{
-		StorageView: storage,
-		System:      sysView,
-	})
+	b, storage := createBackendWithSysView(t)
 
 	req := &logical.Request{
 		Storage:   storage,
@@ -360,14 +318,7 @@ func TestTransit_Export_KeysDoesNotExist_ReturnsNotFound(t *testing.T) {
 }
 
 func TestTransit_Export_EncryptionKey_DoesNotExportHMACKey(t *testing.T) {
-	var b *backend
-	sysView := logical.TestSystemView()
-	storage := &logical.InmemStorage{}
-
-	b = Backend(&logical.BackendConfig{
-		StorageView: storage,
-		System:      sysView,
-	})
+	b, storage := createBackendWithSysView(t)
 
 	req := &logical.Request{
 		Storage:   storage,
@@ -407,7 +358,7 @@ func TestTransit_Export_EncryptionKey_DoesNotExportHMACKey(t *testing.T) {
 		t.Error("could not cast to keys object")
 	}
 	if len(hmacKeys) != len(encryptionKeys) {
-		t.Errorf("hmac (%d) and encyryption (%d) key count don't match",
+		t.Errorf("hmac (%d) and encryption (%d) key count don't match",
 			len(hmacKeys), len(encryptionKeys))
 	}
 

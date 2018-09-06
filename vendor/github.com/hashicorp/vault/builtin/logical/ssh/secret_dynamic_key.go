@@ -32,8 +32,7 @@ func secretDynamicKey(b *backend) *framework.Secret {
 }
 
 func (b *backend) secretDynamicKeyRenew(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
-	f := framework.LeaseExtend(0, 0, b.System())
-	return f(ctx, req, d)
+	return &logical.Response{Secret: req.Secret}, nil
 }
 
 func (b *backend) secretDynamicKeyRevoke(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
@@ -56,7 +55,7 @@ func (b *backend) secretDynamicKeyRevoke(ctx context.Context, req *logical.Reque
 	// Fetch the host key using the key name
 	hostKey, err := b.getKey(ctx, req.Storage, intSec.HostKeyName)
 	if err != nil {
-		return nil, fmt.Errorf("key %q not found error: %v", intSec.HostKeyName, err)
+		return nil, errwrap.Wrapf(fmt.Sprintf("key %q not found error: {{err}}", intSec.HostKeyName), err)
 	}
 	if hostKey == nil {
 		return nil, fmt.Errorf("key %q not found", intSec.HostKeyName)
@@ -64,7 +63,7 @@ func (b *backend) secretDynamicKeyRevoke(ctx context.Context, req *logical.Reque
 
 	// Remove the public key from authorized_keys file in target machine
 	// The last param 'false' indicates that the key should be uninstalled.
-	err = b.installPublicKeyInTarget(intSec.AdminUser, intSec.Username, intSec.IP, intSec.Port, hostKey.Key, intSec.DynamicPublicKey, intSec.InstallScript, false)
+	err = b.installPublicKeyInTarget(ctx, intSec.AdminUser, intSec.Username, intSec.IP, intSec.Port, hostKey.Key, intSec.DynamicPublicKey, intSec.InstallScript, false)
 	if err != nil {
 		return nil, fmt.Errorf("error removing public key from authorized_keys file in target")
 	}

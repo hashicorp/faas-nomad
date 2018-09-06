@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/consul/agent/connect"
 	"github.com/hashicorp/consul/agent/metadata"
+	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/agent/token"
 	"github.com/hashicorp/consul/lib/freeport"
 	"github.com/hashicorp/consul/testrpc"
@@ -90,6 +92,17 @@ func testServerConfig(t *testing.T) (string, *Config) {
 	// TODO (slackpad) - We should be able to run all tests w/o this, but it
 	// looks like several depend on it.
 	config.RPCHoldTimeout = 5 * time.Second
+
+	config.ConnectEnabled = true
+	config.CAConfig = &structs.CAConfiguration{
+		ClusterID: connect.TestClusterID,
+		Provider:  structs.ConsulCAProvider,
+		Config: map[string]interface{}{
+			"PrivateKey":     "",
+			"RootCert":       "",
+			"RotationPeriod": 90 * 24 * time.Hour,
+		},
+	}
 
 	return dir, config
 }
@@ -629,7 +642,7 @@ func TestServer_globalRPCErrors(t *testing.T) {
 		t.Fatalf("should have errored")
 	}
 	if !strings.Contains(err.Error(), "Bad.Method") {
-		t.Fatalf("unexpcted error: %s", err)
+		t.Fatalf("unexpected error: %s", err)
 	}
 }
 
@@ -759,5 +772,23 @@ func TestServer_TLSToFullVerify(t *testing.T) {
 	}
 	if !success {
 		t.Fatalf("bad: %v", success)
+	}
+}
+
+func TestServer_RevokeLeadershipIdempotent(t *testing.T) {
+	t.Parallel()
+	dir1, s1 := testServer(t)
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+
+	testrpc.WaitForLeader(t, s1.RPC, "dc1")
+
+	err := s1.revokeLeadership()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s1.revokeLeadership()
+	if err != nil {
+		t.Fatal(err)
 	}
 }

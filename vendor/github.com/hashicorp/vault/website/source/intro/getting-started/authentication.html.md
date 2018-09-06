@@ -79,14 +79,14 @@ $ vault token revoke 463763ae-0c3b-ff77-e137-af668941465c
 Success! Revoked token (if it existed)
 ```
 
-In a previous section, we use the `vault lease revoke` command. This command
+In a [previous section](/intro/getting-started/dynamic-secrets.html#revoking-the-secret), we use the `vault lease revoke` command. This command
 is only used for revoking _leases_. For revoking _tokens_, use
 `vault token revoke`.
 
 To authenticate with a token:
 
 ```text
-$ vault login d08e2bd5-ffb0-440d-6486-b8f650ec8c0c
+$ vault login a402d075-6d59-6129-1ac7-3718796d4346
 Success! You are now authenticated. The token information displayed below
 is already stored in the token helper. You do NOT need to run "vault login"
 again. Future Vault requests will automatically use this token.
@@ -260,7 +260,7 @@ the `-mode` argument. For example:
 $ vault token revoke -mode path auth/github
 ```
 
-Alternatively, if you want to complete disable the GitHub auth method:
+Alternatively, if you want to completely disable the GitHub auth method:
 
 ```text
 $ vault auth disable github

@@ -19,8 +19,7 @@ func TestCopy_auth(t *testing.T) {
 	// Make a non-pointer one so that it can't be modified directly
 	expected := logical.Auth{
 		LeaseOptions: logical.LeaseOptions{
-			TTL:       1 * time.Hour,
-			IssueTime: time.Now(),
+			TTL: 1 * time.Hour,
 		},
 
 		ClientToken: "foo",
@@ -99,7 +98,7 @@ func TestHashString(t *testing.T) {
 		Key:   "salt",
 		Value: []byte("foo"),
 	})
-	localSalt, err := salt.NewSalt(inmemStorage, &salt.Config{
+	localSalt, err := salt.NewSalt(context.Background(), inmemStorage, &salt.Config{
 		HMAC:     sha256.New,
 		HMACType: "hmac-sha256",
 	})
@@ -116,32 +115,37 @@ func TestHash(t *testing.T) {
 	now := time.Now()
 
 	cases := []struct {
-		Input  interface{}
-		Output interface{}
+		Input           interface{}
+		Output          interface{}
+		NonHMACDataKeys []string
 	}{
 		{
 			&logical.Auth{ClientToken: "foo"},
 			&logical.Auth{ClientToken: "hmac-sha256:08ba357e274f528065766c770a639abf6809b39ccfd37c2a3157c7f51954da0a"},
+			nil,
 		},
 		{
 			&logical.Request{
 				Data: map[string]interface{}{
 					"foo":              "bar",
+					"baz":              "foobar",
 					"private_key_type": certutil.PrivateKeyType("rsa"),
 				},
 			},
 			&logical.Request{
 				Data: map[string]interface{}{
 					"foo":              "hmac-sha256:f9320baf0249169e73850cd6156ded0106e2bb6ad8cab01b7bbbebe6d1065317",
+					"baz":              "foobar",
 					"private_key_type": "hmac-sha256:995230dca56fffd310ff591aa404aab52b2abb41703c787cfa829eceb4595bf1",
 				},
 			},
+			[]string{"baz"},
 		},
 		{
 			&logical.Response{
 				Data: map[string]interface{}{
 					"foo": "bar",
-
+					"baz": "foobar",
 					// Responses can contain time values, so test that with
 					// a known fixed value.
 					"bar": now,
@@ -157,6 +161,7 @@ func TestHash(t *testing.T) {
 			&logical.Response{
 				Data: map[string]interface{}{
 					"foo": "hmac-sha256:f9320baf0249169e73850cd6156ded0106e2bb6ad8cab01b7bbbebe6d1065317",
+					"baz": "foobar",
 					"bar": now.Format(time.RFC3339Nano),
 				},
 				WrapInfo: &wrapping.ResponseWrapInfo{
@@ -167,28 +172,29 @@ func TestHash(t *testing.T) {
 					WrappedAccessor: "hmac-sha256:f9320baf0249169e73850cd6156ded0106e2bb6ad8cab01b7bbbebe6d1065317",
 				},
 			},
+			[]string{"baz"},
 		},
 		{
 			"foo",
 			"foo",
+			nil,
 		},
 		{
 			&logical.Auth{
 				LeaseOptions: logical.LeaseOptions{
-					TTL:       1 * time.Hour,
-					IssueTime: now,
+					TTL: 1 * time.Hour,
 				},
 
 				ClientToken: "foo",
 			},
 			&logical.Auth{
 				LeaseOptions: logical.LeaseOptions{
-					TTL:       1 * time.Hour,
-					IssueTime: now,
+					TTL: 1 * time.Hour,
 				},
 
 				ClientToken: "hmac-sha256:08ba357e274f528065766c770a639abf6809b39ccfd37c2a3157c7f51954da0a",
 			},
+			nil,
 		},
 	}
 
@@ -197,7 +203,7 @@ func TestHash(t *testing.T) {
 		Key:   "salt",
 		Value: []byte("foo"),
 	})
-	localSalt, err := salt.NewSalt(inmemStorage, &salt.Config{
+	localSalt, err := salt.NewSalt(context.Background(), inmemStorage, &salt.Config{
 		HMAC:     sha256.New,
 		HMACType: "hmac-sha256",
 	})
@@ -206,16 +212,16 @@ func TestHash(t *testing.T) {
 	}
 	for _, tc := range cases {
 		input := fmt.Sprintf("%#v", tc.Input)
-		if err := Hash(localSalt, tc.Input); err != nil {
+		if err := Hash(localSalt, tc.Input, tc.NonHMACDataKeys); err != nil {
 			t.Fatalf("err: %s\n\n%s", err, input)
 		}
 		if _, ok := tc.Input.(*logical.Response); ok {
 			if !reflect.DeepEqual(tc.Input.(*logical.Response).WrapInfo, tc.Output.(*logical.Response).WrapInfo) {
-				t.Fatalf("bad:\nInput:\n%s\nTest case input:\n%#v\nTest case output\n%#v", input, tc.Input.(*logical.Response).WrapInfo, tc.Output.(*logical.Response).WrapInfo)
+				t.Fatalf("bad:\nInput:\n%s\nTest case input:\n%#v\nTest case output:\n%#v", input, tc.Input.(*logical.Response).WrapInfo, tc.Output.(*logical.Response).WrapInfo)
 			}
 		}
 		if !reflect.DeepEqual(tc.Input, tc.Output) {
-			t.Fatalf("bad:\nInput:\n%s\nTest case input:\n%#v\nTest case output\n%#v", input, tc.Input, tc.Output)
+			t.Fatalf("bad:\nInput:\n%s\nTest case input:\n%#v\nTest case output:\n%#v", input, tc.Input, tc.Output)
 		}
 	}
 }
@@ -249,7 +255,7 @@ func TestHashWalker(t *testing.T) {
 	for _, tc := range cases {
 		output, err := HashStructure(tc.Input, func(string) string {
 			return replaceText
-		})
+		}, []string{})
 		if err != nil {
 			t.Fatalf("err: %s\n\n%#v", err, tc.Input)
 		}

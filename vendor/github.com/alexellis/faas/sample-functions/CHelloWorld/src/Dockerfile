@@ -1,6 +1,6 @@
-FROM alpine:3.6 as builder
+FROM alpine:3.7 as builder
 RUN apk add --no-cache curl \
-    && curl -SL https://github.com/openfaas/faas/releases/download/0.7.1/fwatchdog > /usr/bin/fwatchdog \
+    && curl -SL https://github.com/openfaas/faas/releases/download/0.8.0/fwatchdog > /usr/bin/fwatchdog \
     && chmod +x /usr/bin/fwatchdog \
     && apk --no-cache del curl
 
@@ -21,6 +21,8 @@ COPY --from=builder /usr/bin/fwatchdog  /
 COPY --from=builder /tmp /tmp
 
 ENV fprocess="/main"
+
+HEALTHCHECK --interval=5s CMD [ -e /tmp/.lock ] || exit 1
 
 CMD ["/fwatchdog"]
 

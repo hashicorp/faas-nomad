@@ -16,8 +16,14 @@
       <li<%= sidebar_current("docs-http-secret") %>>
         <a href="/api/secret/index.html">Secrets Engines</a>
         <ul class="nav">
+          <li<%= sidebar_current("docs-http-secret-ad") %>>
+            <a href="/api/secret/ad/index.html">Active Directory</a>
+          </li>
           <li<%= sidebar_current("docs-http-secret-aws") %>>
             <a href="/api/secret/aws/index.html">AWS</a>
+          </li>
+          <li<%= sidebar_current("docs-http-secret-azure") %>>
+            <a href="/api/secret/azure/index.html">Azure</a>
           </li>
           <li<%= sidebar_current("docs-http-secret-consul") %>>
             <a href="/api/secret/consul/index.html">Consul</a>
@@ -53,8 +59,19 @@
             </ul>
           </li>
 
+          <li<%= sidebar_current("docs-http-secret-gcp") %>>
+            <a href="/api/secret/gcp/index.html">Google Cloud</a>
+          </li>
           <li<%= sidebar_current("docs-http-secret-kv") %>>
-            <a href="/api/secret/kv/index.html">Key/Value</a>
+              <a href="/api/secret/kv/index.html">Key/Value</a>
+              <ul class="nav">
+              <li<%= sidebar_current("docs-http-secret-kv-v1") %>>
+                <a href="/api/secret/kv/kv-v1.html">K/V Version 1</a>
+              </li>
+              <li<%= sidebar_current("docs-http-secret-kv-v2") %>>
+                <a href="/api/secret/kv/kv-v2.html">K/V Version 2</a>
+              </li>
+            </ul>
           </li>
           <li<%= sidebar_current("docs-http-secret-identity") %>>
             <a href="/api/secret/identity/index.html">Identity</a>
@@ -121,14 +138,23 @@
           <li<%= sidebar_current("docs-http-auth-approle") %>>
             <a href="/api/auth/approle/index.html">AppRole</a>
           </li>
+          <li<%= sidebar_current("docs-http-auth-alicloud") %>>
+            <a href="/api/auth/alicloud/index.html">AliCloud</a>
+          </li>
           <li<%= sidebar_current("docs-http-auth-aws") %>>
             <a href="/api/auth/aws/index.html">AWS</a>
           </li>
+          <li<%= sidebar_current("docs-http-auth-azure") %>>
+            <a href="/api/auth/azure/index.html">Azure</a>
+          </li>
           <li<%= sidebar_current("docs-http-auth-github") %>>
-            <a href="/api/auth/github/index.html">Github</a>
+            <a href="/api/auth/github/index.html">GitHub</a>
           </li>
           <li<%= sidebar_current("docs-http-auth-gcp") %>>
             <a href="/api/auth/gcp/index.html">Google Cloud</a>
+          </li>
+          <li<%= sidebar_current("docs-http-auth-jwt") %>>
+            <a href="/api/auth/jwt/index.html">JWT/OIDC</a>
           </li>
           <li<%= sidebar_current("docs-http-auth-kubernetes") %>>
             <a href="/api/auth/kubernetes/index.html">Kubernetes</a>
@@ -190,6 +216,9 @@
           <li<%= sidebar_current("docs-http-system-config-cors") %>>
             <a href="/api/system/config-cors.html"><tt>/sys/config/cors</tt></a>
           </li>
+          <li<%= sidebar_current("docs-http-system-config-ui") %>>
+            <a href="/api/system/config-ui.html"><tt>/sys/config/ui</tt></a>
+          </li>
           <li<%= sidebar_current("docs-http-system-control-group") %>>
           <a href="/api/system/control-group.html"><tt>/sys/control-group</tt></a>
           </li>
@@ -202,6 +231,9 @@
           <li<%= sidebar_current("docs-http-system-init") %>>
             <a href="/api/system/init.html"><tt>/sys/init</tt></a>
           </li>
+          <li<%= sidebar_current("docs-http-system-internal-ui-mounts") %>>
+            <a href="/api/system/internal-ui-mounts.html"><tt>/sys/internal/ui/mounts</tt></a>
+          </li>
           <li<%= sidebar_current("docs-http-system-key-status") %>>
             <a href="/api/system/key-status.html"><tt>/sys/key-status</tt></a>
           </li>
@@ -213,6 +245,9 @@
           </li>
           <li<%= sidebar_current("docs-http-system-license") %>>
             <a href="/api/system/license.html"><tt>/sys/license</tt></a>
+          </li>
+          <li<%= sidebar_current("docs-http-system-namespaces") %>>
+            <a href="/api/system/namespaces.html"><tt>/sys/namespaces</tt></a>
           </li>
           <li<%= sidebar_current("docs-http-system-mfa") %>>
             <a href="/api/system/mfa.html"><tt>/sys/mfa</tt></a>

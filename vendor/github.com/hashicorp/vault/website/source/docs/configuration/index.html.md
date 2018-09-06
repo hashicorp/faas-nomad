@@ -89,6 +89,8 @@ to specify where the configuration is.
     sudo setcap cap_ipc_lock=+ep $(readlink -f $(which vault))
     ```
 
+    Note: Since each plugin runs as a separate process, you need to do the same for each plugin in your [plugins directory](https://www.vaultproject.io/docs/internals/plugins.html#plugin-directory).
+
     If you use a Linux distribution with a modern version of systemd, you can add
     the following directive to the "[Service]" configuration section:
 
@@ -104,7 +106,7 @@ to specify where the configuration is.
   allowed to be loaded. Vault must have permission to read files in this
   directory to successfully load plugins.
 
-- `telemetry` <tt>([Telemetry][telemetry]: <none>)</tt> – Specifies the telemetry
+- `telemetry` <tt>([Telemetry][telemetry]: &lt;none&gt;)</tt> – Specifies the telemetry
   reporting system.
 
 - `default_lease_ttl` `(string: "768h")` – Specifies the default lease duration
@@ -119,10 +121,11 @@ to specify where the configuration is.
   allows the decryption/encryption of raw data into and out of the security
   barrier. This is a highly privileged endpoint.
 
-- `ui` `(bool: false, Enterprise-only)` – Enables the built-in web UI, which is
-  available on all listeners (address + port) at the `/ui` path. Browsers accessing
-  the standard Vault API address will automatically redirect there. This can also
-  be provided via the environment variable `VAULT_UI`.
+- `ui` `(bool: false)` – Enables the built-in web UI, which is available on all
+  listeners (address + port) at the `/ui` path. Browsers accessing the standard
+  Vault API address will automatically redirect there. This can also be provided
+  via the environment variable `VAULT_UI`. For more information, please see the
+  [ui configuration documentation](/docs/configuration/ui/index.html).
 
 - `pid_file` `(string: "")` - Path to the file in which the Vault server's
   Process ID (PID) should be stored.
@@ -134,7 +137,8 @@ The following parameters are used on backends that support [high availability][h
 - `api_addr` `(string: "")` - Specifies the address (full URL) to advertise to
   other Vault servers in the cluster for client redirection. This value is also
   used for [plugin backends][plugins]. This can also be provided via the
-  environment variable `VAULT_API_ADDR`.
+  environment variable `VAULT_API_ADDR`. In general this should be set as a full
+  URL that points to the value of the [`listener`](#listener) address.
 
 - `cluster_addr` `(string: "")` -  – Specifies the address to advertise to other
   Vault servers in the cluster for request forwarding. This can also be provided

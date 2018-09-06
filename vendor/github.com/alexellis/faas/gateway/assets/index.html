@@ -1,6 +1,7 @@
 <html ng-app="faasGateway">
 
 <head>
+    <title>OpenFaaS Portal</title>
     <link href="https://fonts.googleapis.com/css?family=Rationale|Roboto+Mono|Roboto:300,400,400i,500,700" rel="stylesheet">
     <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/angular_material/1.1.0/angular-material.min.css">
     <link rel="stylesheet" href="style/bootstrap.css">
@@ -10,9 +11,18 @@
     <link rel="manifest" href="manifest.json">
     <link rel="mask-icon" href="safari-pinned-tab.svg" color="#5bbad5">
     <meta name="theme-color" content="#ffffff">
+    
+    <noscript>
+        <style>
+            .jsonly {
+                display: none;
+            }
+        </style>
+    </noscript>
 </head>
 
 <body ng-controller="home">
+    <div class="jsonly">
     <div layout="column" ng-cloak>
 
         <md-toolbar class="md-theme-indigo" hide-gt-sm>
@@ -57,22 +67,23 @@
                     </md-list>
                 </md-content>
             </md-sidenav>
-
-            <md-content flex layout-padding ng-if="!selectedFunction" ng-show="functions.length">
-                <div layout="column" layout-align="top center">
-                    <p>Select a function.</p>
-                </div>
-                <div flex></div>
+            
+            <md-content flex layout="column" layout-align="start center" class="blankslate" ng-if="!selectedFunction">
+              <p ng-if="functions.length === 0">
+                You have no functions in OpenFaaS.<br>
+                Start by deploying a new function.
+              </p>
+              <p ng-if="functions.length !== 0">
+                Select a function or deploy a new one.
+              </p>
+              <md-button class="md-primary md-raised" ng-click="newFunction()">
+                Deploy new function
+              </md-button>
+              <p>Or use <strong>faas-cli</strong> to build and deploy functions:</p>
+              <pre>$ curl -sSL https://cli.openfaas.com | sudo sh</pre>
             </md-content>
 
-            <md-content flex layout-padding ng-if="!functions.length">
-                <div layout="column" layout-align="top center">
-                    <p>No functions found in FaaS.</p>
-                </div>
-                <div flex></div>
-            </md-content>
-
-            <md-content flex layout="column" ng-repeat="function in functions" ng-show="function.name == selectedFunction.name">
+            <md-content flex layout="column" ng-repeat="function in functions" ng-if="function.name == selectedFunction.name">
 
                 <md-card md-theme="default" md-theme-watch>
                     <md-card-title>
@@ -89,11 +100,18 @@
                                 </md-button>
 
                             </div>
+
                             <div layout-gt-sm="row">
+                                <md-input-container class="md-icon-float md-block">
+                                   <label>Status</label>
+                                   <input value="{{ function.ready ? 'Ready' : 'Not ready' }}" type="text" readonly="readonly">
+                                </md-input-container>
+
                                 <md-input-container class="md-icon-float md-block">
                                     <label>Replicas</label>
                                     <input ng-model="function.replicas" type="text" readonly="readonly">
                                 </md-input-container>
+
                                 <md-input-container class="md-block" flex-gt-sm>
                                     <label>Invocation count</label>
                                     <input ng-model="function.invocationCount" type="text" readonly="readonly">
@@ -105,6 +123,11 @@
                                     <label>Image</label>
                                     <input ng-model="function.image" type="text" readonly="readonly">
                                 </md-input-container>
+                                <md-input-container class="md-block function-url" flex-gt-sm>
+                                    <label>URL</label>
+                                    <input ng-value="baseUrl + 'function/' + function.name" type="text" readonly="readonly">
+                                    <md-icon ng-if="canCopyToClipboard" md-svg-src="img/icons/outline-file_copy-24px.svg" ng-click="copyClicked($event)"></md-icon>
+                                </md-input-container>
                             </div>
                             <div layout-gt-sm="row" ng-show="function.envProcess">
                                 <md-input-container class="md-block" flex-gt-sm>
@@ -112,7 +135,7 @@
                                     <input ng-model="function.envProcess" type="text" readonly="readonly">
                                 </md-input-container>
                             </div>
-                            <md-card-title-text>
+                        </md-card-title-text>
                     </md-card-title>
                 </md-card>
                 <md-card>
@@ -124,7 +147,7 @@
                             </span>
                             <div layout-gt-sm="row">
                                 <md-input-container class="md-block" flex-gt-sm>
-                                    <button ng-click="fireRequest()" class="md-raised md-button md-ink-ripple" type="button" ng-disabled="invocationInProgress">
+                                    <button ng-click="fireRequest()" class="md-raised md-button md-ink-ripple" type="button" ng-disabled="invocationInProgress || (selectedFunction && !selectedFunction.ready)">
                                         <span class="ng-scope">Invoke</span><div class="md-ripple-container"></div>
                                     </button>
                                 </md-input-container>
@@ -135,8 +158,8 @@
                                 <md-input-container class="md-block" flex-gt-sm>
                                     <md-radio-group ng-model="invocation.contentType" layout="row" layout-align="start center">
                                         <md-radio-button value="text" class="md-primary"> Text </md-radio-button>
-                                        <md-radio-button value="json"> JSON </md-radio-button>
-                                        <md-radio-button value="binary"> Download </md-radio-button>                                        
+                                        <md-radio-button value="json" class="md-primary"> JSON </md-radio-button>
+                                        <md-radio-button value="binary" class="md-primary"> Download </md-radio-button>                                        
                                     </md-radio-group>
                                 </md-input-container>
                             </div>
@@ -164,7 +187,7 @@
                                     <textarea ng-model="invocationResponse" class="monospace" cols="80" rows=10></textarea>
                                 </md-input-container>
                             </div>
-                            <md-card-title-text>
+                        </md-card-title-text>
                     </md-card-title>
                 </md-card>
             </md-content>
@@ -179,6 +202,14 @@
     <script src="https://ajax.googleapis.com/ajax/libs/angular_material/1.1.4/angular-material.min.js"></script>
     <script src="script/funcstore.js"></script>
     <script src="script/bootstrap.js"></script>
+    </div>
+    
+    <noscript>
+	<div style="padding: 15px;">
+	        <h2>You need JavaScript to view this page</h2>
+        	<p>You don't need the web dashboard to use OpenFaaS, you can get the CLI with this command: <code>curl -sL cli.openfaas.com | sh</code></p>
+	</div>
+    </noscript>
 </body>
 
 </html>

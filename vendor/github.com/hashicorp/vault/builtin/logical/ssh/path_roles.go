@@ -7,6 +7,7 @@ import (
 
 	"time"
 
+	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/helper/cidrutil"
 	"github.com/hashicorp/vault/helper/parseutil"
 	"github.com/hashicorp/vault/logical"
@@ -273,7 +274,7 @@ func pathRoles(b *backend) *framework.Path {
 				Description: `
 				[Not applicable for Dynamic type] [Not applicable for OTP type] [Optional for CA type]
 				When supplied, this value specifies a custom format for the key id of a signed certificate.
-				The following variables are availble for use: '{{token_display_name}}' - The display name of
+				The following variables are available for use: '{{token_display_name}}' - The display name of
 				the token used to make the request. '{{role_name}}' - The name of the role signing the request.
 				'{{public_key_hash}}' - A SHA256 checksum of the public key that is being signed.
 				`,
@@ -305,7 +306,7 @@ func (b *backend) pathRoleWrite(ctx context.Context, req *logical.Request, d *fr
 	if cidrList != "" {
 		valid, err := cidrutil.ValidateCIDRListString(cidrList, ",")
 		if err != nil {
-			return nil, fmt.Errorf("failed to validate cidr_list: %v", err)
+			return nil, errwrap.Wrapf("failed to validate cidr_list: {{err}}", err)
 		}
 		if !valid {
 			return logical.ErrorResponse("failed to validate cidr_list"), nil
@@ -317,7 +318,7 @@ func (b *backend) pathRoleWrite(ctx context.Context, req *logical.Request, d *fr
 	if excludeCidrList != "" {
 		valid, err := cidrutil.ValidateCIDRListString(excludeCidrList, ",")
 		if err != nil {
-			return nil, fmt.Errorf("failed to validate exclude_cidr_list entry: %v", err)
+			return nil, errwrap.Wrapf("failed to validate exclude_cidr_list entry: {{err}}", err)
 		}
 		if !valid {
 			return logical.ErrorResponse(fmt.Sprintf("failed to validate exclude_cidr_list entry: %v", err)), nil
@@ -490,7 +491,7 @@ func (b *backend) getRole(ctx context.Context, s logical.Storage, n string) (*ss
 }
 
 // parseRole converts a sshRole object into its map[string]interface representation,
-// with appropriate values for each KeyType. If the KeyType is invalid, it will retun
+// with appropriate values for each KeyType. If the KeyType is invalid, it will return
 // an error.
 func (b *backend) parseRole(role *sshRole) (map[string]interface{}, error) {
 	var result map[string]interface{}
@@ -530,6 +531,7 @@ func (b *backend) parseRole(role *sshRole) (map[string]interface{}, error) {
 			"allow_user_key_ids":       role.AllowUserKeyIDs,
 			"key_id_format":            role.KeyIDFormat,
 			"key_type":                 role.KeyType,
+			"key_bits":                 role.KeyBits,
 			"default_critical_options": role.DefaultCriticalOptions,
 			"default_extensions":       role.DefaultExtensions,
 		}
@@ -570,14 +572,14 @@ func (b *backend) pathRoleList(ctx context.Context, req *logical.Request, d *fra
 		if err != nil {
 			// On error, log warning and continue
 			if b.Logger().IsWarn() {
-				b.Logger().Warn("ssh: error getting role info", "role", entry, "error", err)
+				b.Logger().Warn("error getting role info", "role", entry, "error", err)
 			}
 			continue
 		}
 		if role == nil {
 			// On empty role, log warning and continue
 			if b.Logger().IsWarn() {
-				b.Logger().Warn("ssh: no role info found", "role", entry)
+				b.Logger().Warn("no role info found", "role", entry)
 			}
 			continue
 		}
@@ -585,7 +587,7 @@ func (b *backend) pathRoleList(ctx context.Context, req *logical.Request, d *fra
 		roleInfo, err := b.parseRole(role)
 		if err != nil {
 			if b.Logger().IsWarn() {
-				b.Logger().Warn("ssh: error parsing role info", "role", entry, "error", err)
+				b.Logger().Warn("error parsing role info", "role", entry, "error", err)
 			}
 			continue
 		}

@@ -73,7 +73,7 @@ To better reflect its actual use, the `generic` backend is now `kv`. Using
 
 ### HSM Users Need to Specify New Config Options (In 0.9)
 
-When using Vault with an HSM, a new paramter is required: `hmac_key_label`.
+When using Vault with an HSM, a new parameter is required: `hmac_key_label`.
 This performs a similar function to `key_label` but for the HMAC key Vault will
 use. Vault will generate a suitable key if this value is specified and
 `generate_key` is set true. See [the seal configuration page][pkcs11-seal] for
@@ -115,7 +115,7 @@ corresponding object containing the `key_type`.
 
 ### More granularity in audit logs (In 0.9)
 
-Audit request and response entires are still in RFC3339 format but now have a
+Audit request and response entries are still in RFC3339 format but now have a
 granularity of nanoseconds.
 
 [generate-root]: https://www.vaultproject.io/api/secret/pki/index.html#generate-root

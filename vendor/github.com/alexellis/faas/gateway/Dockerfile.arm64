@@ -1,5 +1,4 @@
-#FROM alexellis2/golang:1.9-arm64 as build
-FROM golang:1.9.2 as build
+FROM golang:1.9.7 as build
 WORKDIR /go/src/github.com/openfaas/faas/gateway
 
 #RUN curl -sL https://github.com/alexellis/license-check/releases/download/0.1/license-check > /usr/bin/license-check && chmod +x /usr/bin/license-check
@@ -20,7 +19,7 @@ COPY server.go      .
 #RUN license-check -path ./ --verbose=false \
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o gateway .
 
-FROM alpine:3.6
+FROM alpine:3.7
 
 RUN addgroup -S app \
     && adduser -S -g app app

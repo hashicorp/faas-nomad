@@ -25,12 +25,16 @@ has a number of parameters to further configure a connection.
 ### Parameters
 
 - `connection_url` `(string: <required>)` – Specifies the MongoDB standard
-  connection string (URI).
+  connection string (URI).   This field can be templated and supports passing the 
+  username and password parameters in the following format {{field_name}}.  A 
+  templated connection URL is required when using root credential rotation.
 - `write_concern` `(string: "")` - Specifies the MongoDB [write
   concern][mongodb-write-concern]. This is set for the entirety of the session,
   maintained for the lifecycle of the plugin process. Must be a serialized JSON
   object, or a base64-encoded serialized JSON object. The JSON payload values
   map to the values in the [Safe][mgo-safe] struct from the mgo driver.
+- `username` `(string: "")` - The root credential username used in the connection URL. 
+- `password` `(string: "")` - The root credential password used in the connection URL. 
 
 ### Sample Payload
 
@@ -38,8 +42,10 @@ has a number of parameters to further configure a connection.
 {
   "plugin_name": "mongodb-database-plugin",
   "allowed_roles": "readonly",
-  "connection_url": "mongodb://admin:Password!@mongodb.acme.com:27017/admin?ssl=true",
-  "write_concern": "{ \"wmode\": \"majority\", \"wtimeout\": 5000 }"
+  "connection_url": "mongodb://{{username}}:{{password}}@mongodb.acme.com:27017/admin?ssl=true",
+  "write_concern": "{ \"wmode\": \"majority\", \"wtimeout\": 5000 }",
+  "username": "admin",
+  "password": "Password!"
 }
 ```
 
@@ -50,13 +56,13 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/database/config/mongodb
+    http://127.0.0.1:8200/v1/database/config/mongodb
 ```
 
 ## Statements
 
 Statements are configured during role creation and are used by the plugin to
-determine what is sent to the datatabse on user creation, renewing, and
+determine what is sent to the database on user creation, renewing, and
 revocation. For more information on configuring roles see the [Role
 API](/api/secret/databases/index.html#create-role) in the database secrets engine docs.
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/vault/helper/keysutil"
 	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/logical/framework"
 )
@@ -61,10 +62,10 @@ func (b *backend) pathConfigWrite(ctx context.Context, req *logical.Request, d *
 	name := d.Get("name").(string)
 
 	// Check if the policy already exists before we lock everything
-	p, lock, err := b.lm.GetPolicyExclusive(ctx, req.Storage, name)
-	if lock != nil {
-		defer lock.Unlock()
-	}
+	p, _, err := b.lm.GetPolicy(ctx, keysutil.PolicyRequest{
+		Storage: req.Storage,
+		Name:    name,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +74,10 @@ func (b *backend) pathConfigWrite(ctx context.Context, req *logical.Request, d *
 				fmt.Sprintf("no existing key named %s could be found", name)),
 			logical.ErrInvalidRequest
 	}
+	if !b.System().CachingDisabled() {
+		p.Lock(true)
+	}
+	defer p.Unlock()
 
 	resp := &logical.Response{}
 
@@ -180,5 +185,5 @@ const pathConfigHelpSyn = `Configure a named encryption key`
 const pathConfigHelpDesc = `
 This path is used to configure the named key. Currently, this
 supports adjusting the minimum version of the key allowed to
-be used for decryption via the min_decryption_version paramter.
+be used for decryption via the min_decryption_version parameter.
 `

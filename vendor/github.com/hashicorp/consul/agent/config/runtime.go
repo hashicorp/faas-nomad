@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/agent/structs"
+	"github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/lib"
 	"github.com/hashicorp/consul/tlsutil"
 	"github.com/hashicorp/consul/types"
 	"golang.org/x/time/rate"
@@ -45,14 +47,6 @@ type RuntimeConfig struct {
 	ConsulRaftElectionTimeout        time.Duration
 	ConsulRaftHeartbeatTimeout       time.Duration
 	ConsulRaftLeaderLeaseTimeout     time.Duration
-	ConsulSerfLANGossipInterval      time.Duration
-	ConsulSerfLANProbeInterval       time.Duration
-	ConsulSerfLANProbeTimeout        time.Duration
-	ConsulSerfLANSuspicionMult       int
-	ConsulSerfWANGossipInterval      time.Duration
-	ConsulSerfWANProbeInterval       time.Duration
-	ConsulSerfWANProbeTimeout        time.Duration
-	ConsulSerfWANSuspicionMult       int
 	ConsulServerHealthInterval       time.Duration
 
 	// ACLAgentMasterToken is a special token that has full read and write
@@ -93,8 +87,10 @@ type RuntimeConfig struct {
 	//                    ACL's to be used to service requests. This
 	//                    is the default. If the ACL is not in the cache,
 	//                    this acts like deny.
+	//   * async-cache - Same behaviour as extend-cache, but perform ACL
+	//                   Lookups asynchronously when cache TTL is expired.
 	//
-	// hcl: acl_down_policy = ("allow"|"deny"|"extend-cache")
+	// hcl: acl_down_policy = ("allow"|"deny"|"extend-cache"|"async-cache")
 	ACLDownPolicy string
 
 	// ACLEnforceVersion8 is used to gate a set of ACL policy features that
@@ -181,7 +177,7 @@ type RuntimeConfig struct {
 	// AutopilotUpgradeVersionTag is the node tag to use for version info when
 	// performing upgrade migrations. If left blank, the Consul version will be used.
 	//
-	// (Entrprise-only)
+	// (Enterprise-only)
 	//
 	// hcl: autopilot { upgrade_version_tag = string }
 	AutopilotUpgradeVersionTag string
@@ -193,6 +189,25 @@ type RuntimeConfig struct {
 	//
 	// hcl: dns_config { allow_stale = (true|false) }
 	DNSAllowStale bool
+
+	// DNSARecordLimit is used to limit the maximum number of DNS Resource
+	// Records returned in the ANSWER section of a DNS response for A or AAAA
+	// records for both UDP and TCP queries.
+	//
+	// This is not normally useful and will be limited based on the querying
+	// protocol, however systems that implemented §6 Rule 9 in RFC3484
+	// may want to set this to `1` in order to subvert §6 Rule 9 and
+	// re-obtain the effect of randomized resource records (i.e. each
+	// answer contains only one IP, but the IP changes every request).
+	// RFC3484 sorts answers in a deterministic order, which defeats the
+	// purpose of randomized DNS responses.  This RFC has been obsoleted
+	// by RFC6724 and restores the desired behavior of randomized
+	// responses, however a large number of Linux hosts using glibc(3)
+	// implemented §6 Rule 9 and may need this option (e.g. CentOS 5-6,
+	// Debian Squeeze, etc).
+	//
+	// hcl: dns_config { a_record_limit = int }
+	DNSARecordLimit int
 
 	// DNSDisableCompression is used to control whether DNS responses are
 	// compressed. In Consul 0.7 this was turned on by default and this
@@ -253,21 +268,19 @@ type RuntimeConfig struct {
 	DNSServiceTTL map[string]time.Duration
 
 	// DNSUDPAnswerLimit is used to limit the maximum number of DNS Resource
-	// Records returned in the ANSWER section of a DNS response. This is
-	// not normally useful and will be limited based on the querying
-	// protocol, however systems that implemented §6 Rule 9 in RFC3484
-	// may want to set this to `1` in order to subvert §6 Rule 9 and
-	// re-obtain the effect of randomized resource records (i.e. each
-	// answer contains only one IP, but the IP changes every request).
-	// RFC3484 sorts answers in a deterministic order, which defeats the
-	// purpose of randomized DNS responses.  This RFC has been obsoleted
-	// by RFC6724 and restores the desired behavior of randomized
-	// responses, however a large number of Linux hosts using glibc(3)
-	// implemented §6 Rule 9 and may need this option (e.g. CentOS 5-6,
-	// Debian Squeeze, etc).
+	// Records returned in the ANSWER section of a DNS response for UDP
+	// responses without EDNS support (limited to 512 bytes).
+	// This parameter is deprecated, if you want to limit the number of
+	// records returned by A or AAAA questions, please use DNSARecordLimit
+	// instead.
 	//
 	// hcl: dns_config { udp_answer_limit = int }
 	DNSUDPAnswerLimit int
+
+	// DNSNodeMetaTXT controls whether DNS queries will synthesize
+	// TXT records for the node metadata and add them when not specifically
+	// request (query type = TXT). If unset this will default to true
+	DNSNodeMetaTXT bool
 
 	// DNSRecursors can be set to allow the DNS servers to recursively
 	// resolve non-consul domains.
@@ -287,169 +300,8 @@ type RuntimeConfig struct {
 	// hcl: http_config { response_headers = map[string]string }
 	HTTPResponseHeaders map[string]string
 
-	// TelemetryCirconus*: see https://github.com/circonus-labs/circonus-gometrics
-	// for more details on the various configuration options.
-	// Valid configuration combinations:
-	//    - CirconusAPIToken
-	//      metric management enabled (search for existing check or create a new one)
-	//    - CirconusSubmissionUrl
-	//      metric management disabled (use check with specified submission_url,
-	//      broker must be using a public SSL certificate)
-	//    - CirconusAPIToken + CirconusCheckSubmissionURL
-	//      metric management enabled (use check with specified submission_url)
-	//    - CirconusAPIToken + CirconusCheckID
-	//      metric management enabled (use check with specified id)
-
-	// TelemetryCirconusAPIApp is an app name associated with API token.
-	// Default: "consul"
-	//
-	// hcl: telemetry { circonus_api_app = string }
-	TelemetryCirconusAPIApp string
-
-	// TelemetryCirconusAPIToken is a valid API Token used to create/manage check. If provided,
-	// metric management is enabled.
-	// Default: none
-	//
-	// hcl: telemetry { circonous_api_token = string }
-	TelemetryCirconusAPIToken string
-
-	// TelemetryCirconusAPIURL is the base URL to use for contacting the Circonus API.
-	// Default: "https://api.circonus.com/v2"
-	//
-	// hcl: telemetry { circonus_api_url = string }
-	TelemetryCirconusAPIURL string
-
-	// TelemetryCirconusBrokerID is an explicit broker to use when creating a new check. The numeric portion
-	// of broker._cid. If metric management is enabled and neither a Submission URL nor Check ID
-	// is provided, an attempt will be made to search for an existing check using Instance ID and
-	// Search Tag. If one is not found, a new HTTPTRAP check will be created.
-	// Default: use Select Tag if provided, otherwise, a random Enterprise Broker associated
-	// with the specified API token or the default Circonus Broker.
-	// Default: none
-	//
-	// hcl: telemetry { circonus_broker_id = string }
-	TelemetryCirconusBrokerID string
-
-	// TelemetryCirconusBrokerSelectTag is a special tag which will be used to select a broker when
-	// a Broker ID is not provided. The best use of this is to as a hint for which broker
-	// should be used based on *where* this particular instance is running.
-	// (e.g. a specific geo location or datacenter, dc:sfo)
-	// Default: none
-	//
-	// hcl: telemetry { circonus_broker_select_tag = string }
-	TelemetryCirconusBrokerSelectTag string
-
-	// TelemetryCirconusCheckDisplayName is the name for the check which will be displayed in the Circonus UI.
-	// Default: value of CirconusCheckInstanceID
-	//
-	// hcl: telemetry { circonus_check_display_name = string }
-	TelemetryCirconusCheckDisplayName string
-
-	// TelemetryCirconusCheckForceMetricActivation will force enabling metrics, as they are encountered,
-	// if the metric already exists and is NOT active. If check management is enabled, the default
-	// behavior is to add new metrics as they are encoutered. If the metric already exists in the
-	// check, it will *NOT* be activated. This setting overrides that behavior.
-	// Default: "false"
-	//
-	// hcl: telemetry { circonus_check_metrics_activation = (true|false)
-	TelemetryCirconusCheckForceMetricActivation string
-
-	// TelemetryCirconusCheckID is the check id (not check bundle id) from a previously created
-	// HTTPTRAP check. The numeric portion of the check._cid field.
-	// Default: none
-	//
-	// hcl: telemetry { circonus_check_id = string }
-	TelemetryCirconusCheckID string
-
-	// TelemetryCirconusCheckInstanceID serves to uniquely identify the metrics coming from this "instance".
-	// It can be used to maintain metric continuity with transient or ephemeral instances as
-	// they move around within an infrastructure.
-	// Default: hostname:app
-	//
-	// hcl: telemetry { circonus_check_instance_id = string }
-	TelemetryCirconusCheckInstanceID string
-
-	// TelemetryCirconusCheckSearchTag is a special tag which, when coupled with the instance id, helps to
-	// narrow down the search results when neither a Submission URL or Check ID is provided.
-	// Default: service:app (e.g. service:consul)
-	//
-	// hcl: telemetry { circonus_check_search_tag = string }
-	TelemetryCirconusCheckSearchTag string
-
-	// TelemetryCirconusCheckSearchTag is a special tag which, when coupled with the instance id, helps to
-	// narrow down the search results when neither a Submission URL or Check ID is provided.
-	// Default: service:app (e.g. service:consul)
-	//
-	// hcl: telemetry { circonus_check_tags = string }
-	TelemetryCirconusCheckTags string
-
-	// TelemetryCirconusSubmissionInterval is the interval at which metrics are submitted to Circonus.
-	// Default: 10s
-	//
-	// hcl: telemetry { circonus_submission_interval = "duration" }
-	TelemetryCirconusSubmissionInterval string
-
-	// TelemetryCirconusCheckSubmissionURL is the check.config.submission_url field from a
-	// previously created HTTPTRAP check.
-	// Default: none
-	//
-	// hcl: telemetry { circonus_submission_url = string }
-	TelemetryCirconusSubmissionURL string
-
-	// DisableHostname will disable hostname prefixing for all metrics.
-	//
-	// hcl: telemetry { disable_hostname = (true|false)
-	TelemetryDisableHostname bool
-
-	// TelemetryDogStatsdAddr is the address of a dogstatsd instance. If provided,
-	// metrics will be sent to that instance
-	//
-	// hcl: telemetry { dogstatsd_addr = string }
-	TelemetryDogstatsdAddr string
-
-	// TelemetryDogStatsdTags are the global tags that should be sent with each packet to dogstatsd
-	// It is a list of strings, where each string looks like "my_tag_name:my_tag_value"
-	//
-	// hcl: telemetry { dogstatsd_tags = []string }
-	TelemetryDogstatsdTags []string
-
-	// TelemetryFilterDefault is the default for whether to allow a metric that's not
-	// covered by the filter.
-	//
-	// hcl: telemetry { filter_default = (true|false) }
-	TelemetryFilterDefault bool
-
-	// TelemetryAllowedPrefixes is a list of filter rules to apply for allowing metrics
-	// by prefix. Use the 'prefix_filter' option and prefix rules with '+' to be
-	// included.
-	//
-	// hcl: telemetry { prefix_filter = []string{"+<expr>", "+<expr>", ...} }
-	TelemetryAllowedPrefixes []string
-
-	// TelemetryBlockedPrefixes is a list of filter rules to apply for blocking metrics
-	// by prefix. Use the 'prefix_filter' option and prefix rules with '-' to be
-	// excluded.
-	//
-	// hcl: telemetry { prefix_filter = []string{"-<expr>", "-<expr>", ...} }
-	TelemetryBlockedPrefixes []string
-
-	// TelemetryMetricsPrefix is the prefix used to write stats values to.
-	// Default: "consul."
-	//
-	// hcl: telemetry { metrics_prefix = string }
-	TelemetryMetricsPrefix string
-
-	// TelemetryStatsdAddr is the address of a statsd instance. If provided,
-	// metrics will be sent to that instance.
-	//
-	// hcl: telemetry { statsd_addr = string }
-	TelemetryStatsdAddr string
-
-	// TelemetryStatsiteAddr is the address of a statsite instance. If provided,
-	// metrics will be streamed to that instance.
-	//
-	// hcl: telemetry { statsite_addr = string }
-	TelemetryStatsiteAddr string
+	// Embed Telemetry Config
+	Telemetry lib.TelemetryConfig
 
 	// Datacenter is the datacenter this node is in. Defaults to "dc1".
 	//
@@ -460,6 +312,14 @@ type RuntimeConfig struct {
 	// hcl: datacenter = string
 	// flag: -datacenter string
 	Datacenter string
+
+	// Defines the maximum stale value for discovery path. Defauls to "0s".
+	// Discovery paths are /v1/heath/ paths
+	//
+	// If not set to 0, it will try to perform stale read and perform only a
+	// consistent read whenever the value is too old.
+	// hcl: discovery_max_stale = "duration"
+	DiscoveryMaxStale time.Duration
 
 	// Node name is the name we use to advertise. Defaults to hostname.
 	//
@@ -588,6 +448,61 @@ type RuntimeConfig struct {
 	// flag: -client string
 	ClientAddrs []*net.IPAddr
 
+	// ConnectEnabled opts the agent into connect. It should be set on all clients
+	// and servers in a cluster for correct connect operation.
+	ConnectEnabled bool
+
+	// ConnectProxyBindMinPort is the inclusive start of the range of ports
+	// allocated to the agent for starting proxy listeners on where no explicit
+	// port is specified.
+	ConnectProxyBindMinPort int
+
+	// ConnectProxyBindMaxPort is the inclusive end of the range of ports
+	// allocated to the agent for starting proxy listeners on where no explicit
+	// port is specified.
+	ConnectProxyBindMaxPort int
+
+	// ConnectProxyAllowManagedRoot is true if Consul can execute managed
+	// proxies when running as root (EUID == 0).
+	ConnectProxyAllowManagedRoot bool
+
+	// ConnectProxyAllowManagedAPIRegistration enables managed proxy registration
+	// via the agent HTTP API. If this is false, only file configurations
+	// can be used.
+	ConnectProxyAllowManagedAPIRegistration bool
+
+	// ConnectProxyDefaultExecMode is used where a registration doesn't include an
+	// exec_mode. Defaults to daemon.
+	ConnectProxyDefaultExecMode string
+
+	// ConnectProxyDefaultDaemonCommand is used to start proxy in exec_mode =
+	// daemon if not specified at registration time.
+	ConnectProxyDefaultDaemonCommand []string
+
+	// ConnectProxyDefaultScriptCommand is used to start proxy in exec_mode =
+	// script if not specified at registration time.
+	ConnectProxyDefaultScriptCommand []string
+
+	// ConnectProxyDefaultConfig is merged with any config specified at
+	// registration time to allow global control of defaults.
+	ConnectProxyDefaultConfig map[string]interface{}
+
+	// ConnectCAProvider is the type of CA provider to use with Connect.
+	ConnectCAProvider string
+
+	// ConnectCAConfig is the config to use for the CA provider.
+	ConnectCAConfig map[string]interface{}
+
+	// ConnectTestDisableManagedProxies is not exposed to public config but us
+	// used by TestAgent to prevent self-executing the test binary in the
+	// background if a managed proxy is created for a test. The only place we
+	// actually want to test processes really being spun up and managed is in
+	// `agent/proxy` and it does it at a lower level. Note that this still allows
+	// registering managed proxies via API and other methods, and still creates
+	// all the agent state for them, just doesn't actually start external
+	// processes up.
+	ConnectTestDisableManagedProxies bool
+
 	// DNSAddrs contains the list of TCP and UDP addresses the DNS server will
 	// bind to. If the DNS endpoint is disabled (ports.dns <= 0) the list is
 	// empty.
@@ -640,6 +555,16 @@ type RuntimeConfig struct {
 	// hcl: disable_host_node_id = (true|false)
 	// flag: -disable-host-node-id
 	DisableHostNodeID bool
+
+	// DisableHTTPUnprintableCharFilter will bypass the filter preventing HTTP
+	// URLs from containing unprintable chars. This filter was added in 1.0.3 as a
+	// response to a vulnerability report. Disabling this is never recommended in
+	// general however some users who have keys written in older versions of
+	// Consul may use this to temporarily disable the filter such that they can
+	// delete those keys again! We do not recommend leaving it disabled long term.
+	//
+	// hcl: disable_http_unprintable_char_filter
+	DisableHTTPUnprintableCharFilter bool
 
 	// DisableKeyringFile disables writing the keyring to a file.
 	//
@@ -871,6 +796,17 @@ type RuntimeConfig struct {
 	// hcl: raft_protocol = int
 	RaftProtocol int
 
+	// RaftSnapshotThreshold sets the minimum threshold of raft commits after which
+	// a snapshot is created. Defaults to 8192
+	//
+	// hcl: raft_snapshot_threshold = int
+	RaftSnapshotThreshold int
+
+	// RaftSnapshotInterval sets the interval to use when checking whether to create
+	// a new snapshot. Defaults to 5 seconds.
+	// hcl: raft_snapshot_threshold = int
+	RaftSnapshotInterval time.Duration
+
 	// ReconnectTimeoutLAN specifies the amount of time to wait to reconnect with
 	// another agent before deciding it's permanently gone. This can be used to
 	// control the time it takes to reap failed nodes from the cluster.
@@ -1020,6 +956,160 @@ type RuntimeConfig struct {
 	// hcl: ports { serf_wan = int }
 	SerfPortWAN int
 
+	// GossipLANGossipInterval is the interval between sending messages that need
+	// to be gossiped that haven't been able to piggyback on probing messages.
+	// If this is set to zero, non-piggyback gossip is disabled. By lowering
+	// this value (more frequent) gossip messages are propagated across
+	// the cluster more quickly at the expense of increased bandwidth. This
+	// configuration only applies to LAN gossip communications
+	//
+	// The default is: 200ms
+	//
+	// hcl: gossip_lan { gossip_interval = duration}
+	GossipLANGossipInterval time.Duration
+
+	// GossipLANGossipNodes is the number of random nodes to send gossip messages to
+	// per GossipInterval. Increasing this number causes the gossip messages to
+	// propagate across the cluster more quickly at the expense of increased
+	// bandwidth. This configuration only applies to LAN gossip communications
+	//
+	// The default is: 3
+	//
+	// hcl: gossip_lan { gossip_nodes = int }
+	GossipLANGossipNodes int
+
+	// GossipLANProbeInterval is the interval between random node probes. Setting
+	// this lower (more frequent) will cause the memberlist cluster to detect
+	// failed nodes more quickly at the expense of increased bandwidth usage.
+	// This configuration only applies to LAN gossip communications
+	//
+	// The default is: 1s
+	//
+	// hcl: gossip_lan { probe_interval = duration }
+	GossipLANProbeInterval time.Duration
+
+	// GossipLANProbeTimeout is the timeout to wait for an ack from a probed node
+	// before assuming it is unhealthy. This should be set to 99-percentile
+	// of RTT (round-trip time) on your network. This configuration
+	// only applies to the LAN gossip communications
+	//
+	// The default is: 500ms
+	//
+	// hcl: gossip_lan { probe_timeout = duration }
+	GossipLANProbeTimeout time.Duration
+
+	// GossipLANSuspicionMult is the multiplier for determining the time an
+	// inaccessible node is considered suspect before declaring it dead. This
+	// configuration only applies to LAN gossip communications
+	//
+	// The actual timeout is calculated using the formula:
+	//
+	//   SuspicionTimeout = SuspicionMult * log(N+1) * ProbeInterval
+	//
+	// This allows the timeout to scale properly with expected propagation
+	// delay with a larger cluster size. The higher the multiplier, the longer
+	// an inaccessible node is considered part of the cluster before declaring
+	// it dead, giving that suspect node more time to refute if it is indeed
+	// still alive.
+	//
+	// The default is: 4
+	//
+	// hcl: gossip_lan { suspicion_mult = int }
+	GossipLANSuspicionMult int
+
+	// GossipLANRetransmitMult is the multiplier for the number of retransmissions
+	// that are attempted for messages broadcasted over gossip. This
+	// configuration only applies to LAN gossip communications. The actual
+	// count of retransmissions is calculated using the formula:
+	//
+	//   Retransmits = RetransmitMult * log(N+1)
+	//
+	// This allows the retransmits to scale properly with cluster size. The
+	// higher the multiplier, the more likely a failed broadcast is to converge
+	// at the expense of increased bandwidth.
+	//
+	// The default is: 4
+	//
+	// hcl: gossip_lan { retransmit_mult = int }
+	GossipLANRetransmitMult int
+
+	// GossipWANGossipInterval  is the interval between sending messages that need
+	// to be gossiped that haven't been able to piggyback on probing messages.
+	// If this is set to zero, non-piggyback gossip is disabled. By lowering
+	// this value (more frequent) gossip messages are propagated across
+	// the cluster more quickly at the expense of increased bandwidth. This
+	// configuration only applies to WAN gossip communications
+	//
+	// The default is: 200ms
+	//
+	// hcl: gossip_wan { gossip_interval = duration}
+	GossipWANGossipInterval time.Duration
+
+	// GossipWANGossipNodes is the number of random nodes to send gossip messages to
+	// per GossipInterval. Increasing this number causes the gossip messages to
+	// propagate across the cluster more quickly at the expense of increased
+	// bandwidth. This configuration only applies to WAN gossip communications
+	//
+	// The default is: 3
+	//
+	// hcl: gossip_wan { gossip_nodes = int }
+	GossipWANGossipNodes int
+
+	// GossipWANProbeInterval is the interval between random node probes. Setting
+	// this lower (more frequent) will cause the memberlist cluster to detect
+	// failed nodes more quickly at the expense of increased bandwidth usage.
+	// This configuration only applies to WAN gossip communications
+	//
+	// The default is: 1s
+	//
+	// hcl: gossip_wan { probe_interval = duration }
+	GossipWANProbeInterval time.Duration
+
+	// GossipWANProbeTimeout is the timeout to wait for an ack from a probed node
+	// before assuming it is unhealthy. This should be set to 99-percentile
+	// of RTT (round-trip time) on your network. This configuration
+	// only applies to the WAN gossip communications
+	//
+	// The default is: 500ms
+	//
+	// hcl: gossip_wan { probe_timeout = duration }
+	GossipWANProbeTimeout time.Duration
+
+	// GossipWANSuspicionMult is the multiplier for determining the time an
+	// inaccessible node is considered suspect before declaring it dead. This
+	// configuration only applies to WAN gossip communications
+	//
+	// The actual timeout is calculated using the formula:
+	//
+	//   SuspicionTimeout = SuspicionMult * log(N+1) * ProbeInterval
+	//
+	// This allows the timeout to scale properly with expected propagation
+	// delay with a larger cluster size. The higher the multiplier, the longer
+	// an inaccessible node is considered part of the cluster before declaring
+	// it dead, giving that suspect node more time to refute if it is indeed
+	// still alive.
+	//
+	// The default is: 4
+	//
+	// hcl: gossip_wan { suspicion_mult = int }
+	GossipWANSuspicionMult int
+
+	// GossipWANRetransmitMult is the multiplier for the number of retransmissions
+	// that are attempted for messages broadcasted over gossip. This
+	// configuration only applies to WAN gossip communications. The actual
+	// count of retransmissions is calculated using the formula:
+	//
+	//   Retransmits = RetransmitMult * log(N+1)
+	//
+	// This allows the retransmits to scale properly with cluster size. The
+	// higher the multiplier, the more likely a failed broadcast is to converge
+	// at the expense of increased bandwidth.
+	//
+	// The default is: 4
+	//
+	// hcl: gossip_wan { retransmit_mult = int }
+	GossipWANRetransmitMult int
+
 	// ServerMode controls if this agent acts like a Consul server,
 	// or merely as a client. Servers have more state, take part
 	// in leader election, etc.
@@ -1048,7 +1138,7 @@ type RuntimeConfig struct {
 	//     name = string
 	//     tags = []string
 	//     address = string
-	//     check = { check definiton }
+	//     check = { check definition }
 	//     checks = [ { check definition}, ... ]
 	//     token = string
 	//     enable_tag_override = (true|false)
@@ -1095,23 +1185,28 @@ type RuntimeConfig struct {
 	//
 	// The values should be a list of the following values:
 	//
-	//   TLS_RSA_WITH_RC4_128_SHA
-	//   TLS_RSA_WITH_3DES_EDE_CBC_SHA
-	//   TLS_RSA_WITH_AES_128_CBC_SHA
-	//   TLS_RSA_WITH_AES_256_CBC_SHA
-	//   TLS_RSA_WITH_AES_128_GCM_SHA256
-	//   TLS_RSA_WITH_AES_256_GCM_SHA384
-	//   TLS_ECDHE_ECDSA_WITH_RC4_128_SHA
-	//   TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
-	//   TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
-	//   TLS_ECDHE_RSA_WITH_RC4_128_SHA
-	//   TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
-	//   TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
-	//   TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+	//   TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+	//   TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
 	//   TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
 	//   TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
 	//   TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 	//   TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+	//   TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+	//   TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+	//   TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+	//   TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+	//   TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+	//   TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+	//   TLS_RSA_WITH_AES_128_GCM_SHA256
+	//   TLS_RSA_WITH_AES_256_GCM_SHA384
+	//   TLS_RSA_WITH_AES_128_CBC_SHA256
+	//   TLS_RSA_WITH_AES_128_CBC_SHA
+	//   TLS_RSA_WITH_AES_256_CBC_SHA
+	//   TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
+	//   TLS_RSA_WITH_3DES_EDE_CBC_SHA
+	//   TLS_RSA_WITH_RC4_128_SHA
+	//   TLS_ECDHE_RSA_WITH_RC4_128_SHA
+	//   TLS_ECDHE_ECDSA_WITH_RC4_128_SHA
 	//
 	// todo(fs): IMHO, we should also support the raw 0xNNNN values from
 	// todo(fs): https://golang.org/pkg/crypto/tls/#pkg-constants
@@ -1249,6 +1344,137 @@ func (c *RuntimeConfig) IncomingHTTPSConfig() (*tls.Config, error) {
 		PreferServerCipherSuites: c.TLSPreferServerCipherSuites,
 	}
 	return tc.IncomingTLSConfig()
+}
+
+func (c *RuntimeConfig) apiAddresses(maxPerType int) (unixAddrs, httpAddrs, httpsAddrs []string) {
+	if len(c.HTTPSAddrs) > 0 {
+		for i, addr := range c.HTTPSAddrs {
+			if maxPerType < 1 || i < maxPerType {
+				httpsAddrs = append(httpsAddrs, addr.String())
+			} else {
+				break
+			}
+		}
+	}
+	if len(c.HTTPAddrs) > 0 {
+		unix_count := 0
+		http_count := 0
+		for _, addr := range c.HTTPAddrs {
+			switch addr.(type) {
+			case *net.UnixAddr:
+				if maxPerType < 1 || unix_count < maxPerType {
+					unixAddrs = append(unixAddrs, addr.String())
+					unix_count += 1
+				}
+			default:
+				if maxPerType < 1 || http_count < maxPerType {
+					httpAddrs = append(httpAddrs, addr.String())
+					http_count += 1
+				}
+			}
+		}
+	}
+
+	return
+}
+
+func (c *RuntimeConfig) ClientAddress() (unixAddr, httpAddr, httpsAddr string) {
+	unixAddrs, httpAddrs, httpsAddrs := c.apiAddresses(0)
+
+	if len(unixAddrs) > 0 {
+		unixAddr = "unix://" + unixAddrs[0]
+	}
+
+	http_any := ""
+	if len(httpAddrs) > 0 {
+		for _, addr := range httpAddrs {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				continue
+			}
+
+			if host == "0.0.0.0" || host == "::" {
+				if http_any == "" {
+					if host == "0.0.0.0" {
+						http_any = net.JoinHostPort("127.0.0.1", port)
+					} else {
+						http_any = net.JoinHostPort("::1", port)
+					}
+				}
+				continue
+			}
+
+			httpAddr = addr
+			break
+		}
+
+		if httpAddr == "" && http_any != "" {
+			httpAddr = http_any
+		}
+	}
+
+	https_any := ""
+	if len(httpsAddrs) > 0 {
+		for _, addr := range httpsAddrs {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				continue
+			}
+
+			if host == "0.0.0.0" || host == "::" {
+				if https_any == "" {
+					if host == "0.0.0.0" {
+						https_any = net.JoinHostPort("127.0.0.1", port)
+					} else {
+						https_any = net.JoinHostPort("::1", port)
+					}
+				}
+				continue
+			}
+
+			httpsAddr = addr
+			break
+		}
+
+		if httpsAddr == "" && https_any != "" {
+			httpsAddr = https_any
+		}
+	}
+
+	return
+}
+
+func (c *RuntimeConfig) APIConfig(includeClientCerts bool) (*api.Config, error) {
+	cfg := &api.Config{
+		Datacenter: c.Datacenter,
+		TLSConfig:  api.TLSConfig{InsecureSkipVerify: !c.VerifyOutgoing},
+	}
+
+	unixAddr, httpAddr, httpsAddr := c.ClientAddress()
+
+	if httpsAddr != "" {
+		cfg.Address = httpsAddr
+		cfg.Scheme = "https"
+		cfg.TLSConfig.CAFile = c.CAFile
+		cfg.TLSConfig.CAPath = c.CAPath
+		cfg.TLSConfig.Address = httpsAddr
+		if includeClientCerts {
+			cfg.TLSConfig.CertFile = c.CertFile
+			cfg.TLSConfig.KeyFile = c.KeyFile
+		}
+	} else if httpAddr != "" {
+		cfg.Address = httpAddr
+		cfg.Scheme = "http"
+	} else if unixAddr != "" {
+		cfg.Address = unixAddr
+		// this should be ignored - however we are still talking http over a unix socket
+		// so it makes sense to set it like this
+		cfg.Scheme = "http"
+	} else {
+		return nil, fmt.Errorf("No suitable client address can be found")
+	}
+
+	return cfg, nil
 }
 
 // Sanitized returns a JSON/HCL compatible representation of the runtime

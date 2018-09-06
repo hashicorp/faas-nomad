@@ -10,6 +10,10 @@ import (
 	"github.com/hashicorp/go-memdb"
 )
 
+const (
+	servicesTableName = "services"
+)
+
 // nodesTableSchema returns a new table schema used for storing node
 // information.
 func nodesTableSchema() *memdb.TableSchema {
@@ -86,6 +90,12 @@ func servicesTableSchema() *memdb.TableSchema {
 					Field:     "ServiceName",
 					Lowercase: true,
 				},
+			},
+			"connect": &memdb.IndexSchema{
+				Name:         "connect",
+				AllowMissing: true,
+				Unique:       false,
+				Indexer:      &IndexConnectService{},
 			},
 		},
 	}
@@ -517,7 +527,11 @@ func (s *Store) deleteNodeTxn(tx *memdb.Txn, idx uint64, nodeName string) error 
 	}
 	var sids []string
 	for service := services.Next(); service != nil; service = services.Next() {
-		sids = append(sids, service.(*structs.ServiceNode).ServiceID)
+		svc := service.(*structs.ServiceNode)
+		sids = append(sids, svc.ServiceID)
+		if err := tx.Insert("index", &IndexEntry{serviceIndexName(svc.ServiceName), idx}); err != nil {
+			return fmt.Errorf("failed updating index: %s", err)
+		}
 	}
 
 	// Do the delete in a separate loop so we don't trash the iterator.
@@ -610,6 +624,9 @@ func (s *Store) ensureServiceTxn(tx *memdb.Txn, idx uint64, node string, svc *st
 		return fmt.Errorf("failed service lookup: %s", err)
 	}
 
+	if err = structs.ValidateMetadata(svc.Meta, false); err != nil {
+		return fmt.Errorf("Invalid Service Meta for node %s and serviceID %s: %v", node, svc.ID, err)
+	}
 	// Create the service node entry and populate the indexes. Note that
 	// conversion doesn't populate any of the node-specific information.
 	// That's always populated when we read from the state store.
@@ -636,6 +653,9 @@ func (s *Store) ensureServiceTxn(tx *memdb.Txn, idx uint64, node string, svc *st
 		return fmt.Errorf("failed inserting service: %s", err)
 	}
 	if err := tx.Insert("index", &IndexEntry{"services", idx}); err != nil {
+		return fmt.Errorf("failed updating index: %s", err)
+	}
+	if err := tx.Insert("index", &IndexEntry{serviceIndexName(svc.Service), idx}); err != nil {
 		return fmt.Errorf("failed updating index: %s", err)
 	}
 
@@ -752,16 +772,56 @@ func (s *Store) ServicesByNodeMeta(ws memdb.WatchSet, filters map[string]string)
 	return idx, results, nil
 }
 
+// maxIndexForService return the maximum Raft Index for a service
+// If the index is not set for the service, it will return:
+// - maxIndex(nodes, services) if checks is false
+// - maxIndex(nodes, services, checks) if checks is true
+func maxIndexForService(tx *memdb.Txn, serviceName string, checks bool) uint64 {
+	transaction, err := tx.First("index", "id", serviceIndexName(serviceName))
+	if err == nil {
+		if idx, ok := transaction.(*IndexEntry); ok {
+			return idx.Value
+		}
+	}
+	if checks {
+		return maxIndexTxn(tx, "nodes", "services", "checks")
+	}
+	return maxIndexTxn(tx, "nodes", "services")
+}
+
+// ConnectServiceNodes returns the nodes associated with a Connect
+// compatible destination for the given service name. This will include
+// both proxies and native integrations.
+func (s *Store) ConnectServiceNodes(ws memdb.WatchSet, serviceName string) (uint64, structs.ServiceNodes, error) {
+	return s.serviceNodes(ws, serviceName, true)
+}
+
 // ServiceNodes returns the nodes associated with a given service name.
 func (s *Store) ServiceNodes(ws memdb.WatchSet, serviceName string) (uint64, structs.ServiceNodes, error) {
+	return s.serviceNodes(ws, serviceName, false)
+}
+
+func (s *Store) serviceNodes(ws memdb.WatchSet, serviceName string, connect bool) (uint64, structs.ServiceNodes, error) {
 	tx := s.db.Txn(false)
 	defer tx.Abort()
 
 	// Get the table index.
-	idx := maxIndexTxn(tx, "nodes", "services")
+	idx := maxIndexForService(tx, serviceName, false)
+
+	// Function for lookup
+	var f func() (memdb.ResultIterator, error)
+	if !connect {
+		f = func() (memdb.ResultIterator, error) {
+			return tx.Get("services", "service", serviceName)
+		}
+	} else {
+		f = func() (memdb.ResultIterator, error) {
+			return tx.Get("services", "connect", serviceName)
+		}
+	}
 
 	// List all the services.
-	services, err := tx.Get("services", "service", serviceName)
+	services, err := f()
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed service lookup: %s", err)
 	}
@@ -787,7 +847,7 @@ func (s *Store) ServiceTagNodes(ws memdb.WatchSet, service string, tag string) (
 	defer tx.Abort()
 
 	// Get the table index.
-	idx := maxIndexTxn(tx, "nodes", "services")
+	idx := maxIndexForService(tx, service, false)
 
 	// List all the services.
 	services, err := tx.Get("services", "service", service)
@@ -827,6 +887,36 @@ func serviceTagFilter(sn *structs.ServiceNode, tag string) bool {
 
 	// If we didn't hit the tag above then we should filter.
 	return true
+}
+
+// ServiceAddressNodes returns the nodes associated with a given service, filtering
+// out services that don't match the given serviceAddress
+func (s *Store) ServiceAddressNodes(ws memdb.WatchSet, address string) (uint64, structs.ServiceNodes, error) {
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+
+	// List all the services.
+	services, err := tx.Get("services", "id")
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed service lookup: %s", err)
+	}
+	ws.Add(services.WatchCh())
+
+	// Gather all the services and apply the tag filter.
+	var results structs.ServiceNodes
+	for service := services.Next(); service != nil; service = services.Next() {
+		svc := service.(*structs.ServiceNode)
+		if svc.ServiceAddress == address {
+			results = append(results, svc)
+		}
+	}
+
+	// Fill in the node details.
+	results, err = s.parseServiceNodes(tx, ws, results)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed parsing service nodes: %s", err)
+	}
+	return 0, results, nil
 }
 
 // parseServiceNodes iterates over a services query and fills in the node details,
@@ -979,6 +1069,10 @@ func (s *Store) DeleteService(idx uint64, nodeName, serviceID string) error {
 	return nil
 }
 
+func serviceIndexName(name string) string {
+	return fmt.Sprintf("service.%s", name)
+}
+
 // deleteServiceTxn is the inner method called to remove a service
 // registration within an existing transaction.
 func (s *Store) deleteServiceTxn(tx *memdb.Txn, idx uint64, nodeName, serviceID string) error {
@@ -1022,6 +1116,26 @@ func (s *Store) deleteServiceTxn(tx *memdb.Txn, idx uint64, nodeName, serviceID 
 		return fmt.Errorf("failed updating index: %s", err)
 	}
 
+	svc := service.(*structs.ServiceNode)
+	if remainingService, err := tx.First("services", "service", svc.ServiceName); err == nil {
+		if remainingService != nil {
+			// We have at least one remaining service, update the index
+			if err := tx.Insert("index", &IndexEntry{serviceIndexName(svc.ServiceName), idx}); err != nil {
+				return fmt.Errorf("failed updating index: %s", err)
+			}
+		} else {
+			// There are no more service instances, cleanup the service.<serviceName> index
+			serviceIndex, err := tx.First("index", "id", serviceIndexName(svc.ServiceName))
+			if err == nil && serviceIndex != nil {
+				// we found service.<serviceName> index, garbage collect it
+				if errW := tx.Delete("index", serviceIndex); errW != nil {
+					return fmt.Errorf("[FAILED] deleting serviceIndex %s: %s", svc.ServiceName, err)
+				}
+			}
+		}
+	} else {
+		return fmt.Errorf("Could not find any service %s: %s", svc.ServiceName, err)
+	}
 	return nil
 }
 
@@ -1036,6 +1150,21 @@ func (s *Store) EnsureCheck(idx uint64, hc *structs.HealthCheck) error {
 	}
 
 	tx.Commit()
+	return nil
+}
+
+// updateAllServiceIndexesOfNode updates the Raft index of all the services associated with this node
+func (s *Store) updateAllServiceIndexesOfNode(tx *memdb.Txn, idx uint64, nodeID string) error {
+	services, err := tx.Get("services", "node", nodeID)
+	if err != nil {
+		return fmt.Errorf("failed updating services for node %s: %s", nodeID, err)
+	}
+	for service := services.Next(); service != nil; service = services.Next() {
+		svc := service.(*structs.ServiceNode).ToNodeService()
+		if err := tx.Insert("index", &IndexEntry{serviceIndexName(svc.Service), idx}); err != nil {
+			return fmt.Errorf("failed updating index: %s", err)
+		}
+	}
 	return nil
 }
 
@@ -1087,6 +1216,15 @@ func (s *Store) ensureCheckTxn(tx *memdb.Txn, idx uint64, hc *structs.HealthChec
 		svc := service.(*structs.ServiceNode)
 		hc.ServiceName = svc.ServiceName
 		hc.ServiceTags = svc.ServiceTags
+		if err = tx.Insert("index", &IndexEntry{serviceIndexName(svc.ServiceName), idx}); err != nil {
+			return fmt.Errorf("failed updating index: %s", err)
+		}
+	} else {
+		// Update the status for all the services associated with this node
+		err = s.updateAllServiceIndexesOfNode(tx, idx, hc.Node)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Delete any sessions for this check if the health is critical.
@@ -1199,8 +1337,7 @@ func (s *Store) ServiceChecksByNodeMeta(ws memdb.WatchSet, serviceName string,
 	defer tx.Abort()
 
 	// Get the table index.
-	idx := maxIndexTxn(tx, "nodes", "checks")
-
+	idx := maxIndexForService(tx, serviceName, true)
 	// Return the checks.
 	iter, err := tx.Get("checks", "service", serviceName)
 	if err != nil {
@@ -1328,6 +1465,23 @@ func (s *Store) deleteCheckTxn(tx *memdb.Txn, idx uint64, node string, checkID t
 	if hc == nil {
 		return nil
 	}
+	existing := hc.(*structs.HealthCheck)
+	if existing != nil {
+		// When no service is linked to this service, update all services of node
+		if existing.ServiceID != "" {
+			if err = tx.Insert("index", &IndexEntry{serviceIndexName(existing.ServiceName), idx}); err != nil {
+				return fmt.Errorf("failed updating index: %s", err)
+			}
+		} else {
+			err = s.updateAllServiceIndexesOfNode(tx, idx, existing.Node)
+			if err != nil {
+				return fmt.Errorf("Failed to update services linked to deleted healthcheck: %s", err)
+			}
+			if err := tx.Insert("index", &IndexEntry{"services", idx}); err != nil {
+				return fmt.Errorf("failed updating index: %s", err)
+			}
+		}
+	}
 
 	// Delete the check from the DB and update the index.
 	if err := tx.Delete("checks", hc); err != nil {
@@ -1359,14 +1513,36 @@ func (s *Store) deleteCheckTxn(tx *memdb.Txn, idx uint64, node string, checkID t
 
 // CheckServiceNodes is used to query all nodes and checks for a given service.
 func (s *Store) CheckServiceNodes(ws memdb.WatchSet, serviceName string) (uint64, structs.CheckServiceNodes, error) {
+	return s.checkServiceNodes(ws, serviceName, false)
+}
+
+// CheckConnectServiceNodes is used to query all nodes and checks for Connect
+// compatible endpoints for a given service.
+func (s *Store) CheckConnectServiceNodes(ws memdb.WatchSet, serviceName string) (uint64, structs.CheckServiceNodes, error) {
+	return s.checkServiceNodes(ws, serviceName, true)
+}
+
+func (s *Store) checkServiceNodes(ws memdb.WatchSet, serviceName string, connect bool) (uint64, structs.CheckServiceNodes, error) {
 	tx := s.db.Txn(false)
 	defer tx.Abort()
 
 	// Get the table index.
-	idx := maxIndexTxn(tx, "nodes", "services", "checks")
+	idx := maxIndexForService(tx, serviceName, true)
+
+	// Function for lookup
+	var f func() (memdb.ResultIterator, error)
+	if !connect {
+		f = func() (memdb.ResultIterator, error) {
+			return tx.Get("services", "service", serviceName)
+		}
+	} else {
+		f = func() (memdb.ResultIterator, error) {
+			return tx.Get("services", "connect", serviceName)
+		}
+	}
 
 	// Query the state store for the service.
-	iter, err := tx.Get("services", "service", serviceName)
+	iter, err := f()
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed service lookup: %s", err)
 	}
@@ -1387,7 +1563,7 @@ func (s *Store) CheckServiceTagNodes(ws memdb.WatchSet, serviceName, tag string)
 	defer tx.Abort()
 
 	// Get the table index.
-	idx := maxIndexTxn(tx, "nodes", "services", "checks")
+	idx := maxIndexForService(tx, serviceName, true)
 
 	// Query the state store for the service.
 	iter, err := tx.Get("services", "service", serviceName)

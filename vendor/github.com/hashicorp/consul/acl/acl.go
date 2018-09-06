@@ -60,6 +60,17 @@ type ACL interface {
 	// EventWrite determines if a specific event may be fired.
 	EventWrite(string) bool
 
+	// IntentionDefaultAllow determines the default authorized behavior
+	// when no intentions match a Connect request.
+	IntentionDefaultAllow() bool
+
+	// IntentionRead determines if a specific intention can be read.
+	IntentionRead(string) bool
+
+	// IntentionWrite determines if a specific intention can be
+	// created, modified, or deleted.
+	IntentionWrite(string) bool
+
 	// KeyList checks for permission to list keys under a prefix
 	KeyList(string) bool
 
@@ -96,7 +107,7 @@ type ACL interface {
 	// functions can be used.
 	OperatorWrite() bool
 
-	// PrepardQueryRead determines if a specific prepared query can be read
+	// PreparedQueryRead determines if a specific prepared query can be read
 	// to show its contents (this is not used for execution).
 	PreparedQueryRead(string) bool
 
@@ -151,6 +162,18 @@ func (s *StaticACL) EventRead(string) bool {
 }
 
 func (s *StaticACL) EventWrite(string) bool {
+	return s.defaultAllow
+}
+
+func (s *StaticACL) IntentionDefaultAllow() bool {
+	return s.defaultAllow
+}
+
+func (s *StaticACL) IntentionRead(string) bool {
+	return s.defaultAllow
+}
+
+func (s *StaticACL) IntentionWrite(string) bool {
 	return s.defaultAllow
 }
 
@@ -275,6 +298,9 @@ type PolicyACL struct {
 	// agentRules contains the agent policies
 	agentRules *radix.Tree
 
+	// intentionRules contains the service intention policies
+	intentionRules *radix.Tree
+
 	// keyRules contains the key policies
 	keyRules *radix.Tree
 
@@ -302,12 +328,41 @@ type PolicyACL struct {
 	operatorRule string
 }
 
+func enforce(rule string, requiredPermission string) (allow, recurse bool) {
+	switch rule {
+	case PolicyWrite:
+		// grants read, list and write permissions
+		return true, false
+	case PolicyList:
+		// grants read and list permissions
+		if requiredPermission == PolicyList || requiredPermission == PolicyRead {
+			return true, false
+		} else {
+			return false, false
+		}
+	case PolicyRead:
+		// grants just read permissions
+		if requiredPermission == PolicyRead {
+			return true, false
+		} else {
+			return false, false
+		}
+	case PolicyDeny:
+		// explicit denial - do not recurse
+		return false, false
+	default:
+		// need to recurse as there was no specific policy set
+		return false, true
+	}
+}
+
 // New is used to construct a policy based ACL from a set of policies
 // and a parent policy to resolve missing cases.
 func New(parent ACL, policy *Policy, sentinel sentinel.Evaluator) (*PolicyACL, error) {
 	p := &PolicyACL{
 		parent:             parent,
 		agentRules:         radix.New(),
+		intentionRules:     radix.New(),
 		keyRules:           radix.New(),
 		nodeRules:          radix.New(),
 		serviceRules:       radix.New(),
@@ -347,6 +402,25 @@ func New(parent ACL, policy *Policy, sentinel sentinel.Evaluator) (*PolicyACL, e
 			sentinelPolicy: sp.Sentinel,
 		}
 		p.serviceRules.Insert(sp.Name, policyRule)
+
+		// Determine the intention. The intention could be blank (not set).
+		// If the intention is not set, the value depends on the value of
+		// the service policy.
+		intention := sp.Intentions
+		if intention == "" {
+			switch sp.Policy {
+			case PolicyRead, PolicyWrite:
+				intention = PolicyRead
+			default:
+				intention = PolicyDeny
+			}
+		}
+
+		policyRule = PolicyRule{
+			aclPolicy:      intention,
+			sentinelPolicy: sp.Sentinel,
+		}
+		p.intentionRules.Insert(sp.Name, policyRule)
 	}
 
 	// Load the session policy
@@ -387,14 +461,9 @@ func (p *PolicyACL) ACLModify() bool {
 // node.
 func (p *PolicyACL) AgentRead(node string) bool {
 	// Check for an exact rule or catch-all
-	_, rule, ok := p.agentRules.LongestPrefix(node)
-
-	if ok {
-		switch rule {
-		case PolicyRead, PolicyWrite:
-			return true
-		default:
-			return false
+	if _, rule, ok := p.agentRules.LongestPrefix(node); ok {
+		if allow, recurse := enforce(rule.(string), PolicyRead); !recurse {
+			return allow
 		}
 	}
 
@@ -409,11 +478,8 @@ func (p *PolicyACL) AgentWrite(node string) bool {
 	_, rule, ok := p.agentRules.LongestPrefix(node)
 
 	if ok {
-		switch rule {
-		case PolicyWrite:
-			return true
-		default:
-			return false
+		if allow, recurse := enforce(rule.(string), PolicyWrite); !recurse {
+			return allow
 		}
 	}
 
@@ -431,15 +497,12 @@ func (p *PolicyACL) Snapshot() bool {
 func (p *PolicyACL) EventRead(name string) bool {
 	// Longest-prefix match on event names
 	if _, rule, ok := p.eventRules.LongestPrefix(name); ok {
-		switch rule {
-		case PolicyRead, PolicyWrite:
-			return true
-		default:
-			return false
+		if allow, recurse := enforce(rule.(string), PolicyRead); !recurse {
+			return allow
 		}
 	}
 
-	// Nothing matched, use parent
+	// No matching rule, use the parent.
 	return p.parent.EventRead(name)
 }
 
@@ -448,24 +511,59 @@ func (p *PolicyACL) EventRead(name string) bool {
 func (p *PolicyACL) EventWrite(name string) bool {
 	// Longest-prefix match event names
 	if _, rule, ok := p.eventRules.LongestPrefix(name); ok {
-		return rule == PolicyWrite
+		if allow, recurse := enforce(rule.(string), PolicyWrite); !recurse {
+			return allow
+		}
 	}
 
 	// No match, use parent
 	return p.parent.EventWrite(name)
 }
 
+// IntentionDefaultAllow returns whether the default behavior when there are
+// no matching intentions is to allow or deny.
+func (p *PolicyACL) IntentionDefaultAllow() bool {
+	// We always go up, this can't be determined by a policy.
+	return p.parent.IntentionDefaultAllow()
+}
+
+// IntentionRead checks if writing (creating, updating, or deleting) of an
+// intention is allowed.
+func (p *PolicyACL) IntentionRead(prefix string) bool {
+	// Check for an exact rule or catch-all
+	if _, rule, ok := p.intentionRules.LongestPrefix(prefix); ok {
+		pr := rule.(PolicyRule)
+		if allow, recurse := enforce(pr.aclPolicy, PolicyRead); !recurse {
+			return allow
+		}
+	}
+
+	// No matching rule, use the parent.
+	return p.parent.IntentionRead(prefix)
+}
+
+// IntentionWrite checks if writing (creating, updating, or deleting) of an
+// intention is allowed.
+func (p *PolicyACL) IntentionWrite(prefix string) bool {
+	// Check for an exact rule or catch-all
+	if _, rule, ok := p.intentionRules.LongestPrefix(prefix); ok {
+		pr := rule.(PolicyRule)
+		if allow, recurse := enforce(pr.aclPolicy, PolicyWrite); !recurse {
+			return allow
+		}
+	}
+
+	// No matching rule, use the parent.
+	return p.parent.IntentionWrite(prefix)
+}
+
 // KeyRead returns if a key is allowed to be read
 func (p *PolicyACL) KeyRead(key string) bool {
 	// Look for a matching rule
-	_, rule, ok := p.keyRules.LongestPrefix(key)
-	if ok {
+	if _, rule, ok := p.keyRules.LongestPrefix(key); ok {
 		pr := rule.(PolicyRule)
-		switch pr.aclPolicy {
-		case PolicyRead, PolicyWrite, PolicyList:
-			return true
-		default:
-			return false
+		if allow, recurse := enforce(pr.aclPolicy, PolicyRead); !recurse {
+			return allow
 		}
 	}
 
@@ -476,14 +574,10 @@ func (p *PolicyACL) KeyRead(key string) bool {
 // KeyList returns if a key is allowed to be listed
 func (p *PolicyACL) KeyList(key string) bool {
 	// Look for a matching rule
-	_, rule, ok := p.keyRules.LongestPrefix(key)
-	if ok {
+	if _, rule, ok := p.keyRules.LongestPrefix(key); ok {
 		pr := rule.(PolicyRule)
-		switch pr.aclPolicy {
-		case PolicyList, PolicyWrite:
-			return true
-		default:
-			return false
+		if allow, recurse := enforce(pr.aclPolicy, PolicyList); !recurse {
+			return allow
 		}
 	}
 
@@ -494,13 +588,12 @@ func (p *PolicyACL) KeyList(key string) bool {
 // KeyWrite returns if a key is allowed to be written
 func (p *PolicyACL) KeyWrite(key string, scope sentinel.ScopeFn) bool {
 	// Look for a matching rule
-	_, rule, ok := p.keyRules.LongestPrefix(key)
-	if ok {
+	if _, rule, ok := p.keyRules.LongestPrefix(key); ok {
 		pr := rule.(PolicyRule)
-		switch pr.aclPolicy {
-		case PolicyWrite:
-			return p.executeCodePolicy(&pr.sentinelPolicy, scope)
-		default:
+		if allow, recurse := enforce(pr.aclPolicy, PolicyWrite); !recurse {
+			if allow {
+				return p.executeCodePolicy(&pr.sentinelPolicy, scope)
+			}
 			return false
 		}
 	}
@@ -545,48 +638,48 @@ func (p *PolicyACL) KeyWritePrefix(prefix string) bool {
 // KeyringRead is used to determine if the keyring can be
 // read by the current ACL token.
 func (p *PolicyACL) KeyringRead() bool {
-	switch p.keyringRule {
-	case PolicyRead, PolicyWrite:
-		return true
-	case PolicyDeny:
-		return false
-	default:
-		return p.parent.KeyringRead()
+	if allow, recurse := enforce(p.keyringRule, PolicyRead); !recurse {
+		return allow
 	}
+
+	return p.parent.KeyringRead()
 }
 
 // KeyringWrite determines if the keyring can be manipulated.
 func (p *PolicyACL) KeyringWrite() bool {
-	if p.keyringRule == PolicyWrite {
-		return true
+	if allow, recurse := enforce(p.keyringRule, PolicyWrite); !recurse {
+		return allow
 	}
+
 	return p.parent.KeyringWrite()
 }
 
 // OperatorRead determines if the read-only operator functions are allowed.
 func (p *PolicyACL) OperatorRead() bool {
-	switch p.operatorRule {
-	case PolicyRead, PolicyWrite:
-		return true
-	case PolicyDeny:
-		return false
-	default:
-		return p.parent.OperatorRead()
+	if allow, recurse := enforce(p.operatorRule, PolicyRead); !recurse {
+		return allow
 	}
+
+	return p.parent.OperatorRead()
+}
+
+// OperatorWrite determines if the state-changing operator functions are
+// allowed.
+func (p *PolicyACL) OperatorWrite() bool {
+	if allow, recurse := enforce(p.operatorRule, PolicyWrite); !recurse {
+		return allow
+	}
+
+	return p.parent.OperatorWrite()
 }
 
 // NodeRead checks if reading (discovery) of a node is allowed
 func (p *PolicyACL) NodeRead(name string) bool {
 	// Check for an exact rule or catch-all
-	_, rule, ok := p.nodeRules.LongestPrefix(name)
-
-	if ok {
+	if _, rule, ok := p.nodeRules.LongestPrefix(name); ok {
 		pr := rule.(PolicyRule)
-		switch pr.aclPolicy {
-		case PolicyRead, PolicyWrite:
-			return true
-		default:
-			return false
+		if allow, recurse := enforce(pr.aclPolicy, PolicyRead); !recurse {
+			return allow
 		}
 	}
 
@@ -597,15 +690,10 @@ func (p *PolicyACL) NodeRead(name string) bool {
 // NodeWrite checks if writing (registering) a node is allowed
 func (p *PolicyACL) NodeWrite(name string, scope sentinel.ScopeFn) bool {
 	// Check for an exact rule or catch-all
-	_, rule, ok := p.nodeRules.LongestPrefix(name)
-
-	if ok {
+	if _, rule, ok := p.nodeRules.LongestPrefix(name); ok {
 		pr := rule.(PolicyRule)
-		switch pr.aclPolicy {
-		case PolicyWrite:
-			return true
-		default:
-			return false
+		if allow, recurse := enforce(pr.aclPolicy, PolicyWrite); !recurse {
+			return allow
 		}
 	}
 
@@ -613,27 +701,13 @@ func (p *PolicyACL) NodeWrite(name string, scope sentinel.ScopeFn) bool {
 	return p.parent.NodeWrite(name, scope)
 }
 
-// OperatorWrite determines if the state-changing operator functions are
-// allowed.
-func (p *PolicyACL) OperatorWrite() bool {
-	if p.operatorRule == PolicyWrite {
-		return true
-	}
-	return p.parent.OperatorWrite()
-}
-
 // PreparedQueryRead checks if reading (listing) of a prepared query is
 // allowed - this isn't execution, just listing its contents.
 func (p *PolicyACL) PreparedQueryRead(prefix string) bool {
 	// Check for an exact rule or catch-all
-	_, rule, ok := p.preparedQueryRules.LongestPrefix(prefix)
-
-	if ok {
-		switch rule {
-		case PolicyRead, PolicyWrite:
-			return true
-		default:
-			return false
+	if _, rule, ok := p.preparedQueryRules.LongestPrefix(prefix); ok {
+		if allow, recurse := enforce(rule.(string), PolicyRead); !recurse {
+			return allow
 		}
 	}
 
@@ -645,14 +719,9 @@ func (p *PolicyACL) PreparedQueryRead(prefix string) bool {
 // prepared query is allowed.
 func (p *PolicyACL) PreparedQueryWrite(prefix string) bool {
 	// Check for an exact rule or catch-all
-	_, rule, ok := p.preparedQueryRules.LongestPrefix(prefix)
-
-	if ok {
-		switch rule {
-		case PolicyWrite:
-			return true
-		default:
-			return false
+	if _, rule, ok := p.preparedQueryRules.LongestPrefix(prefix); ok {
+		if allow, recurse := enforce(rule.(string), PolicyWrite); !recurse {
+			return allow
 		}
 	}
 
@@ -663,14 +732,10 @@ func (p *PolicyACL) PreparedQueryWrite(prefix string) bool {
 // ServiceRead checks if reading (discovery) of a service is allowed
 func (p *PolicyACL) ServiceRead(name string) bool {
 	// Check for an exact rule or catch-all
-	_, rule, ok := p.serviceRules.LongestPrefix(name)
-	if ok {
+	if _, rule, ok := p.serviceRules.LongestPrefix(name); ok {
 		pr := rule.(PolicyRule)
-		switch pr.aclPolicy {
-		case PolicyRead, PolicyWrite:
-			return true
-		default:
-			return false
+		if allow, recurse := enforce(pr.aclPolicy, PolicyRead); !recurse {
+			return allow
 		}
 	}
 
@@ -681,14 +746,10 @@ func (p *PolicyACL) ServiceRead(name string) bool {
 // ServiceWrite checks if writing (registering) a service is allowed
 func (p *PolicyACL) ServiceWrite(name string, scope sentinel.ScopeFn) bool {
 	// Check for an exact rule or catch-all
-	_, rule, ok := p.serviceRules.LongestPrefix(name)
-	if ok {
+	if _, rule, ok := p.serviceRules.LongestPrefix(name); ok {
 		pr := rule.(PolicyRule)
-		switch pr.aclPolicy {
-		case PolicyWrite:
-			return true
-		default:
-			return false
+		if allow, recurse := enforce(pr.aclPolicy, PolicyWrite); !recurse {
+			return allow
 		}
 	}
 
@@ -699,14 +760,9 @@ func (p *PolicyACL) ServiceWrite(name string, scope sentinel.ScopeFn) bool {
 // SessionRead checks for permission to read sessions for a given node.
 func (p *PolicyACL) SessionRead(node string) bool {
 	// Check for an exact rule or catch-all
-	_, rule, ok := p.sessionRules.LongestPrefix(node)
-
-	if ok {
-		switch rule {
-		case PolicyRead, PolicyWrite:
-			return true
-		default:
-			return false
+	if _, rule, ok := p.sessionRules.LongestPrefix(node); ok {
+		if allow, recurse := enforce(rule.(string), PolicyRead); !recurse {
+			return allow
 		}
 	}
 
@@ -717,14 +773,9 @@ func (p *PolicyACL) SessionRead(node string) bool {
 // SessionWrite checks for permission to create sessions for a given node.
 func (p *PolicyACL) SessionWrite(node string) bool {
 	// Check for an exact rule or catch-all
-	_, rule, ok := p.sessionRules.LongestPrefix(node)
-
-	if ok {
-		switch rule {
-		case PolicyWrite:
-			return true
-		default:
-			return false
+	if _, rule, ok := p.sessionRules.LongestPrefix(node); ok {
+		if allow, recurse := enforce(rule.(string), PolicyWrite); !recurse {
+			return allow
 		}
 	}
 

@@ -34,9 +34,9 @@ Here's how to package your function if you don't want to use the CLI or have exi
 Example Dockerfile for an `echo` function:
 
 ```
-FROM alpine:3.5
+FROM alpine:3.7
 
-ADD https://github.com/openfaas/faas/releases/download/0.7.1/fwatchdog /usr/bin
+ADD https://github.com/openfaas/faas/releases/download/0.8.0/fwatchdog /usr/bin
 RUN chmod +x /usr/bin/fwatchdog
 
 # Define your binary here
@@ -45,9 +45,17 @@ ENV fprocess="/bin/cat"
 CMD ["fwatchdog"]
 ```
 
-**Implementing a Docker healthcheck**
+**Implementing a health-check**
 
-A Docker Healthcheck is not required but is best practice. It will make sure that the watchdog is ready to accept a request before forwarding requests via the API Gateway. If the function or watchdog runs into an unrecoverable issue Swarm will also be able to restart the container.
+At any point in time, if you detect that your function has become unhealthy and needs to restart, then you can delete the `/tmp/.lock` file which invalidates the check and causes Swarm to re-schedule the function.
+
+* Kubernetes
+
+For Kubernetes the health check is added through automation without you needing to alter the `Dockerfile`.
+
+* Swarm
+
+A Docker Swarm Healthcheck is required and is best practice. It will make sure that the watchdog is ready to accept a request before forwarding requests via the API Gateway. If the function or watchdog runs into an unrecoverable issue Swarm will also be able to restart the container.
 
 Here is an example of the `echo` function implementing a healthcheck with a 5-second checking interval.
 
@@ -71,32 +79,28 @@ The watchdog can be configured through environmental variables. You must always 
 
 | Option                 | Usage             |
 |------------------------|--------------|
-| `fprocess`             | The process to invoke for each function call (function process). This must be a UNIX binary and accept input via STDIN and output via STDOUT.  |
-| `cgi_headers`          | HTTP headers from request are made available through environmental variables - `Http_X_Served_By` etc. See section: *Handling headers* for more detail. Enabled by default. |
+| `fprocess`             | The process to invoke for each function call (function process). This must be a UNIX binary and accept input via STDIN and output via STDOUT  |
+| `cgi_headers`          | HTTP headers from request are made available through environmental variables - `Http_X_Served_By` etc. See section: *Handling headers* for more detail. Enabled by default |
 | `marshal_request`     | Instead of re-directing the raw HTTP body into your fprocess, it will first be marshalled into JSON. Use this if you need to work with HTTP headers and do not want to use environmental variables via the `cgi_headers` flag. |
-| `content_type`         | Force a specific Content-Type response for all responses. |
+| `content_type`         | Force a specific Content-Type response for all responses |
 | `write_timeout`        | HTTP timeout for writing a response body from your function (in seconds)  |
 | `read_timeout`         | HTTP timeout for reading the payload from the client caller (in seconds) |
 | `suppress_lock`        | The watchdog will attempt to write a lockfile to /tmp/ for swarm healthchecks - set this to true to disable behaviour. |
-| `exec_timeout`         | Hard timeout for process exec'd for each incoming request (in seconds). Disabled if set to 0. |
-| `write_debug`          | Write all output, error messages, and additional information to the logs. Default is false. |
- 
+| `exec_timeout`         | Hard timeout for process exec'd for each incoming request (in seconds). Disabled if set to 0 |
+| `write_debug`          | Write all output, error messages, and additional information to the logs. Default is false |
+| `combine_output`       | True by default - combines stdout/stderr in function response, when set to false `stderr` is written to the container logs and stdout is used for function response |
 
 ## Advanced / tuning
 
-### of-watchdog and AfterBurn
+### (New) of-watchdog and HTTP mode
 
 * of-watchdog
+
+Forking a new process per request has advantages such as process isolation, portability and simplicity. Any process can be made into a function without any additional code. The of-watchdog and its "HTTP" mode is an optimization which maintains one single process between all requests.
 
 A new version of the watchdog is being tested over at [openfaas-incubator/of-watchdog](https://github.com/openfaas-incubator/of-watchdog).
 
 This re-write is mainly structural for on-going maintenance. It will be a drop-in replacement for the existing watchdog and also has binary releases available.
-
-* AfterBurn Optimizations
-
-Forking a new process per request has many advantages for isolation, simplicity and means any process can be a function without any additional code. AfterBurn is an optimization which maintains one single process between all requests and means a Java function can execute a round-trip in as little as 10-12ms without further tuning. It relies on a simple client library maintained by this project for each runtime language.
-
-You can read about [AfterBurn](https://blog.alexellis.io/openfaas-serverless-acceleration/) on my blog. It is supported by the of-watchdog and a version is also available for the existing watchdog in [PR #224](https://github.com/openfaas/faas/pull/224).
 
 ### Working with HTTP headers
 

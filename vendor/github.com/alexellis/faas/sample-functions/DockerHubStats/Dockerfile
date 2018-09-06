@@ -1,10 +1,10 @@
-FROM golang:1.9.4-alpine as builder
+FROM golang:1.9.7-alpine as builder
 
 MAINTAINER alex@openfaas.com
 ENTRYPOINT []
 
 RUN apk --no-cache add make curl \
-    && curl -sL https://github.com/openfaas/faas/releases/download/0.7.1/fwatchdog > /usr/bin/fwatchdog \
+    && curl -sL https://github.com/openfaas/faas/releases/download/0.8.0/fwatchdog > /usr/bin/fwatchdog \
     && chmod +x /usr/bin/fwatchdog
 
 WORKDIR /go/src/github.com/openfaas/faas/sample-functions/DockerHubStats
@@ -13,7 +13,7 @@ COPY . /go/src/github.com/openfaas/faas/sample-functions/DockerHubStats
 
 RUN make install
 
-FROM alpine:3.6
+FROM alpine:3.7
 
 # Needed to reach the hub
 RUN apk --no-cache add ca-certificates 

@@ -11,13 +11,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/vault/helper/certutil"
 	"github.com/hashicorp/vault/helper/policyutil"
 	"github.com/hashicorp/vault/logical"
 	"github.com/hashicorp/vault/logical/framework"
 
+	"github.com/hashicorp/vault/helper/cidrutil"
 	"github.com/ryanuber/go-glob"
 )
 
@@ -72,9 +72,8 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *fra
 		return nil, nil
 	}
 
-	ttl := matched.Entry.TTL
-	if ttl == 0 {
-		ttl = b.System().DefaultLeaseTTL()
+	if err := b.checkCIDR(matched.Entry, req); err != nil {
+		return nil, err
 	}
 
 	clientCerts := req.Connection.ConnState.PeerCertificates
@@ -96,31 +95,20 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *fra
 			Metadata: map[string]string{
 				"cert_name":        matched.Entry.Name,
 				"common_name":      clientCerts[0].Subject.CommonName,
+				"serial_number":    clientCerts[0].SerialNumber.String(),
 				"subject_key_id":   certutil.GetHexFormatted(clientCerts[0].SubjectKeyId, ":"),
 				"authority_key_id": certutil.GetHexFormatted(clientCerts[0].AuthorityKeyId, ":"),
 			},
 			LeaseOptions: logical.LeaseOptions{
 				Renewable: true,
-				TTL:       ttl,
+				TTL:       matched.Entry.TTL,
+				MaxTTL:    matched.Entry.MaxTTL,
 			},
 			Alias: &logical.Alias{
-				Name: clientCerts[0].SerialNumber.String(),
+				Name: clientCerts[0].Subject.CommonName,
 			},
+			BoundCIDRs: matched.Entry.BoundCIDRs,
 		},
-	}
-
-	if matched.Entry.MaxTTL > time.Duration(0) {
-		// Cap maxTTL to the sysview's max TTL
-		maxTTL := matched.Entry.MaxTTL
-		if maxTTL > b.System().MaxLeaseTTL() {
-			maxTTL = b.System().MaxLeaseTTL()
-		}
-
-		// Cap TTL to MaxTTL
-		if resp.Auth.TTL > maxTTL {
-			resp.AddWarning(fmt.Sprintf("Effective TTL of '%s' exceeded the effective max_ttl of '%s'; TTL value is capped accordingly", (resp.Auth.TTL / time.Second), (maxTTL / time.Second)))
-			resp.Auth.TTL = maxTTL
-		}
 	}
 
 	// Generate a response
@@ -171,21 +159,15 @@ func (b *backend) pathLoginRenew(ctx context.Context, req *logical.Request, d *f
 		return nil, nil
 	}
 
-	if !policyutil.EquivalentPolicies(cert.Policies, req.Auth.Policies) {
+	if !policyutil.EquivalentPolicies(cert.Policies, req.Auth.TokenPolicies) {
 		return nil, fmt.Errorf("policies have changed, not renewing")
 	}
 
-	// If a period is provided, set that as part of resp.Auth.Period and return a
-	// response immediately. Let expiration manager handle renewal from there on.
-	if cert.Period > time.Duration(0) {
-		resp := &logical.Response{
-			Auth: req.Auth,
-		}
-		resp.Auth.Period = cert.Period
-		return resp, nil
-	}
-
-	return framework.LeaseExtend(cert.TTL, cert.MaxTTL, b.System())(ctx, req, d)
+	resp := &logical.Response{Auth: req.Auth}
+	resp.Auth.TTL = cert.TTL
+	resp.Auth.MaxTTL = cert.MaxTTL
+	resp.Auth.Period = cert.Period
+	return resp, nil
 }
 
 func (b *backend) verifyCredentials(ctx context.Context, req *logical.Request, d *framework.FieldData) (*ParsedCert, *logical.Response, error) {
@@ -266,7 +248,11 @@ func (b *backend) verifyCredentials(ctx context.Context, req *logical.Request, d
 func (b *backend) matchesConstraints(clientCert *x509.Certificate, trustedChain []*x509.Certificate, config *ParsedCert) bool {
 	return !b.checkForChainInCRLs(trustedChain) &&
 		b.matchesNames(clientCert, config) &&
-		b.matchesCertificateExtenions(clientCert, config)
+		b.matchesCommonName(clientCert, config) &&
+		b.matchesDNSSANs(clientCert, config) &&
+		b.matchesEmailSANs(clientCert, config) &&
+		b.matchesURISANs(clientCert, config) &&
+		b.matchesCertificateExtensions(clientCert, config)
 }
 
 // matchesNames verifies that the certificate matches at least one configured
@@ -293,13 +279,88 @@ func (b *backend) matchesNames(clientCert *x509.Certificate, config *ParsedCert)
 				return true
 			}
 		}
+
 	}
 	return false
 }
 
-// matchesCertificateExtenions verifies that the certificate matches configured
+// matchesCommonName verifies that the certificate matches at least one configured
+// allowed common name
+func (b *backend) matchesCommonName(clientCert *x509.Certificate, config *ParsedCert) bool {
+	// Default behavior (no names) is to allow all names
+	if len(config.Entry.AllowedCommonNames) == 0 {
+		return true
+	}
+	// At least one pattern must match at least one name if any patterns are specified
+	for _, allowedCommonName := range config.Entry.AllowedCommonNames {
+		if glob.Glob(allowedCommonName, clientCert.Subject.CommonName) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// matchesDNSSANs verifies that the certificate matches at least one configured
+// allowed dns entry in the subject alternate name extension
+func (b *backend) matchesDNSSANs(clientCert *x509.Certificate, config *ParsedCert) bool {
+	// Default behavior (no names) is to allow all names
+	if len(config.Entry.AllowedDNSSANs) == 0 {
+		return true
+	}
+	// At least one pattern must match at least one name if any patterns are specified
+	for _, allowedDNS := range config.Entry.AllowedDNSSANs {
+		for _, name := range clientCert.DNSNames {
+			if glob.Glob(allowedDNS, name) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// matchesEmailSANs verifies that the certificate matches at least one configured
+// allowed email in the subject alternate name extension
+func (b *backend) matchesEmailSANs(clientCert *x509.Certificate, config *ParsedCert) bool {
+	// Default behavior (no names) is to allow all names
+	if len(config.Entry.AllowedEmailSANs) == 0 {
+		return true
+	}
+	// At least one pattern must match at least one name if any patterns are specified
+	for _, allowedEmail := range config.Entry.AllowedEmailSANs {
+		for _, email := range clientCert.EmailAddresses {
+			if glob.Glob(allowedEmail, email) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// matchesURISANs verifies that the certificate matches at least one configured
+// allowed uri in the subject alternate name extension
+func (b *backend) matchesURISANs(clientCert *x509.Certificate, config *ParsedCert) bool {
+	// Default behavior (no names) is to allow all names
+	if len(config.Entry.AllowedURISANs) == 0 {
+		return true
+	}
+	// At least one pattern must match at least one name if any patterns are specified
+	for _, allowedURI := range config.Entry.AllowedURISANs {
+		for _, name := range clientCert.URIs {
+			if glob.Glob(allowedURI, name.String()) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// matchesCertificateExtensions verifies that the certificate matches configured
 // required extensions
-func (b *backend) matchesCertificateExtenions(clientCert *x509.Certificate, config *ParsedCert) bool {
+func (b *backend) matchesCertificateExtensions(clientCert *x509.Certificate, config *ParsedCert) bool {
 	// If no required extensions, nothing to check here
 	if len(config.Entry.RequiredExtensions) == 0 {
 		return true
@@ -337,7 +398,7 @@ func (b *backend) loadTrustedCerts(ctx context.Context, storage logical.Storage,
 	trustedNonCAs = make([]*ParsedCert, 0)
 	names, err := storage.List(ctx, "cert/")
 	if err != nil {
-		b.Logger().Error("cert: failed to list trusted certs", "error", err)
+		b.Logger().Error("failed to list trusted certs", "error", err)
 		return
 	}
 	for _, name := range names {
@@ -347,12 +408,12 @@ func (b *backend) loadTrustedCerts(ctx context.Context, storage logical.Storage,
 		}
 		entry, err := b.Cert(ctx, storage, strings.TrimPrefix(name, "cert/"))
 		if err != nil {
-			b.Logger().Error("cert: failed to load trusted cert", "name", name, "error", err)
+			b.Logger().Error("failed to load trusted cert", "name", name, "error", err)
 			continue
 		}
 		parsed := parsePEM([]byte(entry.Certificate))
 		if len(parsed) == 0 {
-			b.Logger().Error("cert: failed to parse certificate", "name", name)
+			b.Logger().Error("failed to parse certificate", "name", name)
 			continue
 		}
 		if !parsed[0].IsCA {
@@ -394,6 +455,13 @@ func (b *backend) checkForValidChain(chains [][]*x509.Certificate) bool {
 		}
 	}
 	return false
+}
+
+func (b *backend) checkCIDR(cert *CertEntry, req *logical.Request) error {
+	if cidrutil.RemoteAddrIsOk(req.Connection.RemoteAddr, cert.BoundCIDRs) {
+		return nil
+	}
+	return logical.ErrPermissionDenied
 }
 
 // parsePEM parses a PEM encoded x509 certificate
@@ -439,28 +507,12 @@ func validateConnState(roots *x509.CertPool, cs *tls.ConnectionState) ([][]*x509
 		}
 	}
 
-	var chains [][]*x509.Certificate
-	var err error
-	switch {
-	case len(certs[0].DNSNames) > 0:
-		for _, dnsName := range certs[0].DNSNames {
-			opts.DNSName = dnsName
-			chains, err = certs[0].Verify(opts)
-			if err != nil {
-				if _, ok := err.(x509.UnknownAuthorityError); ok {
-					return nil, nil
-				}
-				return nil, errors.New("failed to verify client's certificate: " + err.Error())
-			}
+	chains, err := certs[0].Verify(opts)
+	if err != nil {
+		if _, ok := err.(x509.UnknownAuthorityError); ok {
+			return nil, nil
 		}
-	default:
-		chains, err = certs[0].Verify(opts)
-		if err != nil {
-			if _, ok := err.(x509.UnknownAuthorityError); ok {
-				return nil, nil
-			}
-			return nil, errors.New("failed to verify client's certificate: " + err.Error())
-		}
+		return nil, errors.New("failed to verify client's certificate: " + err.Error())
 	}
 
 	return chains, nil

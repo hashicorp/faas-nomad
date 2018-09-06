@@ -25,7 +25,7 @@ This endpoint lists all enabled auth methods.
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/sys/auth
+    http://127.0.0.1:8200/v1/sys/auth
 ```
 
 ### Sample Response
@@ -77,7 +77,26 @@ For example, enable the "foo" auth method will make it accessible at
 - `config` `(map<string|string>: nil)` – Specifies configuration options for
   this auth method. These are the possible values:
 
-    - `plugin_name`
+  - `default_lease_ttl` `(string: "")` - The default lease duration, specified
+     as a string duration like "5s" or "30m".
+
+  - `max_lease_ttl` `(string: "")` - The maximum lease duration, specified as a
+     string duration like "5s" or "30m".
+
+  - `plugin_name` `(string: "")` - The name of the plugin in the plugin catalog
+     to use.
+
+  - `audit_non_hmac_request_keys` `(array: [])` - Comma-separated list of keys
+     that will not be HMAC'd by audit devices in the request data object.
+
+  - `audit_non_hmac_response_keys` `(array: [])` - Comma-separated list of keys
+     that will not be HMAC'd by audit devices in the response data object.
+
+  - `listing_visibility` `(string: "")` - Speficies whether to show this mount
+     in the UI-specific listing endpoint.
+
+  - `passthrough_request_headers` `(array: [])` - Comma-separated list of headers
+     to whitelist and pass from the request to the backend.
 
     The plugin_name can be provided in the config map or as a top-level option,
     with the former taking precedence.
@@ -108,7 +127,7 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/sys/auth/my-auth
+    http://127.0.0.1:8200/v1/sys/auth/my-auth
 ```
 
 ## Disable Auth Method
@@ -133,7 +152,7 @@ This endpoint disables the auth method at the given auth path.
 $ curl \
     --header "X-Vault-Token: ..." \
     --request DELETE \
-    https://vault.rocks/v1/sys/auth/my-auth
+    http://127.0.0.1:8200/v1/sys/auth/my-auth
 ```
 
 ## Read Auth Method Tuning
@@ -158,7 +177,7 @@ without `sudo` via `sys/mounts/auth/[auth-path]/tune`._
 ```
 $ curl \
     --header "X-Vault-Token: ..." \
-    https://vault.rocks/v1/sys/auth/my-auth/tune
+    http://127.0.0.1:8200/v1/sys/auth/my-auth/tune
 ```
 
 ### Sample Response
@@ -194,6 +213,20 @@ can be achieved without `sudo` via `sys/mounts/auth/[auth-path]/tune`._
 - `description` `(string: "")` – Specifies the description of the mount. This
   overrides the current stored value, if any.
 
+- `audit_non_hmac_request_keys` `(array: [])` - Specifies the comma-separated
+  list of keys that will not be HMAC'd by audit devices in the request data
+  object.
+
+- `audit_non_hmac_response_keys` `(array: [])` - Specifies the comma-separated
+  list of keys that will not be HMAC'd by audit devices in the response data
+  object.
+
+- `listing_visibility` `(string: "")` - Speficies whether to show this mount
+    in the UI-specific listing endpoint. Valid values are `"unauth"` or `""`.
+
+- `passthrough_request_headers` `(array: [])` - Comma-separated list of headers
+    to whitelist and pass from the request to the backend.
+
 ### Sample Payload
 
 ```json
@@ -210,5 +243,5 @@ $ curl \
     --header "X-Vault-Token: ..." \
     --request POST \
     --data @payload.json \
-    https://vault.rocks/v1/sys/auth/my-auth/tune
+    http://127.0.0.1:8200/v1/sys/auth/my-auth/tune
 ```

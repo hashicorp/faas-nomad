@@ -482,6 +482,28 @@ default.
 If using [`acl_token`](/docs/agent/options.html#acl_token), then it's likely the anonymous
 token will have a more restrictive policy than shown in the examples here.
 
+#### Create Tokens for UI Use (Optional)
+
+If you utilize the Consul UI with a restrictive ACL policy, as above, the UI will
+not function fully using the anonymous ACL token. It is recommended
+that a UI-specific ACL token is used, which can be set in the UI during the
+web browser session to authenticate the interface.
+
+```text
+$ curl \
+    --request PUT \
+    --header "X-Consul-Token: b1gs33cr3t" \
+    --data \
+'{
+  "Name": "UI Token",
+  "Type": "client",
+  "Rules": "key \"\" { policy = \"write\" } node \"\" { policy = \"read\" } service \"\" { policy = \"read\" }"
+}' http://127.0.0.1:8500/v1/acl/create
+{"ID":"d0a9f330-2f9d-0a8c-d2af-1e9ceda354e6"}
+```
+
+The token can then be set on the "settings" page of the UI.
+
 #### Next Steps
 
 The examples above configure a basic ACL environment with the ability to see all nodes
@@ -961,12 +983,16 @@ to use for registration events:
 1. Using the [acl_token](/docs/agent/options.html#acl_token) configuration
    directive. This allows a single token to be configured globally and used
    during all service and check registration operations.
-2. Providing an ACL token with service and check definitions at
-   registration time. This allows for greater flexibility and enables the use
-   of multiple tokens on the same agent. Examples of what this looks like are
-   available for both [services](/docs/agent/services.html) and
-   [checks](/docs/agent/checks.html). Tokens may also be passed to the
-   [HTTP API](/api/index.html) for operations that require them.
+2. Providing an ACL token with service and check definitions at registration
+   time. This allows for greater flexibility and enables the use of multiple
+   tokens on the same agent. Examples of what this looks like are available for
+   both [services](/docs/agent/services.html) and
+   [checks](/docs/agent/checks.html). Tokens may also be passed to the [HTTP
+   API](/api/index.html) for operations that require them. **Note:** all tokens
+   passed to an agent are persisted on local disk to allow recovery from
+   restarts. See [`-data-dir` flag
+   documentation](/docs/agent/options.html#acl_token) for notes on securing
+   access.
 
 In addition to ACLs, in Consul 0.9.0 and later, the agent must be configured with
 [`enable_script_checks`](/docs/agent/options.html#_enable_script_checks) set to `true` in order to enable
@@ -1035,6 +1061,11 @@ and the [`acl_down_policy`](/docs/agent/options.html#acl_down_policy)
 is set to "extend-cache", tokens will be resolved during the outage using the
 replicated set of ACLs. An [ACL replication status](/api/acl.html#acl_replication_status)
 endpoint is available to monitor the health of the replication process.
+Also note that in recent versions of Consul (greater than 1.2.0), using
+`acl_down_policy = "async-cache"` refreshes token asynchronously when an ACL is
+already cached and is expired while similar semantics than "extend-cache".
+It allows to avoid having issues when connectivity with the authoritative is not completely
+broken, but very slow.
 
 Locally-resolved ACLs will be cached using the [`acl_ttl`](/docs/agent/options.html#acl_ttl)
 setting of the non-authoritative datacenter, so these entries may persist in the

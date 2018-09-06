@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -14,10 +15,10 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/coreos/etcd/pkg/transport"
+	"github.com/hashicorp/errwrap"
+	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/helper/strutil"
 	"github.com/hashicorp/vault/physical"
-	log "github.com/mgutz/logxi/v1"
-	"golang.org/x/net/context"
 )
 
 // EtcdBackend is a physical backend that stores data at specific
@@ -85,9 +86,9 @@ func newEtcd3Backend(conf map[string]string, logger log.Logger) (physical.Backen
 	ca, hasCa := conf["tls_ca_file"]
 	if (hasCert && hasKey) || hasCa {
 		tls := transport.TLSInfo{
-			CAFile:   ca,
-			CertFile: cert,
-			KeyFile:  key,
+			TrustedCAFile: ca,
+			CertFile:      cert,
+			KeyFile:       key,
 		}
 
 		tlscfg, err := tls.ClientConfig()
@@ -117,7 +118,7 @@ func newEtcd3Backend(conf map[string]string, logger log.Logger) (physical.Backen
 		// grpc converts this to uint32 internally, so parse as that to avoid passing invalid values
 		val, err := strconv.ParseUint(maxReceive, 10, 32)
 		if err != nil {
-			return nil, fmt.Errorf("value [%v] of 'max_receive_size' could not be understood", maxReceive)
+			return nil, errwrap.Wrapf(fmt.Sprintf("value of 'max_receive_size' (%v) could not be understood: {{err}}", maxReceive), err)
 		}
 		cfg.MaxCallRecvMsgSize = int(val)
 	}
@@ -133,7 +134,7 @@ func newEtcd3Backend(conf map[string]string, logger log.Logger) (physical.Backen
 	}
 	sync, err := strconv.ParseBool(ssync)
 	if err != nil {
-		return nil, fmt.Errorf("value of 'sync' (%v) could not be understood", err)
+		return nil, errwrap.Wrapf(fmt.Sprintf("value of 'sync' (%v) could not be understood: {{err}}", ssync), err)
 	}
 
 	if sync {
@@ -242,7 +243,7 @@ func (e *EtcdBackend) HAEnabled() bool {
 	return e.haEnabled
 }
 
-// EtcdLock emplements a lock using and etcd backend.
+// EtcdLock implements a lock using and etcd backend.
 type EtcdLock struct {
 	lock sync.Mutex
 	held bool

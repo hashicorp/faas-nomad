@@ -1,9 +1,9 @@
 ---
 layout: "guides"
 page_title: "Secret as a Service - Guides"
-sidebar_current: "guides-secret-mgmt-dataynamic-secrets"
+sidebar_current: "guides-secret-mgmt-dynamic-secrets"
 description: |-
-  Vault can dynamically generate secrets on--dataemand for some systems.
+  Vault can dynamically generate secrets on-demand for some systems.
 ---
 
 # Secret as a Service: Dynamic Secrets
@@ -20,7 +20,7 @@ you through the generation of dynamic AWS credentials.
 ## Reference Material
 
 - [Getting Started - Dynamic Secrets](/intro/getting-started/dynamic-secrets.html)
-- [Database Backends](/docs/secrets/databases/index.html)
+- [Secret Engines - Databases](/docs/secrets/databases/index.html)
 - [Role API](/api/secret/databases/index.html#create-role)
 
 ## Estimated Time to Complete
@@ -31,7 +31,7 @@ you through the generation of dynamic AWS credentials.
 
 The end-to-end scenario described in this guide involves two personas:
 
-- **`admin`** with privileged permissions to configure secret backends
+- **`admin`** with privileged permissions to configure secret engines
 - **`apps`** read the secrets from Vault
 
 ## Challenge
@@ -67,29 +67,14 @@ unsealed](/intro/getting-started/deploy.html).
 
 ### PostgreSQL
 
-This guide requires that you have PostgreSQL that you can connect to,
-and have a database named **`myapp`**. You can download and install
-[PostgreSQL](https://www.postgresql.org/download/) locally, or connect to a
-remote host.
+This guide requires that you have a PostgreSQL server to connect to. If you
+don't have one, install [PostgreSQL](https://www.postgresql.org/download/) to
+perform the steps described in this guide.
 
-**Example on Ubuntu:**
-
-```shell
-# Install PostgreSQL
-$ sudo apt-get install -y postgresql postgresql-contrib
-
-# Initialize PostgreSQL
-$ sudo postgresql-setup initdb
-
-# Switch to postgres user
-$ su - postgres
-
-# Create myapp database
-$ psql -U postgres -c 'CREATE DATABASE myapp;'
-```
-
-[PostgreSQL Wiki](https://wiki.postgresql.org/wiki/First_steps) gives you a
+- Refer to the [PostgreSQL documentation](https://www.postgresql.org/docs/online-resources/) for details
+- [PostgreSQL Wiki](https://wiki.postgresql.org/wiki/First_steps) gives you a
 summary of basic commands to get started.
+
 
 ### Policy requirements
 
@@ -102,12 +87,12 @@ To perform all tasks demonstrated in this guide, your policy must include the
 following permissions:
 
 ```shell
-# Mount secret backends
+# Mount secret engines
 path "sys/mounts/*" {
   capabilities = [ "create", "read", "update", "delete", "list" ]
 }
 
-# Configure the database backend and create roles
+# Configure the database secret engine and create roles
 path "database/*" {
   capabilities = [ "create", "read", "update", "delete", "list" ]
 }
@@ -128,12 +113,12 @@ If you are not familiar with policies, complete the
 
 ## Steps
 
-In this guide, you are going to configure PostgreSQL secret backend, and create
+In this guide, you are going to configure PostgreSQL secret engine, and create
 a read-only database role. The Vault generated PostgreSQL credentials will only
 have read permission.
 
-1. [Mount the database secret backend](#step1)
-2. [Configure PostgreSQL backend](#step2)
+1. [Mount the database secret engine](#step1)
+2. [Configure PostgreSQL secret engine](#step2)
 3. [Create a role](#step3)
 4. [Request PostgreSQL credentials](#step4)
 5. [Validation](#validation)
@@ -142,34 +127,34 @@ Step 1 through 3 need to be performed by an `admin` user.  Step 4 describes
 the commands that an `app` runs to get a database credentials from Vault.
 
 
-### <a name="step1"></a>Step 1: Mount the database secret backend
+### <a name="step1"></a>Step 1: Mount the database secret engine
 (**Persona:** admin)
 
-As most of the secret backends, the [database backend](/docs/secrets/databases/index.html)
+As most of the secret engines, the [database secret engine](/docs/secrets/databases/index.html)
 must be mounted.
 
 #### CLI command
 
-To mount a database backend:
+To mount a database secret engine:
 
-```shell
+```plaintext
 $ vault secrets enable <PATH>
 ```
 
 **Example:**
 
-```shell
+```plaintext
 $ vault secrets enable database
 ```
 
-**NOTE:** In this guide, the database backend is mounted at the `/database path` in
-Vault.  However, it is possible to mount your secret backends at any location.
+**NOTE:** In this guide, the database secret engine is mounted at the `/database path` in
+Vault.  However, it is possible to mount your secret engines at any location.
 
 #### API call using cURL
 
-Mount `database` secret backend using `/sys/mounts` endpoint:
+Mount `database` secret engine using `/sys/mounts` endpoint:
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: <TOKEN>" \
        --request POST \
        --data <PARAMETERS> \
@@ -177,33 +162,33 @@ $ curl --header "X-Vault-Token: <TOKEN>" \
 ```
 
 Where `<TOKEN>` is your valid token, and `<PARAMETERS>` holds [configuration
-parameters](/api/system/mounts.html#mount-secret-backend) of the backend.
+parameters](/api/system/mounts.html#enable-secrets-engine) of the secret engine.
 
 **Example:**
 
-The following example mounts database backend at `sys/mounts/database` path, and
-passed the backend type ("database") in the request payload.
+The following example mounts database secret engine at `sys/mounts/database`
+path, and passed the secret engine type ("database") in the request payload.
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: ..." \
        --request POST \
        --data '{"type":"database"}' \
-       https://$ vault.rocks/v1/sys/mounts/database
+       https://127.0.0.1:8200/v1/sys/mounts/database
 ```
 
-**NOTE:** It is possible to mount your database secret backends at any location.
+**NOTE:** It is possible to mount your database secret engines at any location.
 
 
-### <a name="step1"></a>Step 2: Configure PostgreSQL backend
+### <a name="step2"></a>Step 2: Configure PostgreSQL secret engine
 (**Persona:** admin)
 
-The PostgreSQL backend needs to be configured with valid credentials. It is very
-common to give Vault the **root** credentials and let Vault manage the auditing
-and lifecycle credentials; it's much better than having one person manage the
-credentials.
+The PostgreSQL secret engine needs to be configured with valid credentials. It
+is very common to give Vault the **root** credentials and let Vault manage the
+auditing and lifecycle credentials; it's much better than having one person
+manage the credentials.
 
 
-The following command configures the database secret backend using
+The following command configures the database secret engine using
 `postgresql-database-plugin` where the database connection URL is
 `postgresql://root:rootpassword@localhost:5432/myapp`.  The allowed role is
 `readonly` which you will create in [Step 3](#step3).
@@ -217,9 +202,11 @@ command with correct URL to match your environment.
 
 **Example:**
 
-```shell
-$ vault write database/config/postgresql plugin_name=postgresql-database-plugin \
-  allowed_roles=readonly connection_url=postgresql://root:rootpassword@localhost:5432/myapp
+```plaintext
+$ vault write database/config/postgresql
+      plugin_name=postgresql-database-plugin \
+      allowed_roles=readonly \
+      connection_url=postgresql://root:rootpassword@localhost:5432/myapp
 ```
 
 
@@ -227,9 +214,9 @@ $ vault write database/config/postgresql plugin_name=postgresql-database-plugin 
 
 **Example:**
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: ..." --request POST --data @payload.json \
-    https://vault.rocks/v1/database/config/postgresql
+    http://127.0.0.1:8200/v1/database/config/postgresql
 
 $ cat payload.json
 {
@@ -239,10 +226,17 @@ $ cat payload.json
 }
 ```
 
+<br>
+
+~> **NOTE:** Read the [Database Root Credential Rotation](/guides/secret-mgmt/db-root-rotation.html)
+guide to learn about rotating the root credential immediately after the initial
+configuration of each database.
+
+
 ### <a name="step3"></a>Step 3: Create a role
 (**Persona:** admin)
 
-In [Step 2](#step2), you configured the PostgreSQL backend by passing **`readonly`** role
+In [Step 2](#step2), you configured the PostgreSQL secret engine by passing **`readonly`** role
 as an allowed member. The next step is to define the `readonly` role. A role is
 a logical name that maps to a policy used to generate credentials.
 
@@ -265,7 +259,7 @@ if Vault is offline or unable to communicate with it.
 
 **Example:**
 
-```shell
+```plaintext
 $ vault write database/roles/readonly db_name=postgresql creation_statements=@readonly.sql \
     default_ttl=1h max_ttl=24h
 ```
@@ -278,15 +272,15 @@ statement is passed as the role creation statement.
 
 **Example:**
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: ..." --request POST --data @payload.json \
-    https://vault.rocks/v1/database/roles/readonly
+    http://127.0.0.1:8200/v1/database/roles/readonly
 
 $ cat payload.json
 {
 	"db_name": "postgres",
-	"creation_statements": "CREATE ROLE '{{name}}' WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';
-  GRANT SELECT ON ALL TABLES IN SCHEMA public TO '{{name}}';",
+	"creation_statements": ["CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';
+  GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{name}}\";"],
 	"default_ttl": "1h",
 	"max_ttl": "24h"
 }
@@ -307,7 +301,7 @@ the read permission.
 `apps-policy.hcl`
 
 ```shell
-# Get credentials from the database backend
+# Get credentials from the database secret engine
 path "database/creds/readonly" {
   capabilities = [ "read" ]
 }
@@ -330,7 +324,7 @@ $ vault token create -policy="apps"
 Key            	Value
 ---            	-----
 token          	e4bdf7dc-cbbf-1bb1-c06c-6a4f9a826cf2
-token_accessor 	54700b7e--data828-a6c4-6141-96e71e002bd7
+token_accessor 	54700b7e-d828-a6c4-6141-96e71e002bd7
 token_duration 	768h0m0s
 token_renewable	true
 token_policies 	[apps default]
@@ -354,7 +348,7 @@ $ vault read database/creds/readonly
 
 Key            	Value
 ---            	-----
-lease_id       	database/creds/readonly/4b5c6e82--dataf88-0dec-c0cb-f07eee8f0329
+lease_id       	database/creds/readonly/4b5c6e82-df88-0dec-c0cb-f07eee8f0329
 lease_duration 	1h0m0s
 lease_renewable	true
 password       	A1a-4urzp0wu92r5s1q0
@@ -381,12 +375,12 @@ $ cat payload.json
 # Create "apps" policy
 $ curl --header "X-Vault-Token: ..." --request PUT \
        --data @payload.json \
-       https://vault.rocks/v1/sys/policy/apps
+       http://127.0.0.1:8200/v1/sys/policy/apps
 
 # Generate a new token with apps policy
 $ curl --header "X-Vault-Token: ..." --request POST \
        --data '{"policies": ["apps"]}' \
-       https://vault.rocks/v1/auth/token/create | jq
+       http://127.0.0.1:8200/v1/auth/token/create | jq
 {
  "request_id": "e1737bc8-7e51-3943-42a0-2dbd6cb40e3e",
  "lease_id": "",
@@ -415,10 +409,10 @@ Be sure to use the returned token to perform the remaining.
 **NOTE:** [AppRole Pull Authentication](/guides/identity/authentication.html) guide
 demonstrates more sophisticated way of generating a token for your apps.
 
-```shell
+```plaintext
 $ curl --header "X-Vault-Token: 1c97b03a-6098-31cf-9d8b-b404e52dcb4a" \
        --request GET \
-       https://vault.rocks/v1/database/creds/readonly | jq
+       http://127.0.0.1:8200/v1/database/creds/readonly | jq
 {
   "request_id": "e0e5a6c1-5e69-5cf3-c9d2-020af192de36",
   "lease_id": "database/creds/readonly/7aa462ab-98cb-fdcb-b226-f0a0d37644cc",
@@ -496,7 +490,7 @@ user name exists.
 
 ## Next steps
 
-This guide discussed how to generate credentials on--dataemand so that the access
+This guide discussed how to generate credentials on-demand so that the access
 credentials no longer need to be written to disk. Next, learn about the
-[Tokens and Leases](/guides/identity/lease.html) so that you can control the lifecycle of
-those credentials.
+[Tokens and Leases](/guides/identity/lease.html) so that you can control the
+lifecycle of those credentials.
