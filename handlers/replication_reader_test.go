@@ -43,7 +43,7 @@ func TestMiddlewareReturns404WhenNotFound(t *testing.T) {
 	assert.Equal(t, rr.Code, http.StatusNotFound)
 }
 
-func TestReplicationRReturnsFunctionWhenFound(t *testing.T) {
+func TestReplicationReturnsFunctionWhenFound(t *testing.T) {
 	functionName := "tester"
 	jobName := nomad.JobPrefix + functionName
 

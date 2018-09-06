@@ -17,7 +17,7 @@ func (mp *MockProxyClient) GetFunctionName(r *http.Request) string {
 	return args.Get(0).(string)
 }
 
-// CallAndReturnResponse returns a mock respoonse
+// CallAndReturnResponse returns a mock response
 func (mp *MockProxyClient) CallAndReturnResponse(address string, body []byte, h http.Header) (
 	[]byte, http.Header, error) {
 	args := mp.Called(address, body, h)

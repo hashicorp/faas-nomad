@@ -70,8 +70,8 @@ functions_provider_url="http://{{ env "NOMAD_IP_http" }}:8081/"
 faas_prometheus_host="{{ .Address }}"
 faas_prometheus_port="{{ .Port }}"{{ end }}
 {{ range service "nats" }}
-faas_nats_address: "{{ .Address }}"{{ end }}
-faas_nats_port: 4222
+faas_nats_address="{{ .Address }}"
+faas_nats_port={{ .Port }}{{ end }}
 EOH
       }
 

@@ -10,7 +10,7 @@ type MockJob struct {
 	mock.Mock
 }
 
-// Register is a mock implementaion of the register interface method
+// Register is a mock implementation of the register interface method
 func (m *MockJob) Register(job *api.Job, options *api.WriteOptions) (
 	*api.JobRegisterResponse,
 	*api.WriteMeta, error) {
