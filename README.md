@@ -275,6 +275,19 @@ functions:
       datacenters: "dc1"
 ```
 
+### Annotations
+Metadata can be added to the Nomad job definition through the use of the OpenFaaS annotation config.  The below example would add the key `git` to the `Meta` section of nomad job definition which can be accessed through the API.
+
+```yaml
+functions:
+  facedetect:
+    lang: go-opencv
+    handler: ./facedetect
+    image: nicholasjackson/func_facedetect
+    annotations:
+      git: https://github.com/alexellis/super-pancake-fn.git
+```
+
 ### Async functions
 OpenFaaS has the capability to immediately return when you call a function and add the work to a nats streaming queue.  To enable this feature in addition to the OpenFaaS gateway and Nomad provider you must run a nats streaming server.  
 To run the server please use the `nats.hcl` job file.
