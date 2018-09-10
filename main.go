@@ -129,6 +129,7 @@ func main() {
 	config.ReadTimeout = *functionTimeout
 	config.WriteTimeout = *functionTimeout
 	config.TCPPort = port
+	config.EnableHealth = true
 
 	logger.Info("Started Nomad provider", "port", *config.TCPPort)
 	bootstrap.Serve(handlers, config)
@@ -145,6 +146,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats, *functionTimeout),
 		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
 		InfoHandler:    handlers.MakeInfo(logger, stats, version),
+		Health:         handlers.MakeHealthHandler(),
 	}
 }
 

@@ -8,20 +8,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexellis/faas/gateway/requests"
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
+	"github.com/openfaas/faas/gateway/requests"
 )
 
 var (
-	count               = 1
-	restartDelay        = 1 * time.Second
-	restartMode         = "delay"
-	restartAttempts     = 25
-	logFiles            = 5
-	logSize             = 2
+	count             = 1
+	restartDelay      = 1 * time.Second
+	restartMode       = "delay"
+	restartAttempts   = 25
+	logFiles          = 5
+	logSize           = 2
 	ephemeralDiskSize = 20
 
 	// Constraints
@@ -75,6 +75,7 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 	jobname := nomad.JobPrefix + r.Service
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
 
+	job.Meta = createAnnotations(r)
 	job.Datacenters = createDataCenters(r)
 	job.Update = createUpdateStrategy()
 
@@ -127,6 +128,7 @@ func createTask(r requests.CreateFunctionRequest) *api.Task {
 			"port_map": []map[string]interface{}{
 				map[string]interface{}{"http": 8080},
 			},
+			"labels": createLabels(r),
 		},
 		Resources: createResources(r),
 		Services: []*api.Service{
@@ -141,6 +143,26 @@ func createTask(r requests.CreateFunctionRequest) *api.Task {
 		},
 		Env: envVars,
 	}
+}
+
+func createAnnotations(r requests.CreateFunctionRequest) map[string]string {
+	annotations := map[string]string{}
+	if r.Annotations != nil {
+		for k, v := range *r.Annotations {
+			annotations[k] = v
+		}
+	}
+	return annotations
+}
+
+func createLabels(r requests.CreateFunctionRequest) []map[string]interface{} {
+	labels := []map[string]interface{}{}
+	if r.Labels != nil {
+		for k, v := range *r.Labels {
+			labels = append(labels, map[string]interface{}{k: v})
+		}
+	}
+	return labels
 }
 
 func createResources(r requests.CreateFunctionRequest) *api.Resources {

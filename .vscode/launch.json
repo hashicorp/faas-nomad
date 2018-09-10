@@ -10,7 +10,6 @@
       "request": "launch",
       "mode": "auto",
       "remotePath": "",
-      // "preLaunchTask": "vendor",
       "port": 8080,
       "host": "0.0.0.0",
       "program": "${workspaceFolder}",
