@@ -65,11 +65,25 @@ func getFunctions(client nomad.Job, jobs []*api.JobListStub) ([]requests.Functio
 				Image:           job.TaskGroups[0].Tasks[0].Config["image"].(string),
 				Replicas:        uint64(*job.TaskGroups[0].Count),
 				InvocationCount: 0,
+				Labels:          parseLabels(job.TaskGroups[0].Tasks[0].Config["labels"].([]interface{})),
+				Annotations:     &job.Meta,
 			})
 		}
 	}
 
 	return functions, nil
+}
+
+func parseLabels(labels []interface{}) *map[string]string {
+	newLabels := map[string]string{}
+	if len(labels) > 0 {
+		for _, l := range labels {
+			for k, v := range l.(map[string]interface{}) {
+				newLabels[k] = v.(string)
+			}
+		}
+	}
+	return &newLabels
 }
 
 func sanitiseJobName(job *api.Job) string {

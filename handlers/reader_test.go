@@ -34,14 +34,19 @@ func setupReader() (http.HandlerFunc, *httptest.ResponseRecorder, *http.Request)
 func createMockJob(id string, count int) *api.Job {
 	status := "running"
 	name := nomad.JobPrefix + "JOB123"
+	labels := []interface{}{}
+	labels = append(labels, map[string]interface{}{"label": "test"}) // can we do this better?
+	annotations := map[string]string{"topic": "test"}
 	return &api.Job{
 		ID:     &name,
 		Status: &status,
+		Meta:   annotations,
 		TaskGroups: []*api.TaskGroup{&api.TaskGroup{
 			Count: &count,
 			Tasks: []*api.Task{&api.Task{
-				Name:   "Task" + id,
-				Config: map[string]interface{}{"image": "docker"},
+				Name: "Task" + id,
+				Config: map[string]interface{}{"image": "docker",
+					"labels": labels},
 			}},
 		},
 		}}
