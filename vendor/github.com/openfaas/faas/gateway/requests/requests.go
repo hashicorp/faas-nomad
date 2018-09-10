@@ -36,11 +36,19 @@ type CreateFunctionRequest struct {
 	// back-end for making scheduling or routing decisions
 	Labels *map[string]string `json:"labels"`
 
+	// Annotations are metadata for functions which may be used by the
+	// back-end for management, orchestration, events and build tasks
+	Annotations *map[string]string `json:"annotations"`
+
 	// Limits for function
 	Limits *FunctionResources `json:"limits"`
 
 	// Requests of resources requested by function
 	Requests *FunctionResources `json:"requests"`
+
+	// ReadOnlyRootFilesystem removes write-access from the root filesystem
+	// mount-point.
+	ReadOnlyRootFilesystem bool `json:"readOnlyRootFilesystem"`
 }
 
 // FunctionResources Memory and CPU
@@ -63,6 +71,10 @@ type Function struct {
 	// Labels are metadata for functions which may be used by the
 	// back-end for making scheduling or routing decisions
 	Labels *map[string]string `json:"labels"`
+
+	// Annotations are metadata for functions which may be used by the
+	// back-end for management, orchestration, events and build tasks
+	Annotations *map[string]string `json:"annotations"`
 }
 
 // AsyncReport is the report from a function executed on a queue worker.

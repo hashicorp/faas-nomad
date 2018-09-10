@@ -21,3 +21,7 @@ terraform/.terraform
 dist
 consul.hcl
 nomad.hcl
+
+.vagrant
+debug
+ubuntu*.log
