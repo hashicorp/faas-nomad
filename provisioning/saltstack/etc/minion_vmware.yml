@@ -1,0 +1,20 @@
+file_client: local
+
+file_roots:
+  base:
+    - /vagrant/provisioning/saltstack/salt
+  dev:
+    - /vagrant/provisioning/saltstack/salt
+    - /vagrant/provisioning/saltstack/formulas/nomad-formula
+    - /vagrant/provisioning/saltstack/formulas/consul-formula
+    - /vagrant/provisioning/saltstack/formulas/docker-formula
+    - /vagrant/provisioning/saltstack/formulas/vault-formula
+
+pillar_roots:
+  base:
+    - /vagrant/provisioning/saltstack/pillar
+  dev:
+    - /vagrant/provisioning/saltstack/pillar
+
+grains:
+  provider: vmware
