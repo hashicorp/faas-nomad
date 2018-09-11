@@ -1,5 +1,3 @@
-**NOTE: This repository is not currently actively maintained**
-
 
 [![Build Status](https://travis-ci.org/hashicorp/faas-nomad.svg)](https://travis-ci.org/hashicorp/faas-nomad)
 [![Docker Repository on Quay](https://quay.io/repository/nicholasjackson/faas-nomad/status "Docker Repository on Quay")](https://quay.io/repository/nicholasjackson/faas-nomad)
@@ -49,6 +47,23 @@ NOMAD Running
 ```
 
 The startup script will set the advertised address to your primary local IP address and run both Nomad and Consul in the background redirecting the logs to your home folder.
+
+## Using Vagrant for Local Development
+Vagrant is a tool for provisioning dev environments. The `Vagrantfile` governs the Vagrant configuration:
+1) Install Vagrant via [download links](https://www.vagrantup.com/downloads.html) or package manager
+2) Install VirtualBox via [download links](https://www.virtualbox.org/wiki/Downloads) or a preferred hypervisor of choice (vagrant plugins may be required)
+3) `vagrant up` (default VirtualBox)
+
+The provisioners install Docker, Nomad, Consul, and Vault (via saltstack) then launch OpenFaaS components with Nomad. If successful, the following services will be available over the private network (192.168.50.2):
+- Nomad (v0.8.4) 192.168.50.2:4646
+- Consul (v1.2.0) 192.168.50.2:8500
+- Vault (v0.10.4) 192.168.50.2:8200
+- FaaS Gateway (0.8.1) 192.168.50.2:8080
+
+This setup is intended to streamline local development of the faas-nomad provider with a more complete setup of the hashicorp ecosystem. Therefore, it is assumed that the faas-nomad source code is located on your workstation, and is configured to listen on 0.0.0.0:8080 when debugging/running the Go process. There's a convenient VSCode debug configuration located at: `.vscode/launch.json`. The OpenFaaS gateway env var ends up looking like this in Docker:
+```
+functions_provider_url="http://192.168.50.1:8080/"
+```
 
 ## Starting a remote Nomad / Consul environment
 If you would like to test OpenFaaS running on a cluster in AWS, a Terraform module and instructions can be found here:
@@ -254,7 +269,7 @@ That is all there is to it, checkout the OpenFaaS community page for some inspir
 [faas/community.md at master · openfaas/faas · GitHub](https://github.com/openfaas/faas/blob/master/community.md)
 
 ### Datacenters and Constraints
-By default the Nomad provider will use a default datacenter for a deployed function of `dc1`, this can be overridden by setting the label `datacenters`, which takes a comma separated list of datacenters to deploy the funtion into.  Contstraints for limiting CPU and memory can also be set `memory` is an integer representing Megabytes, `cpu` is an integer representing MHz of CPU where 1024 equals one core.
+By default the Nomad provider will use a default datacenter for a deployed function of `dc1`, this can be overridden by setting the label `datacenters`, which takes a comma separated list of datacenters to deploy the function into.  Constraints for limiting CPU and memory can also be set `memory` is an integer representing Megabytes, `cpu` is an integer representing MHz of CPU where 1024 equals one core.
 
 i.e.
 ```bash
@@ -272,7 +287,20 @@ functions:
       memory: 512
       cpu: 1000
     labels:
-      datacentres: "dc1"
+      datacenters: "dc1"
+```
+
+### Annotations
+Metadata can be added to the Nomad job definition through the use of the OpenFaaS annotation config.  The below example would add the key `git` to the `Meta` section of nomad job definition which can be accessed through the API.
+
+```yaml
+functions:
+  facedetect:
+    lang: go-opencv
+    handler: ./facedetect
+    image: nicholasjackson/func_facedetect
+    annotations:
+      git: https://github.com/alexellis/super-pancake-fn.git
 ```
 
 ### Async functions

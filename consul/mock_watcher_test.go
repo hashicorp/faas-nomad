@@ -25,8 +25,8 @@ func (m *MockWatcher) Remove(d dependency.Dependency) bool {
 	return args.Get(0).(bool)
 }
 
-// ItterateDataCh itterates over the watchers data channel and calls a function
-func (m *MockWatcher) ItterateDataCh(f itterateFunc) {
+// IterateDataCh iterates over the watchers data channel and calls a function
+func (m *MockWatcher) IterateDataCh(f iterateFunc) {
 	args := m.Mock.Called(f)
 	dep := args.Get(0).(dependency.Dependency)
 

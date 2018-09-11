@@ -28,7 +28,7 @@ var (
 	nodeURI      = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
 	nomadAddr    = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
 	consulAddr   = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
-	nomadRegion  = flag.String("nomad_region", "global", "Default region to schedlue functions in")
+	nomadRegion  = flag.String("nomad_region", "global", "Default region to schedule functions in")
 )
 
 var functionTimeout = flag.Duration("function_timeout", 30*time.Second, "Timeout for function execution")
@@ -36,75 +36,75 @@ var functionTimeout = flag.Duration("function_timeout", 30*time.Second, "Timeout
 var (
 	loggerFormat = flag.String("logger_format", "text", "Format for log output text | json")
 	loggerLevel  = flag.String("logger_level", "INFO", "Log output level INFO | ERROR | DEBUG | TRACE")
-	loggerOutput = flag.String("logger_output", "", "Filepath to write log file, if ommited stdOut is used")
+	loggerOutput = flag.String("logger_output", "", "Filepath to write log file, if omitted stdOut is used")
 )
 
-// parseDeprecatedEnvironment is used to merge the previous environment variable configutaion to the new flag style
+// parseDeprecatedEnvironment is used to merge the previous environment variable configuration to the new flag style
 // this will be removed in the next release
 func parseDeprecatedEnvironment() {
-	checkDepricatedStatsD()
-	checkDepricatedNomadHTTP()
-	checkDepricatedNomadAddr()
-	checkDepricatedConsulAddr()
-	checkDepricatedNomadRegion()
-	checkDepricatedLoggerLevel()
-	checkDepricatedLoggerFormat()
-	checkDepricatedLoggerOutput()
+	checkDeprecatedStatsD()
+	checkDeprecatedNomadHTTP()
+	checkDeprecatedNomadAddr()
+	checkDeprecatedConsulAddr()
+	checkDeprecatedNomadRegion()
+	checkDeprecatedLoggerLevel()
+	checkDeprecatedLoggerFormat()
+	checkDeprecatedLoggerOutput()
 }
 
-func checkDepricatedStatsD() {
+func checkDeprecatedStatsD() {
 	if env := os.Getenv("STATSD_ADDR"); env != "" {
 		*statsdServer = env
-		log.Println("The environment variable STATSD_ADDR is depricated please use the command line flag stasd_server")
+		log.Println("The environment variable STATSD_ADDR is deprecated please use the command line flag stasd_server")
 	}
 }
 
-func checkDepricatedNomadHTTP() {
+func checkDeprecatedNomadHTTP() {
 	if env := os.Getenv("NOMAD_ADDR_http"); env != "" {
 		*nodeURI = env
-		log.Println("The environment variable NOMAD_ADDR_http is depricated please use the command line flag node_uri")
+		log.Println("The environment variable NOMAD_ADDR_http is deprecated please use the command line flag node_uri")
 	}
 }
 
-func checkDepricatedNomadAddr() {
+func checkDeprecatedNomadAddr() {
 	if env := os.Getenv("NOMAD_ADDR"); env != "" {
 		*nomadAddr = env
-		log.Println("The environment variable NOMAD_ADDR is depricated please use the command line flag nomad_addr")
+		log.Println("The environment variable NOMAD_ADDR is deprecated please use the command line flag nomad_addr")
 	}
 }
 
-func checkDepricatedConsulAddr() {
+func checkDeprecatedConsulAddr() {
 	if env := os.Getenv("CONSUL_ADDR"); env != "" {
 		*consulAddr = env
-		log.Println("The environment variable CONSUL_ADDR is depricated please use the command line flag consul_addr")
+		log.Println("The environment variable CONSUL_ADDR is deprecated please use the command line flag consul_addr")
 	}
 }
 
-func checkDepricatedNomadRegion() {
+func checkDeprecatedNomadRegion() {
 	if env := os.Getenv("NOMAD_REGION"); env != "" {
 		*nomadRegion = env
-		log.Println("The environment variable NOMAD_REGION is depricated please use the command line flag nomad_region")
+		log.Println("The environment variable NOMAD_REGION is deprecated please use the command line flag nomad_region")
 	}
 }
 
-func checkDepricatedLoggerLevel() {
+func checkDeprecatedLoggerLevel() {
 	if env := os.Getenv("logger_level"); env != "" {
 		*loggerLevel = env
-		log.Println("The environment variable logger_level is depricated please use the command line flag logger_level")
+		log.Println("The environment variable logger_level is deprecated please use the command line flag logger_level")
 	}
 }
 
-func checkDepricatedLoggerFormat() {
+func checkDeprecatedLoggerFormat() {
 	if env := os.Getenv("logger_format"); env != "" {
 		*loggerFormat = env
-		log.Println("The environment variable logger_format is depricated please use the command line flag logger_format")
+		log.Println("The environment variable logger_format is deprecated please use the command line flag logger_format")
 	}
 }
 
-func checkDepricatedLoggerOutput() {
+func checkDeprecatedLoggerOutput() {
 	if env := os.Getenv("logger_output"); env != "" {
 		*loggerOutput = env
-		log.Println("The environment variable logger_output is depricated please use the command line flag logger_output")
+		log.Println("The environment variable logger_output is deprecated please use the command line flag logger_output")
 	}
 }
 
@@ -129,6 +129,7 @@ func main() {
 	config.ReadTimeout = *functionTimeout
 	config.WriteTimeout = *functionTimeout
 	config.TCPPort = port
+	config.EnableHealth = true
 
 	logger.Info("Started Nomad provider", "port", *config.TCPPort)
 	bootstrap.Serve(handlers, config)
@@ -144,6 +145,8 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), logger, stats),
 		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats, *functionTimeout),
 		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
+		InfoHandler:    handlers.MakeInfo(logger, stats, version),
+		Health:         handlers.MakeHealthHandler(),
 	}
 }
 

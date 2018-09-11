@@ -1,9 +1,0 @@
-Start Time: 2017-08-18 13:23:54.265012 +0000 UTC
-Elapsed Time: 0s
-Threads: 1
-Total Requests: 5560
-Avg Request Time: 163.818µs
-Total Success: 5560
-Total Timeouts: 0
-Total Failures: 0
-

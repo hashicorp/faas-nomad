@@ -21,3 +21,8 @@ terraform/.terraform
 dist
 consul.hcl
 nomad.hcl
+
+.vagrant
+provisioning/saltstack/formulas*
+ubuntu*.log
+debug
