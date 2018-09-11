@@ -1,0 +1,6 @@
+base:
+  '*':
+    - base
+dev:
+  '*':
+    - dev

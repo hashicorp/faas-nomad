@@ -23,5 +23,6 @@ consul.hcl
 nomad.hcl
 
 .vagrant
-debug
+provisioning/saltstack/formulas*
 ubuntu*.log
+debug
