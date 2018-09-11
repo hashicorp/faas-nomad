@@ -12,7 +12,11 @@ nomad:
       bootstrap_expect: 1
       encrypt: "AaABbB+CcCdDdEeeFFfggG=="
     client:
+      {% if grains['provider'] == 'virtualbox' %}
       network_interface: enp0s8
+      {% elif grains['provider'] == 'vmware' %}
+      network_interface: eth1
+      {% endif %}
       enabled: true
       meta:
         service_host: "true"

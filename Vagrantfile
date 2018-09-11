@@ -48,17 +48,40 @@ Vagrant.configure("2") do |config|
   ## For masterless, mount your salt file root
   # config.vm.synced_folder "salt/roots/", "/srv/salt/"
 
+  config.vm.synced_folder "./provisioning", "/vagrant/provisioning"
+
   # Provider-specific configuration so you can fine-tune various
   # backing providers for Vagrant. These expose provider-specific options.
   # Example for VirtualBox:
   #
-  config.vm.provider "virtualbox" do |vb|
+  config.vm.provider "virtualbox" do |vb, override|
     # Display the VirtualBox GUI when booting the machine
     # vb.gui = false
   
     # Customize the amount of memory on the VM:
     vb.memory = "2048"
     vb.cpus = 2
+    override.vm.provision :salt do |salt|
+      salt.minion_config = "provisioning/saltstack/etc/minion_virtualbox.yml"
+      salt.run_highstate = true
+      salt.verbose = true
+      salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
+    end
+    override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
+  end
+
+  config.vm.provider "vmware_fusion" do |vmwf, override|
+    # Customize the amount of memory on the VM:
+    override.vm.box = "generic/ubuntu1604"
+    vmwf.memory = "2048"
+    vmwf.cpus = 2
+    override.vm.provision :salt do |salt|
+      salt.minion_config = "provisioning/saltstack/etc/minion_vmware.yml"
+      salt.run_highstate = true
+      salt.verbose = true
+      salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
+    end
+    override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
   end
   #
   # View the documentation for the provider you are using for more
@@ -70,9 +93,9 @@ Vagrant.configure("2") do |config|
 
   # add dependent git forumlas
   config.vm.provision "shell", inline: <<-SHELL
-    rm -r /vagrant/saltstack/formulas
-    mkdir -p /vagrant/saltstack/formulas
-    cd /vagrant/saltstack/formulas
+    rm -r /vagrant/provisioning/saltstack/formulas
+    mkdir -p /vagrant/provisioning/saltstack/formulas
+    cd /vagrant/provisioning/saltstack/formulas
     git clone https://github.com/tucowsinc/nomad-formula.git
     git clone https://github.com/tucowsinc/consul-formula.git
     git clone https://github.com/tucowsinc/docker-formula.git
@@ -84,18 +107,12 @@ Vagrant.configure("2") do |config|
 
     # Relative location of configuration file to use for minion
     # since we need to tell our minion to run in masterless mode
-    salt.minion_config = "saltstack/etc/minion.yml"
-
-    # salt.pillar({
-    #   "network_config" => {
-    #     "host_address" => "192.168.50.2"
-    #   }
-    # })
+    # salt.minion_config = "provisioning/saltstack/etc/minion.yml"
 
     # On provision, run state.highstate (which installs packages, services, etc).
     # Highstate basicly means "comapre the VMs current machine state against 
     # what it should be and make changes if necessary".
-    salt.run_highstate = true
+    # salt.run_highstate = true
     
     # What version of salt to install, and from where.
     # Because by default it will install the latest, its better to explicetly
@@ -108,34 +125,7 @@ Vagrant.configure("2") do |config|
     # Run in verbose mode, so it will output all debug info to the console.
     # This is nice to have when you are testing things out. Once you know they
     # work well you can comment this line out.
-    salt.verbose = true
-    salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
+    # salt.verbose = true
+    # salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
   end
-
-  # test if consul, nomad are running properly
-  config.vm.provision "shell", inline: <<-SHELL
-    echo 'Waiting for consul...'
-    while true
-    do
-      START=`consul members | grep "alive"`
-      if [ -n "$START" ]; then
-        break
-      else
-        sleep 2
-      fi
-    done
-    echo 'Waiting for nomad...'
-    while true
-    do
-      START=`nomad node-status | grep "ready"`
-      if [ -n "$START" ]; then
-        break
-      else
-        sleep 2
-      fi
-    done
-    echo 'Deploying openfaas components...'
-    nomad run /tmp/faas.hcl
-    nomad run /tmp/monitoring.hcl
-  SHELL
 end

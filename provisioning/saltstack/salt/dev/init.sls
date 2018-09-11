@@ -15,3 +15,8 @@ faas_monitoring_job_file:
   file.managed:
     - name: /tmp/monitoring.hcl
     - source: salt://nomad/files/monitoring.hcl
+
+faas_provider_file:
+  file.managed:
+    - name: /tmp/provider
+    - content: {{ grains['provider'] }}
