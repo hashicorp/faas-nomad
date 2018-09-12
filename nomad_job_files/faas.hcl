@@ -23,20 +23,37 @@ job "faas-nomadd" {
       driver = "docker"
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:v0.2.27"
+        image = "quay.io/nicholasjackson/faas-nomad:v0.2.28"
 
         args = [
           "-nomad_region", "${NOMAD_REGION}",
           "-nomad_addr", "${NOMAD_IP_http}:4646",
           "-consul_addr", "${NOMAD_IP_http}:8500",
           "-statsd_addr", "${NOMAD_ADDR_statsd_statsd}",
-          "-node_addr", "${NOMAD_IP_http}"
+          "-node_addr", "${NOMAD_IP_http}",
+          "-basic_auth_secret_path", "/secrets",
+          "-enable_basic_auth=false"
         ]
 
         port_map {
           http = 8080
         }
       }
+      // basic auth from vault example
+      // update -enable_basic_auth=true
+      // uncomment below if you have a Vault instance connected to Nomad
+//       template {
+//         destination   = "secrets/basic-auth-user"
+//         data = <<EOH
+// {{ with secret "secret/openfaas/auth/credentials" }}{{ .Data.username }}{{ end }}
+// EOH
+//       }
+//       template {
+//         destination   = "secrets/basic-auth-password"
+//         data = <<EOH
+// {{ with secret "secret/openfaas/auth/credentials" }}{{ .Data.password }}{{ end }}
+// EOH
+//       }
 
       resources {
         cpu    = 500 # 500 MHz
@@ -76,7 +93,7 @@ EOH
       }
 
       config {
-        image = "functions/gateway:0.8.1"
+        image = "openfaas/gateway:0.8.12"
 
         port_map {
           http = 8080

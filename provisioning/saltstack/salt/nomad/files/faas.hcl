@@ -41,7 +41,7 @@ EOH
       }
 
       config {
-        image = "openfaas/gateway:0.9.2"
+        image = "openfaas/gateway:0.8.12"
 
         port_map {
           http = 8080
