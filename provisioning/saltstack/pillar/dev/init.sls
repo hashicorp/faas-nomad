@@ -16,6 +16,8 @@ nomad:
       network_interface: enp0s8
       {% elif grains['provider'] == 'vmware' %}
       network_interface: eth1
+      {% elif grains['provider'] == 'libvirt' %}
+      network_interface: eth0
       {% endif %}
       enabled: true
       meta:

@@ -70,13 +70,27 @@ Vagrant.configure("2") do |config|
     override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
   end
 
+  # vmware fusion
   config.vm.provider "vmware_fusion" do |vmwf, override|
-    # Customize the amount of memory on the VM:
     override.vm.box = "generic/ubuntu1604"
     vmwf.memory = "2048"
     vmwf.cpus = 2
     override.vm.provision :salt do |salt|
       salt.minion_config = "provisioning/saltstack/etc/minion_vmware.yml"
+      salt.run_highstate = true
+      salt.verbose = true
+      salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
+    end
+    override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
+  end
+
+  # libvirt
+  config.vm.provider "libvirt" do |lv, override|
+    override.vm.box = "generic/ubuntu1604"
+    lv.memory = "2048"
+    lv.cpus = 2
+    override.vm.provision :salt do |salt|
+      salt.minion_config = "provisioning/saltstack/etc/minion_libvirt.yml"
       salt.run_highstate = true
       salt.verbose = true
       salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
