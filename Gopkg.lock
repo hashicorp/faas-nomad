@@ -289,15 +289,16 @@
   version = "0.8.12"
 
 [[projects]]
-  digest = "1:bea682b0fa01d19595a264f18e7bbbed8949eeaf7d5c640c3f7b49df623f79c5"
+  digest = "1:438c2f5a8daffdb8213ca5e062681a18b9505a7f9afc13266f17d873b5d53c66"
   name = "github.com/openfaas/faas-provider"
   packages = [
     ".",
+    "auth",
     "types",
   ]
   pruneopts = "UT"
-  revision = "ffce01238ccf01b0f4e573fb65b92b285a547a4b"
-  version = "0.6"
+  revision = "845bf7aa58cb08352c5b2501807837e464ab071d"
+  version = "0.7.1"
 
 [[projects]]
   digest = "1:808cdddf087fb64baeae67b8dfaee2069034d9704923a3cb8bd96a995421a625"

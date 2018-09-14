@@ -22,8 +22,10 @@ type FaaSHandlers struct {
 
 // FaaSConfig set config for HTTP handlers
 type FaaSConfig struct {
-	TCPPort      *int
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	EnableHealth bool
+	TCPPort         *int
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	EnableHealth    bool
+	EnableBasicAuth bool
+	SecretMountPath string
 }

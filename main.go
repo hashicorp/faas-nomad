@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -23,12 +24,14 @@ import (
 var version = "notset"
 
 var (
-	port         = flag.Int("port", 8080, "Port to bind the server to")
-	statsdServer = flag.String("statsd_addr", "localhost:8125", "Location for the statsd collector")
-	nodeURI      = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
-	nomadAddr    = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
-	consulAddr   = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
-	nomadRegion  = flag.String("nomad_region", "global", "Default region to schedule functions in")
+	port                = flag.Int("port", 8080, "Port to bind the server to")
+	statsdServer        = flag.String("statsd_addr", "localhost:8125", "Location for the statsd collector")
+	nodeURI             = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
+	nomadAddr           = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
+	consulAddr          = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
+	nomadRegion         = flag.String("nomad_region", "global", "Default region to schedule functions in")
+	enableBasicAuth     = flag.Bool("enable_basic_auth", false, "Flag for enabling basic authentication on gateway endpoints")
+	basicAuthSecretPath = flag.String("basic_auth_secret_path", "/secrets", "The directory path to the basic auth secret file")
 )
 
 var functionTimeout = flag.Duration("function_timeout", 30*time.Second, "Timeout for function execution")
@@ -130,8 +133,12 @@ func main() {
 	config.WriteTimeout = *functionTimeout
 	config.TCPPort = port
 	config.EnableHealth = true
+	config.EnableBasicAuth = *enableBasicAuth
+	config.SecretMountPath = *basicAuthSecretPath
 
 	logger.Info("Started Nomad provider", "port", *config.TCPPort)
+	logger.Info("Basic authentication", "enabled", fmt.Sprintf("%t", config.EnableBasicAuth))
+
 	bootstrap.Serve(handlers, config)
 }
 

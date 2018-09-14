@@ -1,3 +1,5 @@
+
+
 job "faas-nomadd" {
   datacenters = ["dc1"]
 
@@ -19,76 +21,22 @@ job "faas-nomadd" {
       mode     = "delay"
     }
 
-    task "nomadd" {
-      driver = "docker"
-
-      config {
-        image = "quay.io/nicholasjackson/faas-nomad:v0.2.28"
-
-        args = [
-          "-nomad_region", "${NOMAD_REGION}",
-          "-nomad_addr", "${NOMAD_IP_http}:4646",
-          "-consul_addr", "${NOMAD_IP_http}:8500",
-          "-statsd_addr", "${NOMAD_ADDR_statsd_statsd}",
-          "-node_addr", "${NOMAD_IP_http}",
-          "-basic_auth_secret_path", "/secrets",
-          "-enable_basic_auth=false"
-        ]
-
-        port_map {
-          http = 8080
-        }
-      }
-      // basic auth from vault example
-      // update -enable_basic_auth=true
-      // uncomment below if you have a Vault instance connected to Nomad
-//       template {
-//         destination   = "secrets/basic-auth-user"
-//         data = <<EOH
-// {{ with secret "secret/openfaas/auth/credentials" }}{{ .Data.username }}{{ end }}
-// EOH
-//       }
-//       template {
-//         destination   = "secrets/basic-auth-password"
-//         data = <<EOH
-// {{ with secret "secret/openfaas/auth/credentials" }}{{ .Data.password }}{{ end }}
-// EOH
-//       }
-
-      resources {
-        cpu    = 500 # 500 MHz
-        memory = 128 # 128MB
-
-        network {
-          mbits = 10
-
-          port "http" {
-            static = 8081
-          }
-        }
-      }
-
-      service {
-        port = "http"
-        name = "faasd-nomad"
-        tags = ["faas"]
-      }
-    }
-
     task "gateway" {
       driver = "docker"
       template {
         env = true
         destination   = "secrets/gateway.env"
-
+        // point the functions_provider_url to the host running vagrant (assuming a go process listening on 0.0.0.0), always .1 on last octet
         data = <<EOH
-functions_provider_url="http://{{ env "NOMAD_IP_http" }}:8081/"
+functions_provider_url="http://{{ host_address }}:8080/"
+{% raw -%}
 {{ range service "prometheus" }}
 faas_prometheus_host="{{ .Address }}"
 faas_prometheus_port="{{ .Port }}"{{ end }}
 {{ range service "nats" }}
 faas_nats_address="{{ .Address }}"
 faas_nats_port={{ .Port }}{{ end }}
+{%- endraw %}
 EOH
       }
 
