@@ -89,4 +89,4 @@ You can now interact with OpenFaaS using the ALB which has been created, to see 
 terraform output
 ```
 
-Please see the main README in the root of this repository for infomation on running and creating jobs with OpenFaaS.
+Please see the main README in the root of this repository for information on running and creating jobs with OpenFaaS.

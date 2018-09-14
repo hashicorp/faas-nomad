@@ -23,7 +23,7 @@ job "faas-nomadd" {
       driver = "docker"
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:v0.2.23"
+        image = "quay.io/nicholasjackson/faas-nomad:v0.2.27"
 
         args = [
           "-nomad_region", "${NOMAD_REGION}",
@@ -70,13 +70,13 @@ functions_provider_url="http://{{ env "NOMAD_IP_http" }}:8081/"
 faas_prometheus_host="{{ .Address }}"
 faas_prometheus_port="{{ .Port }}"{{ end }}
 {{ range service "nats" }}
-faas_nats_address: "{{ .Address }}"{{ end }}
-faas_nats_port: 4222
+faas_nats_address="{{ .Address }}"
+faas_nats_port={{ .Port }}{{ end }}
 EOH
       }
 
       config {
-        image = "functions/gateway:0.7.0"
+        image = "functions/gateway:0.8.1"
 
         port_map {
           http = 8080
@@ -166,6 +166,7 @@ EOH
         args = [
           "-store", "file", "-dir", "/tmp/nats",
           "-m", "8222",
+          "-cid","faas-cluster",
         ]
 
         port_map {

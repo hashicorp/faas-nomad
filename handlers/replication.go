@@ -31,8 +31,22 @@ func MakeReplicationReader(client nomad.Job, logger hclog.Logger, stats metrics.
 			return
 		}
 
+		// get the number of available allocations from the job
+		allocs, err := getAllocationReadyCount(client, job, r)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(rw, err)
+
+			log.Error("Error getting job allocations", "error", err)
+			stats.Incr("replicationreader.error.internalerror", nil, 1)
+			return
+		}
+
 		resp := requests.Function{}
+		resp.AvailableReplicas = allocs
+		resp.Replicas = uint64(*job.TaskGroups[0].Count)
 		resp.Name = strings.Replace(*job.ID, nomad.JobPrefix, "", -1)
+
 		rw.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(rw).Encode(resp)
 
@@ -94,4 +108,19 @@ func getJob(client nomad.Job, r *http.Request) (*api.Job, error) {
 	}
 
 	return job, nil
+}
+
+func getAllocationReadyCount(client nomad.Job, job *api.Job, r *http.Request) (uint64, error) {
+	allocs, _, err := client.Allocations(*job.ID, true, nil)
+	var readyCount uint64
+
+	for _, a := range allocs {
+		for _, ts := range a.TaskStates {
+			if ts.State == "running" {
+				readyCount += 1
+			}
+		}
+	}
+
+	return readyCount, err
 }
