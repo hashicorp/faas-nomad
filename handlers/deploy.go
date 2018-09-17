@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -141,7 +142,8 @@ func createTask(r requests.CreateFunctionRequest) *api.Task {
 			MaxFiles:      &logFiles,
 			MaxFileSizeMB: &logSize,
 		},
-		Env: envVars,
+		Env:       envVars,
+		Templates: createSecrets(r.Secrets),
 	}
 }
 
@@ -237,4 +239,26 @@ func createUpdateStrategy() *api.UpdateStrategy {
 		Stagger:         &updateStagger,
 		HealthyDeadline: &updateHealthyDeadline,
 	}
+}
+
+func createSecrets(secrets []string) []*api.Template {
+	templates := []*api.Template{}
+
+	for _, s := range secrets {
+		// parse the secret key and path
+		parts := strings.Split(s, "/")
+		path := strings.Join(parts[:len(parts)-1], "/")
+		key := parts[len(parts)-1]
+		destPath := "/var/openfaas/secrets/" + key
+
+		embeddedTemplate := fmt.Sprintf(`{{with secret "%s"}}{{.Data.%s}}{{end}}`, path, key)
+		template := &api.Template{
+			DestPath:     &destPath,
+			EmbeddedTmpl: &embeddedTemplate,
+		}
+
+		templates = append(templates, template)
+	}
+
+	return templates
 }
