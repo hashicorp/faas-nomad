@@ -24,6 +24,7 @@ func createRequest() testFunctionRequest {
 	req := testFunctionRequest{}
 	req.Service = "TestFunction"
 	req.Labels = &map[string]string{}
+	req.Constraints = []string{}
 	return req
 }
 

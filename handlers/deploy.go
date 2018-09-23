@@ -76,7 +76,7 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
 
 	job.Meta = createAnnotations(r)
-	job.Datacenters = createDataCenters(r)
+	// job.Constraints = createConstraints(r)
 	job.Update = createUpdateStrategy()
 
 	// add constraints
@@ -200,20 +200,30 @@ func createLimits(r requests.CreateFunctionRequest) (taskMemory, taskCPU int) {
 	return taskMemory, taskCPU
 }
 
-func createDataCenters(r requests.CreateFunctionRequest) []string {
-	if r.Labels != nil && (*r.Labels)["datacenters"] != "" {
-		lbls := (*r.Labels)["datacenters"]
+func createDataCenters(datacenters string) []string {
+	if datacenters != "" {
 		dcs := []string{}
-
-		for _, dc := range strings.Split(lbls, ",") {
-			dcs = append(dcs, strings.Trim(dc, " "))
+		var parseDcs = strings.Split(datacenters, " = ")
+		for _, dc := range strings.Split(parseDcs[1], ",") {
+			dcs = append(dcs, dc)
 		}
-
 		return dcs
 	}
 
 	// default datacenter
 	return []string{"dc1"}
+}
+
+func createConstraints(r requests.CreateFunctionRequest) []string {
+	if r.Constraints != nil {
+		for _, constraint := range r.Constraints {
+			var parseConstraint = strings.Split(constraint, " = ")
+			if parseConstraint[0] == "datacenters" {
+				createDataCenters(constraint)
+			}
+		}
+	}
+	return []string{}
 }
 
 func createEnvVars(r requests.CreateFunctionRequest) map[string]string {
