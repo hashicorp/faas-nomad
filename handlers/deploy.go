@@ -36,6 +36,8 @@ var (
 	updateStagger         = 5 * time.Second
 )
 
+const VAULT_PREFIX = "secret/openfaas"
+
 // MakeDeploy creates a handler for deploying functions
 func MakeDeploy(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) http.HandlerFunc {
 	log := logger.Named("deploy_handler")
@@ -129,7 +131,8 @@ func createTask(r requests.CreateFunctionRequest) *api.Task {
 			"port_map": []map[string]interface{}{
 				map[string]interface{}{"http": 8080},
 			},
-			"labels": createLabels(r),
+			"labels":  createLabels(r),
+			"volumes": createSecretVolumes(r.Secrets),
 		},
 		Resources: createResources(r),
 		Services: []*api.Service{
@@ -143,7 +146,7 @@ func createTask(r requests.CreateFunctionRequest) *api.Task {
 			MaxFileSizeMB: &logSize,
 		},
 		Env:       envVars,
-		Templates: createSecrets(r.Secrets),
+		Templates: createSecrets(r.Service, r.Secrets),
 	}
 }
 
@@ -155,6 +158,15 @@ func createAnnotations(r requests.CreateFunctionRequest) map[string]string {
 		}
 	}
 	return annotations
+}
+
+func createSecretVolumes(secrets []string) []string {
+	newVolumes := []string{}
+	for _, s := range secrets {
+		destPath := "secrets/" + s + ":/var/openfaas/secrets/" + s
+		newVolumes = append(newVolumes, destPath)
+	}
+	return newVolumes
 }
 
 func createLabels(r requests.CreateFunctionRequest) []map[string]interface{} {
@@ -241,17 +253,14 @@ func createUpdateStrategy() *api.UpdateStrategy {
 	}
 }
 
-func createSecrets(secrets []string) []*api.Template {
+func createSecrets(name string, secrets []string) []*api.Template {
 	templates := []*api.Template{}
 
 	for _, s := range secrets {
-		// parse the secret key and path
-		parts := strings.Split(s, "/")
-		path := strings.Join(parts[:len(parts)-1], "/")
-		key := parts[len(parts)-1]
-		destPath := "/var/openfaas/secrets/" + key
+		path := fmt.Sprintf("%s/%s", VAULT_PREFIX, name)
+		destPath := "secrets/" + s
 
-		embeddedTemplate := fmt.Sprintf(`{{with secret "%s"}}{{.Data.%s}}{{end}}`, path, key)
+		embeddedTemplate := fmt.Sprintf(`{{with secret "%s"}}{{.Data.%s}}{{end}}`, path, s)
 		template := &api.Template{
 			DestPath:     &destPath,
 			EmbeddedTmpl: &embeddedTemplate,
