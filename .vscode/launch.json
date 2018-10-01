@@ -20,7 +20,7 @@
         "-consul_addr", "192.168.50.2:8500",
         "-statsd_addr", "192.168.50.2:9125",
         "-basic_auth_secret_path", "provisioning/secrets",
-        "-enable_basic_auth=true"
+        "-enable_basic_auth=false"
       ],
       "showLog": true
     }
