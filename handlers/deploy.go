@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -34,6 +35,8 @@ var (
 	updateHealthyDeadline = 20 * time.Second
 	updateStagger         = 5 * time.Second
 )
+
+const VAULT_PREFIX = "secret/openfaas"
 
 // MakeDeploy creates a handler for deploying functions
 func MakeDeploy(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) http.HandlerFunc {
@@ -128,7 +131,8 @@ func createTask(r requests.CreateFunctionRequest) *api.Task {
 			"port_map": []map[string]interface{}{
 				map[string]interface{}{"http": 8080},
 			},
-			"labels": createLabels(r),
+			"labels":  createLabels(r),
+			"volumes": createSecretVolumes(r.Secrets),
 		},
 		Resources: createResources(r),
 		Services: []*api.Service{
@@ -141,7 +145,8 @@ func createTask(r requests.CreateFunctionRequest) *api.Task {
 			MaxFiles:      &logFiles,
 			MaxFileSizeMB: &logSize,
 		},
-		Env: envVars,
+		Env:       envVars,
+		Templates: createSecrets(r.Service, r.Secrets),
 	}
 }
 
@@ -153,6 +158,15 @@ func createAnnotations(r requests.CreateFunctionRequest) map[string]string {
 		}
 	}
 	return annotations
+}
+
+func createSecretVolumes(secrets []string) []string {
+	newVolumes := []string{}
+	for _, s := range secrets {
+		destPath := "secrets/" + s + ":/var/openfaas/secrets/" + s
+		newVolumes = append(newVolumes, destPath)
+	}
+	return newVolumes
 }
 
 func createLabels(r requests.CreateFunctionRequest) []map[string]interface{} {
@@ -237,4 +251,23 @@ func createUpdateStrategy() *api.UpdateStrategy {
 		Stagger:         &updateStagger,
 		HealthyDeadline: &updateHealthyDeadline,
 	}
+}
+
+func createSecrets(name string, secrets []string) []*api.Template {
+	templates := []*api.Template{}
+
+	for _, s := range secrets {
+		path := fmt.Sprintf("%s/%s", VAULT_PREFIX, name)
+		destPath := "secrets/" + s
+
+		embeddedTemplate := fmt.Sprintf(`{{with secret "%s"}}{{.Data.%s}}{{end}}`, path, s)
+		template := &api.Template{
+			DestPath:     &destPath,
+			EmbeddedTmpl: &embeddedTemplate,
+		}
+
+		templates = append(templates, template)
+	}
+
+	return templates
 }

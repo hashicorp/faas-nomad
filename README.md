@@ -302,6 +302,26 @@ functions:
       git: https://github.com/alexellis/super-pancake-fn.git
 ```
 
+### Secrets
+It is possible to integrate vault secrets [https://docs.openfaas.com/reference/secrets/](https://docs.openfaas.com/reference/secrets/) with the Nomad provider.  The below example shows how to use the V1 Vault API for referencing secrets, it uses the following convention:
+
+`[path]/[key]`
+
+Given you have a secret document stored at the path secret/mysecret and this document contains the key mykey, to make this available to your function the following function yaml could be used.
+
+
+```yaml
+functions:
+  facedetect:
+    lang: go-opencv
+    handler: ./facedetect
+    image: nicholasjackson/func_facedetect
+    secrets:
+      - secret/mysecret/mykey  
+```
+
+This secret would be stored in a file and mounted at the path `/var/openfaas/secrets/mykey` to access the secret you would read the contents of this file from your function.
+
 ### Async functions
 OpenFaaS has the capability to immediately return when you call a function and add the work to a nats streaming queue.  To enable this feature in addition to the OpenFaaS gateway and Nomad provider you must run a nats streaming server.  
 To run the server please use the `nats.hcl` job file.

@@ -7,6 +7,6 @@ consul:
   version: 1.2.0
   user: root
 vault:
-  version: 0.10.4
+  version: 0.9.6
   service:
     type: systemd

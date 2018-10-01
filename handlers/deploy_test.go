@@ -155,3 +155,20 @@ func TestHandlesRequestWithMemoryLimit(t *testing.T) {
 
 	assert.Equal(t, 256, *mem)
 }
+
+func TestHandlesRequestWithSecrets(t *testing.T) {
+	fr := createRequest()
+	fr.Secrets = []string{"myvalue"}
+	expectedTemplate := `{{with secret "secret/openfaas/TestFunction"}}{{.Data.myvalue}}{{end}}`
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	templates := job.TaskGroups[0].Tasks[0].Templates
+
+	assert.Equal(t, "secrets/myvalue", *templates[0].DestPath)
+	assert.Equal(t, expectedTemplate, *templates[0].EmbeddedTmpl)
+}
