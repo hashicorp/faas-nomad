@@ -71,10 +71,11 @@ type cacheItem struct {
 }
 
 // NewResolver creates a new Resolver
-func NewResolver(address string, logger hclog.Logger) *Resolver {
+func NewResolver(address, ACLToken string, logger hclog.Logger) *Resolver {
 	clientSet := dependency.NewClientSet()
 	clientSet.CreateConsulClient(&dependency.CreateConsulClientInput{
 		Address: address,
+		Token:   ACLToken,
 	})
 
 	watch, _ := watch.NewWatcher(&watch.NewWatcherInput{

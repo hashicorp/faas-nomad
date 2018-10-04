@@ -29,6 +29,7 @@ var (
 	nodeURI             = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
 	nomadAddr           = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
 	consulAddr          = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
+	consulACL           = flag.String("consul_acl", "", "ACL token for Consul API, only required if ACL are enabled in Consul")
 	nomadRegion         = flag.String("nomad_region", "global", "Default region to schedule functions in")
 	enableBasicAuth     = flag.Bool("enable_basic_auth", false, "Flag for enabling basic authentication on gateway endpoints")
 	basicAuthSecretPath = flag.String("basic_auth_secret_path", "/secrets", "The directory path to the basic auth secret file")
@@ -120,6 +121,7 @@ func main() {
 		*nodeURI,
 		*nomadAddr,
 		*consulAddr,
+		*consulACL,
 		*nomadRegion,
 	)
 
@@ -157,7 +159,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 	}
 }
 
-func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
+func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, consulACL, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
 	logger := setupLogging()
 
 	logger.Info("Using StatsD server:" + statsDAddr)
@@ -177,7 +179,7 @@ func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, region string
 		logger.Error("Unable to create nomad client", err)
 	}
 
-	cr := consul.NewResolver(consulAddr, logger.Named("consul_resolver"))
+	cr := consul.NewResolver(consulAddr, consulACL, logger.Named("consul_resolver"))
 
 	return logger, stats, nomadClient, cr
 }
