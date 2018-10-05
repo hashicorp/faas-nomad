@@ -11,6 +11,7 @@ import (
 
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	"github.com/hashicorp/faas-nomad/types"
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas/gateway/requests"
@@ -36,10 +37,8 @@ var (
 	updateStagger         = 5 * time.Second
 )
 
-const VAULT_PREFIX = "secret/openfaas"
-
 // MakeDeploy creates a handler for deploying functions
-func MakeDeploy(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) http.HandlerFunc {
+func MakeDeploy(client nomad.Job, providerConfig types.ProviderConfig, logger hclog.Logger, stats metrics.StatsD) http.HandlerFunc {
 	log := logger.Named("deploy_handler")
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +58,7 @@ func MakeDeploy(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) htt
 		}
 
 		// Create job /v1/jobs
-		_, _, err = client.Register(createJob(req), nil)
+		_, _, err = client.Register(createJob(req, providerConfig), nil)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
@@ -74,7 +73,7 @@ func MakeDeploy(client nomad.Job, logger hclog.Logger, stats metrics.StatsD) htt
 	}
 }
 
-func createJob(r requests.CreateFunctionRequest) *api.Job {
+func createJob(r requests.CreateFunctionRequest, providerConfig types.ProviderConfig) *api.Job {
 	jobname := nomad.JobPrefix + r.Service
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
 
@@ -91,17 +90,17 @@ func createJob(r requests.CreateFunctionRequest) *api.Job {
 		},
 	)
 
-	job.TaskGroups = createTaskGroup(r)
+	job.TaskGroups = createTaskGroup(r, providerConfig)
 
 	return job
 }
 
-func createTaskGroup(r requests.CreateFunctionRequest) []*api.TaskGroup {
+func createTaskGroup(r requests.CreateFunctionRequest, providerConfig types.ProviderConfig) []*api.TaskGroup {
 	count := 1
 	restartDelay := 1 * time.Second
 	restartMode := "delay"
 	restartAttempts := 25
-	task := createTask(r)
+	task := createTask(r, providerConfig)
 
 	return []*api.TaskGroup{
 		&api.TaskGroup{
@@ -120,10 +119,11 @@ func createTaskGroup(r requests.CreateFunctionRequest) []*api.TaskGroup {
 	}
 }
 
-func createTask(r requests.CreateFunctionRequest) *api.Task {
+func createTask(r requests.CreateFunctionRequest, providerConfig types.ProviderConfig) *api.Task {
 	envVars := createEnvVars(r)
 
-	return &api.Task{
+	var task api.Task
+	task = api.Task{
 		Name:   r.Service,
 		Driver: "docker",
 		Config: map[string]interface{}{
@@ -131,8 +131,7 @@ func createTask(r requests.CreateFunctionRequest) *api.Task {
 			"port_map": []map[string]interface{}{
 				map[string]interface{}{"http": 8080},
 			},
-			"labels":  createLabels(r),
-			"volumes": createSecretVolumes(r.Secrets),
+			"labels": createLabels(r),
 		},
 		Resources: createResources(r),
 		Services: []*api.Service{
@@ -145,9 +144,18 @@ func createTask(r requests.CreateFunctionRequest) *api.Task {
 			MaxFiles:      &logFiles,
 			MaxFileSizeMB: &logSize,
 		},
-		Env:       envVars,
-		Templates: createSecrets(r.Service, r.Secrets),
+		Env: envVars,
 	}
+
+	if len(r.Secrets) > 0 {
+		task.Config["volumes"] = createSecretVolumes(r.Secrets)
+		task.Templates = createSecrets(providerConfig.VaultSecretPathPrefix, r.Service, r.Secrets)
+		// TODO: check function annotations for vault policies
+		task.Vault = &api.Vault{
+			Policies: []string{providerConfig.VaultDefaultPolicy},
+		}
+	}
+	return &task
 }
 
 func createAnnotations(r requests.CreateFunctionRequest) map[string]string {
@@ -253,11 +261,11 @@ func createUpdateStrategy() *api.UpdateStrategy {
 	}
 }
 
-func createSecrets(name string, secrets []string) []*api.Template {
+func createSecrets(vaultPrefix string, name string, secrets []string) []*api.Template {
 	templates := []*api.Template{}
 
 	for _, s := range secrets {
-		path := fmt.Sprintf("%s/%s", VAULT_PREFIX, name)
+		path := fmt.Sprintf("%s/%s", vaultPrefix, name)
 		destPath := "secrets/" + s
 
 		embeddedTemplate := fmt.Sprintf(`{{with secret "%s"}}{{.Data.%s}}{{end}}`, path, s)

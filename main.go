@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/faas-nomad/handlers"
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	fntypes "github.com/hashicorp/faas-nomad/types"
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 	bootstrap "github.com/openfaas/faas-provider"
@@ -24,14 +25,16 @@ import (
 var version = "notset"
 
 var (
-	port                = flag.Int("port", 8080, "Port to bind the server to")
-	statsdServer        = flag.String("statsd_addr", "localhost:8125", "Location for the statsd collector")
-	nodeURI             = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
-	nomadAddr           = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
-	consulAddr          = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
-	nomadRegion         = flag.String("nomad_region", "global", "Default region to schedule functions in")
-	enableBasicAuth     = flag.Bool("enable_basic_auth", false, "Flag for enabling basic authentication on gateway endpoints")
-	basicAuthSecretPath = flag.String("basic_auth_secret_path", "/secrets", "The directory path to the basic auth secret file")
+	port                  = flag.Int("port", 8080, "Port to bind the server to")
+	statsdServer          = flag.String("statsd_addr", "localhost:8125", "Location for the statsd collector")
+	nodeURI               = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
+	nomadAddr             = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
+	consulAddr            = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
+	nomadRegion           = flag.String("nomad_region", "global", "Default region to schedule functions in")
+	enableBasicAuth       = flag.Bool("enable_basic_auth", false, "Flag for enabling basic authentication on gateway endpoints")
+	basicAuthSecretPath   = flag.String("basic_auth_secret_path", "/secrets", "The directory path to the basic auth secret file")
+	vaultDefaultPolicy    = flag.String("vault_default_policy", "openfaas", "The default policy used when secrets are deployed with a function")
+	vaultSecretPathPrefix = flag.String("vault_secret_path_prefix", "secret/openfaas", "The Vault k/v path prefix used when secrets are deployed with a function")
 )
 
 var functionTimeout = flag.Duration("function_timeout", 30*time.Second, "Timeout for function execution")
@@ -115,10 +118,12 @@ func main() {
 	flag.Parse()
 	parseDeprecatedEnvironment() // to be removed in 0.3.0
 
-	logger, stats, nomadClient, consulResolver := makeDependencies(
+	logger, stats, nomadClient, providerConfig, consulResolver := makeDependencies(
 		*statsdServer,
 		*nodeURI,
 		*nomadAddr,
+		*vaultDefaultPolicy,
+		*vaultSecretPathPrefix,
 		*consulAddr,
 		*nomadRegion,
 	)
@@ -126,7 +131,7 @@ func main() {
 	logger.Info("Started version: " + version)
 	stats.Incr("started", nil, 1)
 
-	handlers := createFaaSHandlers(nomadClient, consulResolver, stats, logger)
+	handlers := createFaaSHandlers(nomadClient, providerConfig, consulResolver, stats, logger)
 
 	config := &types.FaaSConfig{}
 	config.ReadTimeout = *functionTimeout
@@ -142,22 +147,22 @@ func main() {
 	bootstrap.Serve(handlers, config)
 }
 
-func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver, stats *statsd.Client, logger hclog.Logger) *types.FaaSHandlers {
+func createFaaSHandlers(nomadClient *api.Client, providerConfig *fntypes.ProviderConfig, consulResolver *consul.Resolver, stats *statsd.Client, logger hclog.Logger) *types.FaaSHandlers {
 
 	return &types.FaaSHandlers{
 		FunctionReader: handlers.MakeReader(nomadClient.Jobs(), logger, stats),
-		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
+		DeployHandler:  handlers.MakeDeploy(nomadClient.Jobs(), *providerConfig, logger, stats),
 		DeleteHandler:  handlers.MakeDelete(consulResolver, nomadClient.Jobs(), logger, stats),
 		ReplicaReader:  makeReplicationReader(nomadClient.Jobs(), logger, stats),
 		ReplicaUpdater: makeReplicationUpdater(nomadClient.Jobs(), logger, stats),
 		FunctionProxy:  makeFunctionProxyHandler(consulResolver, logger, stats, *functionTimeout),
-		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), logger, stats),
+		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), *providerConfig, logger, stats),
 		InfoHandler:    handlers.MakeInfo(logger, stats, version),
 		Health:         handlers.MakeHealthHandler(),
 	}
 }
 
-func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
+func makeDependencies(statsDAddr, thisAddr, nomadAddr, vaultDefaultPolicy, vaultSecretPathPrefix, consulAddr, region string) (hclog.Logger, *statsd.Client, *api.Client, *fntypes.ProviderConfig, *consul.Resolver) {
 	logger := setupLogging()
 
 	logger.Info("Using StatsD server:" + statsDAddr)
@@ -177,9 +182,14 @@ func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, region string
 		logger.Error("Unable to create nomad client", err)
 	}
 
+	providerConfig := &fntypes.ProviderConfig{
+		VaultDefaultPolicy:    vaultDefaultPolicy,
+		VaultSecretPathPrefix: vaultSecretPathPrefix,
+	}
+
 	cr := consul.NewResolver(consulAddr, logger.Named("consul_resolver"))
 
-	return logger, stats, nomadClient, cr
+	return logger, stats, nomadClient, providerConfig, cr
 }
 
 func setupLogging() hclog.Logger {
