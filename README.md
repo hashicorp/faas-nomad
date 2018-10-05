@@ -303,11 +303,25 @@ functions:
 ```
 
 ### Secrets
-It is possible to integrate vault secrets [https://docs.openfaas.com/reference/secrets/](https://docs.openfaas.com/reference/secrets/) with the Nomad provider.  The below example shows how to use the V1 Vault API for referencing secrets, it uses the following convention:
+It is possible to integrate Vault secrets [https://docs.openfaas.com/reference/secrets/](https://docs.openfaas.com/reference/secrets/) with the Nomad provider. Follow these steps to have OpenFaaS integrate with Nomad + Vault:
 
-`[path]/[key]`
+1) Ensure your Nomad agent(s) are connected to a Vault instance (https://www.nomadproject.io/guides/operations/vault-integration/index.html)
+2) Add a Vault policy with the name "openfaas" (default, configurable with `-vault_default_policy` cli param) using the example policy:
+    ```hcl
+    path "secret/openfaas/*" {
+      policy = "read"
+    }
+    ```
+3) Add your secret with curl or the Vault UI:
+    ```
+    curl -H "X-Vault-Token: token" -H "Content-Type: application/json" \
+      -X POST -d '{"mysecret":"SECRET"}' \ 
+      http://localhost:8200/v1/secret/openfaas/func_facedetect
+    ```
 
-Given you have a secret document stored at the path secret/mysecret and this document contains the key mykey, to make this available to your function the following function yaml could be used.
+The convention for the Vault secret path is: `secret/${vault_secret_path_prefix}/${function_name}`.
+
+Given you have a secret document stored at the path secret/openfaas/mysecret in Vault, to make this available to your function the following function yaml could be used.
 
 
 ```yaml
@@ -317,10 +331,10 @@ functions:
     handler: ./facedetect
     image: nicholasjackson/func_facedetect
     secrets:
-      - secret/mysecret/mykey  
+      - mysecret  
 ```
 
-This secret would be stored in a file and mounted at the path `/var/openfaas/secrets/mykey` to access the secret you would read the contents of this file from your function.
+This secret would be stored in a file and mounted at the path `/var/openfaas/secrets/mysecret` to access the secret you would read the contents of this file from your function.
 
 ### Async functions
 OpenFaaS has the capability to immediately return when you call a function and add the work to a nats streaming queue.  To enable this feature in addition to the OpenFaaS gateway and Nomad provider you must run a nats streaming server.  
