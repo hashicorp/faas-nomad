@@ -118,12 +118,10 @@ func main() {
 	flag.Parse()
 	parseDeprecatedEnvironment() // to be removed in 0.3.0
 
-	logger, stats, nomadClient, providerConfig, consulResolver := makeDependencies(
+	logger, stats, nomadClient, consulResolver := makeDependencies(
 		*statsdServer,
 		*nodeURI,
 		*nomadAddr,
-		*vaultDefaultPolicy,
-		*vaultSecretPathPrefix,
 		*consulAddr,
 		*nomadRegion,
 	)
@@ -131,7 +129,7 @@ func main() {
 	logger.Info("Started version: " + version)
 	stats.Incr("started", nil, 1)
 
-	handlers := createFaaSHandlers(nomadClient, providerConfig, consulResolver, stats, logger)
+	handlers := createFaaSHandlers(nomadClient, consulResolver, stats, logger)
 
 	config := &types.FaaSConfig{}
 	config.ReadTimeout = *functionTimeout
@@ -147,7 +145,12 @@ func main() {
 	bootstrap.Serve(handlers, config)
 }
 
-func createFaaSHandlers(nomadClient *api.Client, providerConfig *fntypes.ProviderConfig, consulResolver *consul.Resolver, stats *statsd.Client, logger hclog.Logger) *types.FaaSHandlers {
+func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver, stats *statsd.Client, logger hclog.Logger) *types.FaaSHandlers {
+
+	providerConfig := &fntypes.ProviderConfig{
+		VaultDefaultPolicy:    *vaultDefaultPolicy,
+		VaultSecretPathPrefix: *vaultSecretPathPrefix,
+	}
 
 	return &types.FaaSHandlers{
 		FunctionReader: handlers.MakeReader(nomadClient.Jobs(), logger, stats),
@@ -162,7 +165,7 @@ func createFaaSHandlers(nomadClient *api.Client, providerConfig *fntypes.Provide
 	}
 }
 
-func makeDependencies(statsDAddr, thisAddr, nomadAddr, vaultDefaultPolicy, vaultSecretPathPrefix, consulAddr, region string) (hclog.Logger, *statsd.Client, *api.Client, *fntypes.ProviderConfig, *consul.Resolver) {
+func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
 	logger := setupLogging()
 
 	logger.Info("Using StatsD server:" + statsDAddr)
@@ -182,14 +185,9 @@ func makeDependencies(statsDAddr, thisAddr, nomadAddr, vaultDefaultPolicy, vault
 		logger.Error("Unable to create nomad client", err)
 	}
 
-	providerConfig := &fntypes.ProviderConfig{
-		VaultDefaultPolicy:    vaultDefaultPolicy,
-		VaultSecretPathPrefix: vaultSecretPathPrefix,
-	}
-
 	cr := consul.NewResolver(consulAddr, logger.Named("consul_resolver"))
 
-	return logger, stats, nomadClient, providerConfig, cr
+	return logger, stats, nomadClient, cr
 }
 
 func setupLogging() hclog.Logger {
