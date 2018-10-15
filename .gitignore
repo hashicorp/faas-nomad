@@ -26,3 +26,4 @@ nomad.hcl
 provisioning/saltstack/formulas*
 ubuntu*.log
 debug
+faas-nomad
