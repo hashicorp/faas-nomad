@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
+	fntypes "github.com/hashicorp/faas-nomad/types"
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 	"github.com/openfaas/faas/gateway/requests"
@@ -25,7 +26,7 @@ func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 
 	logger := hclog.Default()
 
-	return MakeDeploy(mockJob, logger, mockStats),
+	return MakeDeploy(mockJob, fntypes.ProviderConfig{VaultDefaultPolicy: "openfaas", VaultSecretPathPrefix: "secret/openfaas"}, logger, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte(body)))
 }
