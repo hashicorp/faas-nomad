@@ -30,7 +30,7 @@ var (
 	nodeURI               = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
 	nomadAddr             = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
 	consulAddr            = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
-  consulACL           = flag.String("consul_acl", "", "ACL token for Consul API, only required if ACL are enabled in Consul")
+	consulACL             = flag.String("consul_acl", "", "ACL token for Consul API, only required if ACL are enabled in Consul")
 	nomadRegion           = flag.String("nomad_region", "global", "Default region to schedule functions in")
 	enableBasicAuth       = flag.Bool("enable_basic_auth", false, "Flag for enabling basic authentication on gateway endpoints")
 	basicAuthSecretPath   = flag.String("basic_auth_secret_path", "/secrets", "The directory path to the basic auth secret file")
@@ -149,9 +149,16 @@ func main() {
 
 func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver, stats *statsd.Client, logger hclog.Logger) *types.FaaSHandlers {
 
+	datacenter, err := nomadClient.Agent().Datacenter()
+	if err != nil {
+		datacenter = "dc1"
+	}
+	logger.Info("Datacenter from agent", datacenter)
+
 	providerConfig := &fntypes.ProviderConfig{
 		VaultDefaultPolicy:    *vaultDefaultPolicy,
 		VaultSecretPathPrefix: *vaultSecretPathPrefix,
+		Datacenter:            datacenter,
 	}
 
 	return &types.FaaSHandlers{

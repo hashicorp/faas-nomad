@@ -78,7 +78,7 @@ func createJob(r requests.CreateFunctionRequest, providerConfig types.ProviderCo
 	job := api.NewServiceJob(jobname, jobname, "global", 1)
 
 	job.Meta = createAnnotations(r)
-	job.Datacenters = createDataCenters(r)
+	job.Datacenters = createDataCenters(r, providerConfig.Datacenter)
 	job.Update = createUpdateStrategy()
 
 	// add constraints
@@ -222,20 +222,21 @@ func createLimits(r requests.CreateFunctionRequest) (taskMemory, taskCPU int) {
 	return taskMemory, taskCPU
 }
 
-func createDataCenters(r requests.CreateFunctionRequest) []string {
-	if r.Labels != nil && (*r.Labels)["datacenters"] != "" {
-		lbls := (*r.Labels)["datacenters"]
+func createDataCenters(r requests.CreateFunctionRequest, defaultDC string) []string {
+	if r.Constraints != nil && len(r.Constraints) > 0 {
 		dcs := []string{}
 
-		for _, dc := range strings.Split(lbls, ",") {
-			dcs = append(dcs, strings.Trim(dc, " "))
+		for _, constr := range r.Constraints {
+			if strings.Contains(constr, "datacenter") {
+				dcs = append(dcs, strings.Trim(strings.Split(constr, "==")[1], " "))
+			}
 		}
 
 		return dcs
 	}
 
 	// default datacenter
-	return []string{"dc1"}
+	return []string{defaultDC}
 }
 
 func createEnvVars(r requests.CreateFunctionRequest) map[string]string {
