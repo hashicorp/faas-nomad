@@ -153,7 +153,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 	if err != nil {
 		datacenter = "dc1"
 	}
-	logger.Info("Datacenter from agent", datacenter)
+	logger.Info("Datacenter from agent:" + datacenter)
 
 	providerConfig := &fntypes.ProviderConfig{
 		VaultDefaultPolicy:    *vaultDefaultPolicy,
