@@ -154,7 +154,7 @@ job "faas-monitoring" {
       driver = "docker"
 
       config {
-        image = "grafana/grafana:4.5.2"
+        image = "grafana/grafana:4.6.3"
 
         port_map {
           http = 3000
