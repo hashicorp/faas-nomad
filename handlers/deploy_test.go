@@ -26,7 +26,7 @@ func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 
 	logger := hclog.Default()
 
-	return MakeDeploy(mockJob, fntypes.ProviderConfig{VaultDefaultPolicy: "openfaas", VaultSecretPathPrefix: "secret/openfaas"}, logger, mockStats),
+	return MakeDeploy(mockJob, fntypes.ProviderConfig{VaultDefaultPolicy: "openfaas", VaultSecretPathPrefix: "secret/openfaas", Datacenter: "dc1"}, logger, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte(body)))
 }
@@ -80,7 +80,7 @@ func TestHandlerRegistersWithFunctionProcess(t *testing.T) {
 
 func TestHandlesDataCentreLabelWithSingleDC(t *testing.T) {
 	fr := createRequest()
-	(*fr.Labels)["datacenters"] = "test"
+	fr.Constraints = []string{"datacenter == test"}
 
 	h, rw, r := setupDeploy(fr.String())
 
@@ -95,7 +95,7 @@ func TestHandlesDataCentreLabelWithSingleDC(t *testing.T) {
 
 func TestHandlesDataCentreLabelWithMultipleDC(t *testing.T) {
 	fr := createRequest()
-	(*fr.Labels)["datacenters"] = "test1,test2"
+	fr.Constraints = []string{"datacenter == test1", "datacenter == test2"}
 
 	h, rw, r := setupDeploy(fr.String())
 
