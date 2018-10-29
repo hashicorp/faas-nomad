@@ -28,7 +28,7 @@ job "faas-nomadd" {
         destination   = "secrets/gateway.env"
         // point the functions_provider_url to the host running vagrant (assuming a go process listening on 0.0.0.0), always .1 on last octet
         data = <<EOH
-functions_provider_url="http://{{ host_address }}:8080/"
+functions_provider_url="http://{{ host_address }}:8081/"
 {% raw -%}
 {{ range service "prometheus" }}
 faas_prometheus_host="{{ .Address }}"
