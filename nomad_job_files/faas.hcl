@@ -93,7 +93,7 @@ EOH
       }
 
       config {
-        image = "openfaas/gateway:0.9.3"
+        image = "openfaas/gateway:0.9.8"
 
         port_map {
           http = 8080
@@ -178,7 +178,7 @@ EOH
       driver = "docker"
       
       config {
-        image = "nats-streaming:0.7.0-linux"
+        image = "nats-streaming:0.11.2-linux"
 
         args = [
           "-store", "file", "-dir", "/tmp/nats",
