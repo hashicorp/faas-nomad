@@ -47,13 +47,33 @@ func TestReplicationReturnsFunctionWhenFound(t *testing.T) {
 	functionName := "tester"
 	jobName := nomad.JobPrefix + functionName
 
+	count := 2
+	labels := make([]interface{}, 1)
+	labels[0] = map[string]interface{}{
+		"com.openfaas.scale.min": "2",
+		"com.openfaas.scale.max": "10",
+	}
+	config := map[string]interface{}{
+		"image":  "faas-nomad",
+		"labels": labels,
+	}
+
 	h, rr, r := setupReplicationReader(functionName)
+
 	mockJob.On("Info", jobName, mock.Anything).Return(
 		&api.Job{
 			ID: &jobName,
-			TaskGroups: []*api.TaskGroup{&api.TaskGroup{
-				Count: &count,
-			}},
+			TaskGroups: []*api.TaskGroup{
+				&api.TaskGroup{
+					Count: &count,
+					Tasks: []*api.Task{
+						&api.Task{
+							Name:   functionName,
+							Config: config,
+						},
+					},
+				},
+			},
 		},
 		nil,
 		nil,
@@ -70,6 +90,7 @@ func TestReplicationReturnsFunctionWhenFound(t *testing.T) {
 		nil,
 		nil,
 	)
+
 	h(rr, r)
 
 	f := &requests.Function{}
@@ -88,12 +109,28 @@ func TestReplicationRReturnsCorrectAllocationCount(t *testing.T) {
 	jobName := nomad.JobPrefix + functionName
 	count := 2
 
+	labels := make([]interface{}, 1)
+	labels[0] = map[string]interface{}{
+		"com.openfaas.scale.min": "2",
+		"com.openfaas.scale.max": "10",
+	}
+
+	config := map[string]interface{}{
+		"image":  "faas-nomad",
+		"labels": labels,
+	}
+
 	h, rr, r := setupReplicationReader(functionName)
 	mockJob.On("Info", jobName, mock.Anything).Return(
 		&api.Job{
 			ID: &jobName,
 			TaskGroups: []*api.TaskGroup{&api.TaskGroup{
 				Count: &count,
+				Tasks: []*api.Task{
+					&api.Task{
+						Config: config,
+					},
+				},
 			}},
 		},
 		nil,
