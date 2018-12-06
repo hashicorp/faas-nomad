@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
@@ -42,10 +41,14 @@ func MakeReplicationReader(client nomad.Job, logger hclog.Logger, stats metrics.
 			return
 		}
 
-		resp := requests.Function{}
-		resp.AvailableReplicas = allocs
-		resp.Replicas = uint64(*job.TaskGroups[0].Count)
-		resp.Name = strings.Replace(*job.ID, nomad.JobPrefix, "", -1)
+		resp := requests.Function{
+			Name:              sanitiseJobName(job),
+			Image:             job.TaskGroups[0].Tasks[0].Config["image"].(string),
+			Replicas:          uint64(*job.TaskGroups[0].Count),
+			AvailableReplicas: allocs,
+			Labels:            parseLabels(job.TaskGroups[0].Tasks[0].Config["labels"].([]interface{})),
+			Annotations:       &job.Meta,
+		}
 
 		rw.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(rw).Encode(resp)

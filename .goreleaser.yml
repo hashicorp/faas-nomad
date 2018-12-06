@@ -1,38 +1,35 @@
+---
 builds:
-  - binary: faas-nomad
-    #ldflags: -s -w -X main.version=dev
-    goos:
-      - windows
-      - linux
-    goarch:
-      - amd64
-      - arm
-    goarm:
-      - 6
-      - 7
-    env:
-      - CGO_ENABLED=0
+- binary: faas-nomad
+  goos:
+  - windows
+  - linux
+  goarch:
+  - amd64
+  - arm
+  goarm:
+  - 6
+  - 7
+  env:
+  - CGO_ENABLED=0
 
 dockers:
-  - 
-    binary: faas-nomad
-    image: quay.io/nicholasjackson/faas-nomad
-    goos: linux
-    goarch: amd64
-    dockerfile: Dockerfile
-    tag_templates: 
-      - "latest"
-      - "{{ .Tag }}"
-      - "{{.Version}}"
-      - "{{.Commit}}"
-  - 
-    binary: faas-nomad
-    image: quay.io/nicholasjackson/faas-nomad
-    goos: linux
-    goarch: arm
-    goarm: 7
-    dockerfile: Dockerfile_arm7
-    tag_templates: 
-      - "arm7-{{ .Tag }}"
-      - "arm7-{{.Version}}"
-      - "arm7-{{.Commit}}"
+-
+  binary: faas-nomad
+  goos: linux
+  goarch: amd64
+  dockerfile: Dockerfile
+  image_templates:
+  - "quay.io/nicholasjackson/faas-nomad:latest"
+  - "quay.io/nicholasjackson/faas-nomad:{{.Tag}}"
+  - "quay.io/nicholasjackson/faas-nomad:{{.Commit}}"
+-
+  binary: faas-nomad
+  goos: linux
+  goarch: arm
+  goarm: 7
+  dockerfile: Dockerfile_arm7
+  image_templates:
+  - "quay.io/nicholasjackson/faas-nomad:arm7-latest"
+  - "quay.io/nicholasjackson/faas-nomad:arm7-{{.Tag}}"
+  - "quay.io/nicholasjackson/faas-nomad:arm7-{{.Commit}}"

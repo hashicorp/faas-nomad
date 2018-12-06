@@ -2,8 +2,8 @@ VERSION=0.2.16
 NAMESPACE=quay.io/nicholasjackson
 
 deps:
-	go get github.com/goreleaser/goreleaser
-	go get github.com/wadey/gocovmerge
+	go get -u github.com/goreleaser/goreleaser
+	go get -u github.com/wadey/gocovmerge
 
 test:
 	GOMAXPROCS=7 go test -parallel 7 -cover -race ./...
