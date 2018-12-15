@@ -159,6 +159,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 		VaultDefaultPolicy:    *vaultDefaultPolicy,
 		VaultSecretPathPrefix: *vaultSecretPathPrefix,
 		Datacenter:            datacenter,
+		ConsulAddress:         *consulAddr,
 	}
 
 	return &types.FaaSHandlers{
