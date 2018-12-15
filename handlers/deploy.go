@@ -147,6 +147,8 @@ func createTask(r requests.CreateFunctionRequest, providerConfig types.ProviderC
 		Env: envVars,
 	}
 
+	task.Config["dns_servers"] = parseDNSServers(envVars)
+
 	if len(r.Secrets) > 0 {
 		task.Config["volumes"] = createSecretVolumes(r.Secrets)
 		task.Templates = createSecrets(providerConfig.VaultSecretPathPrefix, r.Service, r.Secrets)
@@ -279,4 +281,15 @@ func createSecrets(vaultPrefix string, name string, secrets []string) []*api.Tem
 	}
 
 	return templates
+}
+
+func parseDNSServers(envVars map[string]string) []string {
+
+	servers := []string{}
+	if val, ok := envVars["dns_servers"]; ok {
+		servers = strings.Split(val, ",")
+	} else {
+		servers = []string{"8.8.8.8", "8.8.4.4"}
+	}
+	return servers
 }
