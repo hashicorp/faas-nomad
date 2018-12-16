@@ -26,7 +26,7 @@ func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 
 	logger := hclog.Default()
 
-	return MakeDeploy(mockJob, fntypes.ProviderConfig{VaultDefaultPolicy: "openfaas", VaultSecretPathPrefix: "secret/openfaas", Datacenter: "dc1", ConsulAddress: "http://localhost:8500"}, logger, mockStats),
+	return MakeDeploy(mockJob, fntypes.ProviderConfig{VaultDefaultPolicy: "openfaas", VaultSecretPathPrefix: "secret/openfaas", Datacenter: "dc1", ConsulAddress: "http://localhost:8500", ConsulDNSEnabled: true}, logger, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte(body)))
 }

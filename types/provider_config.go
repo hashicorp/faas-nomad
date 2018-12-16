@@ -5,4 +5,5 @@ type ProviderConfig struct {
 	VaultSecretPathPrefix string
 	Datacenter            string
 	ConsulAddress         string
+	ConsulDNSEnabled      bool
 }
