@@ -16,7 +16,7 @@ import (
 // ProxyClient defines the interface for a client which calls faas functions
 type ProxyClient interface {
 	GetFunctionName(*http.Request) string
-	CallAndReturnResponse(address string, body []byte, headers http.Header) ([]byte, http.Header, error)
+	CallAndReturnResponse(address string, body []byte, headers http.Header) ([]byte, http.Header, int, error)
 }
 
 // HTTPProxyClient allows the calling of functions
@@ -55,7 +55,7 @@ func (pc *HTTPProxyClient) GetFunctionName(r *http.Request) string {
 
 // CallAndReturnResponse calls the function and returns the response
 func (pc *HTTPProxyClient) CallAndReturnResponse(address string, body []byte, headers http.Header) (
-	[]byte, http.Header, error) {
+	[]byte, http.Header, int, error) {
 
 	defer func(when time.Time) {
 		seconds := time.Since(when).Seconds()
@@ -72,20 +72,20 @@ func (pc *HTTPProxyClient) CallAndReturnResponse(address string, body []byte, he
 	response, err := pc.proxyClient.Do(request)
 	if err != nil {
 		log.Println(err.Error())
-		return nil, nil, err
+		return nil, nil, response.StatusCode, err
 	}
 
 	respBody, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		pc.logger.Error("Error reading body", "error", err)
 
-		return nil, nil, err
+		return nil, nil, response.StatusCode, err
 	}
 	response.Body.Close()
 
 	pc.logger.Info("Finished")
 
-	return respBody, response.Header, nil
+	return respBody, response.Header, response.StatusCode, nil
 }
 
 func copyHeaders(destination *http.Header, source *http.Header) {

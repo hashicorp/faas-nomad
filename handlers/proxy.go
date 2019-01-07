@@ -72,7 +72,7 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respBody, respHeaders, err := p.callDownstreamFunction(service, urls, r)
+	respBody, respHeaders, respStatus, err := p.callDownstreamFunction(service, urls, r)
 
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
@@ -82,23 +82,25 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	setHeaders(respHeaders, rw)
+	rw.WriteHeader(respStatus)
 	rw.Write(respBody)
 }
 
-func (p *Proxy) callDownstreamFunction(service string, urls []string, r *http.Request) ([]byte, http.Header, error) {
+func (p *Proxy) callDownstreamFunction(service string, urls []string, r *http.Request) ([]byte, http.Header, int, error) {
 	reqBody, _ := ioutil.ReadAll(r.Body)
 	reqHeaders := r.Header
 	defer r.Body.Close()
 
 	var respBody []byte
 	var respHeaders http.Header
+	var respStatus int
 	var err error
 
 	lb := p.getLoadbalancer(service, urls)
 	lb.Do(func(endpoint url.URL) error {
 		// add the querystring from the request
 		endpoint.RawQuery = r.URL.RawQuery
-		respBody, respHeaders, err = p.client.CallAndReturnResponse(endpoint.String(), reqBody, reqHeaders)
+		respBody, respHeaders, respStatus, err = p.client.CallAndReturnResponse(endpoint.String(), reqBody, reqHeaders)
 		if err != nil {
 			return err
 		}
@@ -106,7 +108,7 @@ func (p *Proxy) callDownstreamFunction(service string, urls []string, r *http.Re
 		return nil
 	})
 
-	return respBody, respHeaders, err
+	return respBody, respHeaders, respStatus, err
 }
 
 func setHeaders(headers http.Header, rw http.ResponseWriter) {
