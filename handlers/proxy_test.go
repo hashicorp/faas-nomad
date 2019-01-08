@@ -56,7 +56,7 @@ func TestProxyHandlerWithFunctionNameCallsResolve(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
 	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).
-		Return([]byte{}, http.Header{}, 200, nil)
+		Return([]byte{}, http.Header{}, http.StatusOK, nil)
 	mockServiceResolver.On("Resolve", "function").Return([]string{"http://testaddress"})
 
 	h(rr, r)
@@ -68,7 +68,7 @@ func TestProxyHandlerCallsCallAndReturnResponse(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
 	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).
-		Return([]byte{}, http.Header{}, 200, nil)
+		Return([]byte{}, http.Header{}, http.StatusOK, nil)
 	mockServiceResolver.On("Resolve", "function").Return([]string{"http://testaddress"})
 
 	h(rr, r)
@@ -83,7 +83,7 @@ func TestProxyHandlerReturnsErrorWhenNoEndpoints(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
 	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).
-		Return([]byte{}, http.Header{}, 200, nil)
+		Return([]byte{}, http.Header{}, http.StatusOK, nil)
 	mockServiceResolver.On("Resolve", "function").Return([]string{})
 
 	h(rr, r)
@@ -99,12 +99,12 @@ func TestProxyHandlerReturnsErrorWhenClientError(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
 	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).
-		Return([]byte{}, http.Header{}, 500, fmt.Errorf("Oops, I did it again"))
+		Return([]byte{}, http.Header{}, http.StatusInternalServerError, fmt.Errorf("Oops, I did it again"))
 	mockServiceResolver.On("Resolve", "function").Return([]string{"http://testaddress"})
 
 	h(rr, r)
 
-	assert.Equal(t, http.StatusInternalServerError, 500, rr.Code)
+	assert.Equal(t, http.StatusInternalServerError, http.StatusInternalServerError, rr.Code)
 }
 
 func TestProxyHandlerSetsHeadersOnSuccess(t *testing.T) {
@@ -114,13 +114,13 @@ func TestProxyHandlerSetsHeadersOnSuccess(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
 	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).
-		Return([]byte{}, http.Header{"TestHeader": []string{"Testiculous"}}, 200, nil)
+		Return([]byte{}, http.Header{"TestHeader": []string{"faas-nomad"}}, http.StatusOK, nil)
 	mockServiceResolver.On("Resolve", "function").Return([]string{"http://testaddress"})
 
 	h(rr, r)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "Testiculous", rr.Header().Get("TestHeader"), 200, nil)
+	assert.Equal(t, "faas-nomad", rr.Header().Get("TestHeader"), http.StatusOK, nil)
 }
 
 func TestProxyHandlerSetsBodyOnSuccess(t *testing.T) {
@@ -130,7 +130,7 @@ func TestProxyHandlerSetsBodyOnSuccess(t *testing.T) {
 	h, rr, r := setupProxy("")
 	mockProxyClient.On("GetFunctionName", mock.Anything).Return("function")
 	mockProxyClient.On("CallAndReturnResponse", mock.Anything, mock.Anything, mock.Anything).
-		Return([]byte("Something Something"), http.Header{}, 200, nil)
+		Return([]byte("Something Something"), http.Header{}, http.StatusOK, nil)
 	mockServiceResolver.On("Resolve", "function").Return([]string{"http://testaddress"})
 
 	h(rr, r)

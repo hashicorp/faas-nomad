@@ -72,7 +72,7 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respBody, respHeaders, respStatus, err := p.callDownstreamFunction(service, urls, r)
+	body, headers, status, err := p.callDownstreamFunction(service, urls, r)
 
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
@@ -81,9 +81,9 @@ func (p *Proxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setHeaders(respHeaders, rw)
-	rw.WriteHeader(respStatus)
-	rw.Write(respBody)
+	setHeaders(headers, rw)
+	rw.WriteHeader(status)
+	rw.Write(body)
 }
 
 func (p *Proxy) callDownstreamFunction(service string, urls []string, r *http.Request) ([]byte, http.Header, int, error) {
