@@ -26,7 +26,7 @@ func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 
 	logger := hclog.Default()
 
-	return MakeDeploy(mockJob, fntypes.ProviderConfig{VaultDefaultPolicy: "openfaas", VaultSecretPathPrefix: "secret/openfaas", Datacenter: "dc1"}, logger, mockStats),
+	return MakeDeploy(mockJob, fntypes.ProviderConfig{VaultDefaultPolicy: "openfaas", VaultSecretPathPrefix: "secret/openfaas", Datacenter: "dc1", ConsulAddress: "http://localhost:8500", ConsulDNSEnabled: true}, logger, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte(body)))
 }
@@ -172,4 +172,37 @@ func TestHandlesRequestWithSecrets(t *testing.T) {
 
 	assert.Equal(t, "secrets/myvalue", *templates[0].DestPath)
 	assert.Equal(t, expectedTemplate, *templates[0].EmbeddedTmpl)
+}
+
+func TestHandlesRequestWithDNSServers(t *testing.T) {
+	fr := createRequest()
+	expectedServers := []string{"127.0.0.1", "127.0.1.1"}
+	fr.EnvVars = map[string]string{"dns_servers": "127.0.0.1,127.0.1.1"}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+
+	dnsServers := job.TaskGroups[0].Tasks[0].Config["dns_servers"].([]string)
+
+	assert.Equal(t, expectedServers, dnsServers)
+}
+
+func TestHandlesRequestUsingConsulAddress(t *testing.T) {
+	fr := createRequest()
+	expectedServers := []string{"localhost"}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+
+	dnsServers := job.TaskGroups[0].Tasks[0].Config["dns_servers"].([]string)
+
+	assert.Equal(t, expectedServers, dnsServers)
 }

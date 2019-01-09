@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -147,6 +148,8 @@ func createTask(r requests.CreateFunctionRequest, providerConfig types.ProviderC
 		Env: envVars,
 	}
 
+	task.Config["dns_servers"] = parseDNSServers(envVars, providerConfig)
+
 	if len(r.Secrets) > 0 {
 		task.Config["volumes"] = createSecretVolumes(r.Secrets)
 		task.Templates = createSecrets(providerConfig.VaultSecretPathPrefix, r.Service, r.Secrets)
@@ -279,4 +282,21 @@ func createSecrets(vaultPrefix string, name string, secrets []string) []*api.Tem
 	}
 
 	return templates
+}
+
+func parseDNSServers(envVars map[string]string, providerConfig types.ProviderConfig) []string {
+
+	servers := []string{}
+	u, urlErr := url.Parse(providerConfig.ConsulAddress)
+
+	// use dns servers from env vars first
+	if val, ok := envVars["dns_servers"]; ok {
+		servers = strings.Split(val, ",")
+		// try the configured consul host (assumes dns is available on port 53)
+	} else if providerConfig.ConsulDNSEnabled && urlErr == nil {
+		servers = []string{strings.Split(u.Host, ":")[0]}
+	} else {
+		servers = []string{"8.8.8.8", "8.8.4.4"}
+	}
+	return servers
 }
