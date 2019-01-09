@@ -58,7 +58,7 @@ func TestClientReturnsHeadersFromRequest(t *testing.T) {
 	c, r, s := setupProxyClient(body)
 	defer s.Close()
 
-	_, h, _ := c.CallAndReturnResponse(s.URL, body, r.Header)
+	_, h, _, _ := c.CallAndReturnResponse(s.URL, body, r.Header)
 
 	assert.Equal(t, "somevalue", h.Get("TESTHeader"))
 }
@@ -68,7 +68,7 @@ func TestClientReturnsBodysFromRequest(t *testing.T) {
 	c, r, s := setupProxyClient(body)
 	defer s.Close()
 
-	b, _, _ := c.CallAndReturnResponse(s.URL, body, r.Header)
+	b, _, _, _ := c.CallAndReturnResponse(s.URL, body, r.Header)
 
 	assert.Equal(t, "my body", string(b))
 }
