@@ -27,3 +27,6 @@ provisioning/saltstack/formulas*
 ubuntu*.log
 debug
 faas-nomad
+
+# Remove Go vendor folder since we are using modules
+vendor
