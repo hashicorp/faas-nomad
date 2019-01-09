@@ -23,7 +23,7 @@ job "faas-nomadd" {
       driver = "docker"
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:v0.3.5"
+        image = "quay.io/nicholasjackson/faas-nomad:v0.3.6"
 
         args = [
           "-nomad_region", "${NOMAD_REGION}",
