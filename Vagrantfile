@@ -67,7 +67,7 @@ Vagrant.configure("2") do |config|
       salt.verbose = true
       salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
     end
-    override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
+    # override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
   end
 
   # vmware fusion
@@ -81,6 +81,8 @@ Vagrant.configure("2") do |config|
       salt.verbose = true
       salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
     end
+    # override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
+    override.vm.provision "shell", path: "provisioning/scripts/vault_populate.sh"
     override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
   end
 
@@ -95,7 +97,12 @@ Vagrant.configure("2") do |config|
       salt.verbose = true
       salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
     end
-    override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
+    # override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
+  end
+
+  config.vm.provision :docker do |d|
+    d.run 'dev-vault', image: 'vault:0.9.6', 
+      args: '-p 8200:8200 -e "VAULT_DEV_ROOT_TOKEN_ID=vagrant" -v /vagrant:/vagrant'
   end
   #
   # View the documentation for the provider you are using for more
@@ -112,7 +119,6 @@ Vagrant.configure("2") do |config|
     cd /vagrant/provisioning/saltstack/formulas
     git clone https://github.com/tucows/nomad-formula.git
     git clone https://github.com/tucows/consul-formula.git
-    git clone https://github.com/tucows/docker-formula.git
     git clone https://github.com/tucows/vault-formula.git
   SHELL
   
