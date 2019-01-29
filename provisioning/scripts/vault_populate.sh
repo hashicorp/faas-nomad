@@ -26,7 +26,7 @@ vault policy write ${POLICY_NAME} /vagrant/provisioning/scripts/policy.hcl
 curl -i \
   --header "X-Vault-Token: ${TOKEN}" \
   --request POST \
-  --data '{"policies": "openfaas"}' \
+  --data '{"policies": "openfaas", "period": "24h"}' \
   ${VAULT_URL}/v1/auth/approle/role/${POLICY_NAME}
 
 curl -i \

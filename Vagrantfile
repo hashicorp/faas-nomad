@@ -67,7 +67,8 @@ Vagrant.configure("2") do |config|
       salt.verbose = true
       salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
     end
-    # override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
+    override.vm.provision "shell", path: "provisioning/scripts/vault_populate.sh"
+    override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
   end
 
   # vmware fusion
@@ -81,7 +82,6 @@ Vagrant.configure("2") do |config|
       salt.verbose = true
       salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
     end
-    # override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
     override.vm.provision "shell", path: "provisioning/scripts/vault_populate.sh"
     override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
   end
@@ -97,7 +97,8 @@ Vagrant.configure("2") do |config|
       salt.verbose = true
       salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
     end
-    # override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
+    override.vm.provision "shell", path: "provisioning/scripts/vault_populate.sh"
+    override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
   end
 
   config.vm.provision :docker do |d|

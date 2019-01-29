@@ -152,10 +152,10 @@ func createTask(r requests.CreateFunctionRequest, providerConfig types.ProviderC
 
 	if len(r.Secrets) > 0 {
 		task.Config["volumes"] = createSecretVolumes(r.Secrets)
-		task.Templates = createSecrets(providerConfig.VaultSecretPathPrefix, r.Service, r.Secrets)
+		task.Templates = createSecrets(providerConfig.Vault.SecretPathPrefix, r.Service, r.Secrets)
 		// TODO: check function annotations for vault policies
 		task.Vault = &api.Vault{
-			Policies: []string{providerConfig.VaultDefaultPolicy},
+			Policies: []string{providerConfig.Vault.DefaultPolicy},
 		}
 	}
 	return &task

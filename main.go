@@ -43,8 +43,8 @@ var (
 	vaultAddrOverride     = flag.String("vault_addr", "", "Vault address override. Default Vault address is return from the Nomad agent")
 	vaultDefaultPolicy    = flag.String("vault_default_policy", "openfaas", "The default policy used when secrets are deployed with a function")
 	vaultSecretPathPrefix = flag.String("vault_secret_path_prefix", "secret/openfaas", "The Vault k/v path prefix used when secrets are deployed with a function")
-	vaultAppRoleID        = flag.String("vault_app_role_id", "", "TODO")
-	vaultAppRoleSecret    = flag.String("vault_app_secret_id", "", "TODO")
+	vaultAppRoleID        = flag.String("vault_app_role_id", "", "A valid Vault AppRole role_id")
+	vaultAppRoleSecretID  = flag.String("vault_app_secret_id", "", "A valid Vault AppRole secret_id derived from the role")
 )
 
 var functionTimeout = flag.Duration("function_timeout", 30*time.Second, "Timeout for function execution")
@@ -109,24 +109,29 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 	logger.Info("Vault address: " + vaultConfig.Addr)
 
 	providerConfig := &fntypes.ProviderConfig{
-		VaultDefaultPolicy:    *vaultDefaultPolicy,
-		VaultSecretPathPrefix: *vaultSecretPathPrefix,
-		VaultAppRoleID:        *vaultAppRoleID,
-		VaultAppSecretID:      *vaultAppRoleSecret,
-		Datacenter:            datacenter,
-		ConsulAddress:         *consulAddr,
-		ConsulDNSEnabled:      *enableConsulDNS,
+		Vault: fntypes.VaultConfig{
+			DefaultPolicy:    *vaultDefaultPolicy,
+			SecretPathPrefix: *vaultSecretPathPrefix,
+			AppRoleID:        *vaultAppRoleID,
+			AppSecretID:      *vaultAppRoleSecretID,
+		},
+		Datacenter:       datacenter,
+		ConsulAddress:    *consulAddr,
+		ConsulDNSEnabled: *enableConsulDNS,
 	}
 
 	vaultClient, err := vapi.NewClient(vapi.DefaultConfig())
 	vaultClient.SetAddress(vaultConfig.Addr)
 
-	vaultLogin, err := fnvault.NewVaultLoginInfo(vaultClient, *vaultAppRoleID, *vaultAppRoleSecret)
+	vaultLogin, err := fnvault.NewVaultLoginInfo(vaultClient, providerConfig.Vault.AppRoleID, providerConfig.Vault.AppSecretID)
 	if err != nil {
-		logger.Error("Unable to login to Vault. Secrets will not work properly.", err)
+		logger.Error("Unable to login to Vault. Secrets will not work properly", err.Error())
 	}
 
-	vaultClient.SetToken(vaultLogin.Auth.ClientToken)
+	if len(vaultLogin.Auth.ClientToken) > 0 {
+		vaultClient.SetToken(vaultLogin.Auth.ClientToken)
+		logger.Info("Vault authentication successful!")
+	}
 
 	return &types.FaaSHandlers{
 		FunctionReader: handlers.MakeReader(nomadClient.Jobs(), logger, stats),
@@ -138,7 +143,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), *providerConfig, logger, stats),
 		InfoHandler:    handlers.MakeInfo(logger, stats, version),
 		Health:         handlers.MakeHealthHandler(),
-		SecretHandler:  handlers.MakeSecretHandler(vaultClient, logger, *providerConfig),
+		SecretHandler:  handlers.MakeSecretHandler(vaultClient, logger.Named("secrets_handler"), *providerConfig),
 	}
 }
 

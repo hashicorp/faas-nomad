@@ -2,30 +2,36 @@ package vault
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
-	"github.com/hashicorp/faas-nomad/types"
 	"github.com/hashicorp/vault/api"
 )
 
-func NewVaultLoginInfo(vaultClient *api.Client, vaultAppRoleID string, vaultAppRoleSecret string) (types.VaultLoginInfo, error) {
+func NewVaultLoginInfo(vaultClient *api.Client, roleID string, secretID string) (api.Secret, error) {
 
-	var vaultLogin types.VaultLoginInfo
-	loginRequest := vaultClient.NewRequest("POST", "/v1/auth/approle/login")
-	loginRequest.SetJSONBody(map[string]interface{}{"role_id": vaultAppRoleID, "secret_id": vaultAppRoleSecret})
-	req, err := loginRequest.ToHTTP()
-	if err != nil {
-		return vaultLogin, err
-	}
-
+	var vaultLogin api.Secret
 	client := &http.Client{}
-	resp, err := client.Do(req)
+
+	loginRequest := vaultClient.NewRequest("POST", "/v1/auth/approle/login")
+	loginRequest.SetJSONBody(map[string]interface{}{"role_id": roleID, "secret_id": secretID})
+	lReq, err := loginRequest.ToHTTP()
 	if err != nil {
 		return vaultLogin, err
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
-	parseErr := json.Unmarshal(body, &vaultLogin)
+
+	lResp, err := client.Do(lReq)
+	if err != nil {
+		return vaultLogin, err
+	}
+
+	if lResp.StatusCode != http.StatusOK {
+		return vaultLogin, fmt.Errorf("Vault response status code %v", lResp.StatusCode)
+	}
+
+	lBody, _ := ioutil.ReadAll(lResp.Body)
+	parseErr := json.Unmarshal(lBody, &vaultLogin)
 	if parseErr != nil {
 		return vaultLogin, parseErr
 	}
