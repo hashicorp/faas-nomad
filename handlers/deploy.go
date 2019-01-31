@@ -152,7 +152,7 @@ func createTask(r requests.CreateFunctionRequest, providerConfig types.ProviderC
 
 	if len(r.Secrets) > 0 {
 		task.Config["volumes"] = createSecretVolumes(r.Secrets)
-		task.Templates = createSecrets(providerConfig.Vault.SecretPathPrefix, r.Service, r.Secrets)
+		task.Templates = createSecrets(providerConfig.Vault.SecretPathPrefix, r.Secrets)
 		// TODO: check function annotations for vault policies
 		task.Vault = &api.Vault{
 			Policies: []string{providerConfig.Vault.DefaultPolicy},
@@ -265,14 +265,14 @@ func createUpdateStrategy() *api.UpdateStrategy {
 	}
 }
 
-func createSecrets(vaultPrefix string, name string, secrets []string) []*api.Template {
+func createSecrets(vaultPrefix string, secrets []string) []*api.Template {
 	templates := []*api.Template{}
 
 	for _, s := range secrets {
-		path := fmt.Sprintf("%s/%s", vaultPrefix, name)
+		path := fmt.Sprintf("%s/%s", vaultPrefix, s)
 		destPath := "secrets/" + s
 
-		embeddedTemplate := fmt.Sprintf(`{{with secret "%s"}}{{.Data.%s}}{{end}}`, path, s)
+		embeddedTemplate := fmt.Sprintf(`{{with secret "%s"}}{{.Data.value}}{{end}}`, path)
 		template := &api.Template{
 			DestPath:     &destPath,
 			EmbeddedTmpl: &embeddedTemplate,

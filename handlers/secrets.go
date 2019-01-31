@@ -21,10 +21,8 @@ func MakeSecretHandler(vaultClient *vapi.Client, log hclog.Logger, providerConfi
 
 		body, readBodyErr := ioutil.ReadAll(r.Body)
 		if readBodyErr != nil {
-			log.Error("couldn't read body of a request: %s", readBodyErr)
-
+			log.Error("Couldn't read body of a request: %s", readBodyErr)
 			w.WriteHeader(http.StatusInternalServerError)
-
 			return
 		}
 
@@ -39,10 +37,10 @@ func MakeSecretHandler(vaultClient *vapi.Client, log hclog.Logger, providerConfi
 			responseStatus, responseBody, responseErr = getSecrets(vaultClient, providerConfig, body)
 			break
 		case http.MethodPost:
-			responseStatus, responseBody, responseErr = createNewSecret(vaultClient, providerConfig, body)
+			responseStatus, responseBody, responseErr = createNewSecret(http.MethodPost, vaultClient, providerConfig, body)
 			break
 		case http.MethodPut:
-			responseStatus, responseBody, responseErr = createNewSecret(vaultClient, providerConfig, body)
+			responseStatus, responseBody, responseErr = createNewSecret(http.MethodPut, vaultClient, providerConfig, body)
 			break
 		case http.MethodDelete:
 			responseStatus, responseBody, responseErr = deleteSecret(vaultClient, providerConfig, body)
@@ -51,11 +49,11 @@ func MakeSecretHandler(vaultClient *vapi.Client, log hclog.Logger, providerConfi
 
 		if responseErr != nil {
 			log.Error("Vault error response", responseErr)
-
 			w.WriteHeader(responseStatus)
-
 			return
 		}
+
+		w.WriteHeader(responseStatus)
 
 		if responseBody != nil {
 			_, writeErr := w.Write(responseBody)
@@ -67,31 +65,33 @@ func MakeSecretHandler(vaultClient *vapi.Client, log hclog.Logger, providerConfi
 				return
 			}
 		}
-
-		w.WriteHeader(responseStatus)
 	}
 }
 
 func getSecrets(vaultClient *vapi.Client, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
 
-	response, err := getSecretResponse(vaultClient, "LIST", fmt.Sprintf("/v1/secret/%s", providerConfig.Vault.DefaultPolicy), nil)
+	response, respErr := getSecretResponse(vaultClient, "LIST",
+		fmt.Sprintf("/v1/secret/%s", providerConfig.Vault.DefaultPolicy), nil)
 
-	if err != nil {
-		return http.StatusInternalServerError, nil, err
+	if respErr != nil {
+		return http.StatusInternalServerError,
+			nil,
+			fmt.Errorf("Error in request to Vault: %s", respErr)
 	}
 
 	if response.StatusCode != http.StatusOK {
-		return response.StatusCode, nil, err
+		return http.StatusBadRequest, nil, fmt.Errorf("Vault returned unexpected response: %v", response.StatusCode)
 	}
 
 	var secretList vapi.Secret
-	body, err = ioutil.ReadAll(response.Body)
-	if err != nil {
-		return http.StatusInternalServerError, nil, err
+	secretsBody, bodyErr := ioutil.ReadAll(response.Body)
+	if bodyErr != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("Error reading response body: %s", bodyErr)
 	}
-	unmarshalErr := json.Unmarshal(body, &secretList)
+
+	unmarshalErr := json.Unmarshal(secretsBody, &secretList)
 	if unmarshalErr != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("Error in json deserialisation: %s", unmarshalErr)
 	}
 
 	secrets := []requests.Secret{}
@@ -109,43 +109,51 @@ func getSecrets(vaultClient *vapi.Client, providerConfig types.ProviderConfig, b
 	return http.StatusOK, resultsJson, nil
 }
 
-func createNewSecret(vaultClient *vapi.Client, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
+func createNewSecret(method string, vaultClient *vapi.Client, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
 
 	var secret requests.Secret
-
 	unmarshalErr := json.Unmarshal(body, &secret)
 	if unmarshalErr != nil {
-		return http.StatusBadRequest, nil, unmarshalErr
+		return http.StatusBadRequest, nil, fmt.Errorf("Error in request json deserialisation: %s", unmarshalErr)
 	}
 
-	response, err := getSecretResponse(vaultClient, http.MethodPost, fmt.Sprintf("/v1/secret/%s/%s", providerConfig.Vault.DefaultPolicy, secret.Name), map[string]interface{}{"value": secret.Value})
-	if err != nil {
-		return http.StatusInternalServerError, nil, err
+	response, respErr := getSecretResponse(vaultClient, method,
+		fmt.Sprintf("/v1/secret/%s/%s", providerConfig.Vault.DefaultPolicy, secret.Name),
+		map[string]interface{}{"value": secret.Value})
+
+	if respErr != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("Error in request to Vault: %s", respErr)
 	}
 
+	// Vault only returns 204 type success
 	if response.StatusCode != http.StatusNoContent {
-		return response.StatusCode, nil, err
+		return http.StatusBadRequest, nil, fmt.Errorf("Vault returned unexpected response: %v", response.StatusCode)
 	}
 
-	return http.StatusCreated, nil, nil
+	// as per gateway api docs
+	if method == http.MethodPost {
+		return http.StatusCreated, nil, nil
+	} else {
+		return http.StatusOK, nil, nil
+	}
 }
 
 func deleteSecret(vaultClient *vapi.Client, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
 
 	var secret requests.Secret
-
 	unmarshalErr := json.Unmarshal(body, &secret)
 	if unmarshalErr != nil {
-		return http.StatusBadRequest, nil, unmarshalErr
+		return http.StatusBadRequest, nil, fmt.Errorf("Error in request json deserialisation: %s", unmarshalErr)
 	}
 
-	response, err := getSecretResponse(vaultClient, http.MethodDelete, fmt.Sprintf("/v1/secret/%s/%s", providerConfig.Vault.DefaultPolicy, secret.Name), nil)
-	if err != nil {
-		return http.StatusInternalServerError, nil, err
+	response, respErr := getSecretResponse(vaultClient, http.MethodDelete,
+		fmt.Sprintf("/v1/secret/%s/%s", providerConfig.Vault.DefaultPolicy, secret.Name), nil)
+	if respErr != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("Error in request to Vault: %s", respErr)
 	}
 
 	if response.StatusCode != http.StatusNoContent {
-		return response.StatusCode, nil, err
+		return http.StatusBadRequest, nil, fmt.Errorf("Vault returned unexpected response: %v", response.StatusCode)
 	}
 
 	return http.StatusOK, nil, nil
