@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mitchellh/mapstructure"
-
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/faas-nomad/consul"
@@ -21,6 +19,7 @@ import (
 	"github.com/hashicorp/faas-nomad/vault"
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
+	"github.com/mitchellh/mapstructure"
 	bootstrap "github.com/openfaas/faas-provider"
 	"github.com/openfaas/faas-provider/types"
 )
@@ -137,7 +136,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), *providerConfig, logger, stats),
 		InfoHandler:    handlers.MakeInfo(logger, stats, version),
 		Health:         handlers.MakeHealthHandler(),
-		SecretHandler:  handlers.MakeSecretHandler(vs, logger.Named("secrets_handler"), *providerConfig),
+		SecretHandler:  handlers.MakeSecretHandler(vs, logger.Named("secrets_handler")),
 	}
 }
 

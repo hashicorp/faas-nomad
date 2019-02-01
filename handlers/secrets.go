@@ -7,14 +7,17 @@ import (
 	"net/http"
 
 	"github.com/hashicorp/faas-nomad/vault"
-
-	"github.com/hashicorp/faas-nomad/types"
 	hclog "github.com/hashicorp/go-hclog"
 	vapi "github.com/hashicorp/vault/api"
 	"github.com/openfaas/faas/gateway/requests"
 )
 
-func MakeSecretHandler(vs *vault.VaultService, log hclog.Logger, providerConfig types.ProviderConfig) http.HandlerFunc {
+type SecretsResponse struct {
+	StatusCode int
+	Body       []byte
+}
+
+func MakeSecretHandler(vs *vault.VaultService, log hclog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		if r.Body != nil {
@@ -29,36 +32,35 @@ func MakeSecretHandler(vs *vault.VaultService, log hclog.Logger, providerConfig 
 		}
 
 		var (
-			responseStatus int
-			responseBody   []byte
-			responseErr    error
+			response    SecretsResponse
+			responseErr error
 		)
 
 		switch r.Method {
 		case http.MethodGet:
-			responseStatus, responseBody, responseErr = getSecrets(vs, providerConfig, body)
+			response, responseErr = getSecrets(vs, body)
 			break
 		case http.MethodPost:
-			responseStatus, responseBody, responseErr = createNewSecret(http.MethodPost, vs, providerConfig, body)
+			response, responseErr = createNewSecret(vs, body)
 			break
 		case http.MethodPut:
-			responseStatus, responseBody, responseErr = createNewSecret(http.MethodPut, vs, providerConfig, body)
+			response, responseErr = updateSecret(vs, body)
 			break
 		case http.MethodDelete:
-			responseStatus, responseBody, responseErr = deleteSecret(vs, providerConfig, body)
+			response, responseErr = deleteSecret(vs, body)
 			break
 		}
 
 		if responseErr != nil {
 			log.Error(responseErr.Error())
-			w.WriteHeader(responseStatus)
+			w.WriteHeader(response.StatusCode)
 			return
 		}
 
-		w.WriteHeader(responseStatus)
+		w.WriteHeader(response.StatusCode)
 
-		if responseBody != nil {
-			_, writeErr := w.Write(responseBody)
+		if response.Body != nil {
+			_, writeErr := w.Write(response.Body)
 
 			if writeErr != nil {
 				log.Error("Cannot write body of a response")
@@ -70,31 +72,35 @@ func MakeSecretHandler(vs *vault.VaultService, log hclog.Logger, providerConfig 
 	}
 }
 
-func getSecrets(vs *vault.VaultService, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
+func getSecrets(vs *vault.VaultService, body []byte) (resp SecretsResponse, err error) {
 
 	response, respErr := vs.DoRequest("LIST",
-		fmt.Sprintf("/v1/secret/%s", providerConfig.Vault.DefaultPolicy), nil)
+		fmt.Sprintf("/v1/secret/%s", vs.Config.DefaultPolicy), nil)
 
 	if respErr != nil {
-		return http.StatusInternalServerError,
-			nil,
+		return SecretsResponse{StatusCode: http.StatusInternalServerError},
 			fmt.Errorf("Error in request to Vault: %s", respErr)
 	}
 
 	// If Vault finds nothing, return StatusOK according to gateway API docs
 	if response.StatusCode == http.StatusNotFound {
-		return http.StatusOK, []byte(`[]`), nil
+		return SecretsResponse{
+			StatusCode: http.StatusOK,
+			Body:       []byte(`[]`),
+		}, nil
 	}
 
 	var secretList vapi.Secret
 	secretsBody, bodyErr := ioutil.ReadAll(response.Body)
 	if bodyErr != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("Error reading response body: %s", bodyErr)
+		return SecretsResponse{StatusCode: http.StatusInternalServerError},
+			fmt.Errorf("Error reading response body: %s", bodyErr)
 	}
 
 	unmarshalErr := json.Unmarshal(secretsBody, &secretList)
 	if unmarshalErr != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("Error in json deserialisation: %s", unmarshalErr)
+		return SecretsResponse{StatusCode: http.StatusInternalServerError},
+			fmt.Errorf("Error in json deserialisation: %s", unmarshalErr)
 	}
 
 	secrets := []requests.Secret{}
@@ -104,61 +110,78 @@ func getSecrets(vs *vault.VaultService, providerConfig types.ProviderConfig, bod
 
 	resultsJson, marshalErr := json.Marshal(secrets)
 	if marshalErr != nil {
-		return http.StatusInternalServerError,
-			nil,
+		return SecretsResponse{StatusCode: http.StatusInternalServerError},
 			marshalErr
 	}
 
-	return http.StatusOK, resultsJson, nil
+	return SecretsResponse{StatusCode: http.StatusOK, Body: resultsJson}, nil
 }
 
-func createNewSecret(method string, vs *vault.VaultService, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
+func createNewSecret(vs *vault.VaultService, body []byte) (resp SecretsResponse, err error) {
 
 	var secret requests.Secret
 	unmarshalErr := json.Unmarshal(body, &secret)
 	if unmarshalErr != nil {
-		return http.StatusBadRequest, nil, fmt.Errorf("Error in request json deserialisation: %s", unmarshalErr)
+		return SecretsResponse{StatusCode: http.StatusBadRequest}, fmt.Errorf("Error in request json deserialisation: %s", unmarshalErr)
 	}
 
-	response, respErr := vs.DoRequest(method,
-		fmt.Sprintf("/v1/secret/%s/%s", providerConfig.Vault.DefaultPolicy, secret.Name),
+	response, respErr := vs.DoRequest(http.MethodPost,
+		fmt.Sprintf("/v1/secret/%s/%s", vs.Config.DefaultPolicy, secret.Name),
 		map[string]interface{}{"value": secret.Value})
 
 	if respErr != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("Error in request to Vault: %s", respErr)
+		return SecretsResponse{StatusCode: http.StatusInternalServerError}, fmt.Errorf("Error in request to Vault: %s", respErr)
 	}
 
 	// Vault only returns 204 type success
 	if response.StatusCode != http.StatusNoContent {
-		return http.StatusBadRequest, nil, fmt.Errorf("Vault returned unexpected response: %v", response.StatusCode)
+		return SecretsResponse{StatusCode: http.StatusInternalServerError}, fmt.Errorf("Vault returned unexpected response: %v", response.StatusCode)
 	}
 
-	// as per gateway api docs
-	if method == http.MethodPost {
-		return http.StatusCreated, nil, nil
-	} else {
-		return http.StatusOK, nil, nil
-	}
+	return SecretsResponse{StatusCode: http.StatusCreated}, nil
 }
 
-func deleteSecret(vs *vault.VaultService, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
+func updateSecret(vs *vault.VaultService, body []byte) (resp SecretsResponse, err error) {
 
 	var secret requests.Secret
 	unmarshalErr := json.Unmarshal(body, &secret)
 	if unmarshalErr != nil {
-		return http.StatusBadRequest, nil, fmt.Errorf("Error in request json deserialisation: %s", unmarshalErr)
+		return SecretsResponse{StatusCode: http.StatusBadRequest}, fmt.Errorf("Error in request json deserialisation: %s", unmarshalErr)
+	}
+
+	response, respErr := vs.DoRequest(http.MethodPut,
+		fmt.Sprintf("/v1/secret/%s/%s", vs.Config.DefaultPolicy, secret.Name),
+		map[string]interface{}{"value": secret.Value})
+
+	if respErr != nil {
+		return SecretsResponse{StatusCode: http.StatusInternalServerError}, fmt.Errorf("Error in request to Vault: %s", respErr)
+	}
+
+	// Vault only returns 204 type success
+	if response.StatusCode != http.StatusNoContent {
+		return SecretsResponse{StatusCode: http.StatusInternalServerError}, fmt.Errorf("Vault returned unexpected response: %v", response.StatusCode)
+	}
+
+	return SecretsResponse{StatusCode: http.StatusOK}, nil
+}
+
+func deleteSecret(vs *vault.VaultService, body []byte) (resp SecretsResponse, err error) {
+
+	var secret requests.Secret
+	unmarshalErr := json.Unmarshal(body, &secret)
+	if unmarshalErr != nil {
+		return SecretsResponse{StatusCode: http.StatusBadRequest}, fmt.Errorf("Error in request json deserialisation: %s", unmarshalErr)
 	}
 
 	response, respErr := vs.DoRequest(http.MethodDelete,
-		fmt.Sprintf("/v1/secret/%s/%s", providerConfig.Vault.DefaultPolicy, secret.Name), nil)
+		fmt.Sprintf("/v1/secret/%s/%s", vs.Config.DefaultPolicy, secret.Name), nil)
 	if respErr != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("Error in request to Vault: %s", respErr)
+		return SecretsResponse{StatusCode: http.StatusInternalServerError}, fmt.Errorf("Error in request to Vault: %s", respErr)
 	}
 
 	if response.StatusCode != http.StatusNoContent {
-		return http.StatusBadRequest, nil, fmt.Errorf("Vault returned unexpected response: %v", response.StatusCode)
+		return SecretsResponse{StatusCode: http.StatusInternalServerError}, fmt.Errorf("Vault returned unexpected response: %v", response.StatusCode)
 	}
 
-	return http.StatusOK, nil, nil
-
+	return SecretsResponse{StatusCode: http.StatusOK}, nil
 }
