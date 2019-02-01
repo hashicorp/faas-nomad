@@ -18,10 +18,9 @@ import (
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	fntypes "github.com/hashicorp/faas-nomad/types"
-	fnvault "github.com/hashicorp/faas-nomad/vault"
+	"github.com/hashicorp/faas-nomad/vault"
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
-	vapi "github.com/hashicorp/vault/api"
 	bootstrap "github.com/openfaas/faas-provider"
 	"github.com/openfaas/faas-provider/types"
 )
@@ -40,7 +39,7 @@ var (
 	nomadRegion           = flag.String("nomad_region", "global", "Default region to schedule functions in")
 	enableBasicAuth       = flag.Bool("enable_basic_auth", false, "Flag for enabling basic authentication on gateway endpoints")
 	basicAuthSecretPath   = flag.String("basic_auth_secret_path", "/secrets", "The directory path to the basic auth secret file")
-	vaultAddrOverride     = flag.String("vault_addr", "", "Vault address override. Default Vault address is return from the Nomad agent")
+	vaultAddrOverride     = flag.String("vault_addr", "", "Vault address override. Default Vault address is returned from the Nomad agent")
 	vaultDefaultPolicy    = flag.String("vault_default_policy", "openfaas", "The default policy used when secrets are deployed with a function")
 	vaultSecretPathPrefix = flag.String("vault_secret_path_prefix", "secret/openfaas", "The Vault k/v path prefix used when secrets are deployed with a function")
 	vaultAppRoleID        = flag.String("vault_app_role_id", "", "A valid Vault AppRole role_id")
@@ -107,29 +106,24 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 	}
 
 	logger.Info("Vault address: " + vaultConfig.Addr)
+	vaultConfig.DefaultPolicy = *vaultDefaultPolicy
+	vaultConfig.SecretPathPrefix = *vaultSecretPathPrefix
+	vaultConfig.AppRoleID = *vaultAppRoleID
+	vaultConfig.AppSecretID = *vaultAppRoleSecretID
 
 	providerConfig := &fntypes.ProviderConfig{
-		Vault: fntypes.VaultConfig{
-			DefaultPolicy:    *vaultDefaultPolicy,
-			SecretPathPrefix: *vaultSecretPathPrefix,
-			AppRoleID:        *vaultAppRoleID,
-			AppSecretID:      *vaultAppRoleSecretID,
-		},
+		Vault:            vaultConfig,
 		Datacenter:       datacenter,
 		ConsulAddress:    *consulAddr,
 		ConsulDNSEnabled: *enableConsulDNS,
 	}
 
-	vaultClient, err := vapi.NewClient(vapi.DefaultConfig())
-	vaultClient.SetAddress(vaultConfig.Addr)
+	vs := vault.NewVaultService(&vaultConfig, logger)
 
-	vaultLogin, err := fnvault.NewVaultLoginInfo(vaultClient, providerConfig.Vault.AppRoleID, providerConfig.Vault.AppSecretID)
-	if err != nil {
-		logger.Error("Unable to login to Vault. Secrets will not work properly", err.Error())
-	}
-
-	if len(vaultLogin.Auth.ClientToken) > 0 {
-		vaultClient.SetToken(vaultLogin.Auth.ClientToken)
+	_, loginErr := vs.Login()
+	if loginErr != nil {
+		logger.Error("Unable to login to Vault. Secrets will not work properly", loginErr.Error())
+	} else {
 		logger.Info("Vault authentication successful!")
 	}
 
@@ -143,7 +137,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), *providerConfig, logger, stats),
 		InfoHandler:    handlers.MakeInfo(logger, stats, version),
 		Health:         handlers.MakeHealthHandler(),
-		SecretHandler:  handlers.MakeSecretHandler(vaultClient, logger.Named("secrets_handler"), *providerConfig),
+		SecretHandler:  handlers.MakeSecretHandler(vs, logger.Named("secrets_handler"), *providerConfig),
 	}
 }
 

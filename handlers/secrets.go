@@ -6,13 +6,15 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/hashicorp/faas-nomad/vault"
+
 	"github.com/hashicorp/faas-nomad/types"
 	hclog "github.com/hashicorp/go-hclog"
 	vapi "github.com/hashicorp/vault/api"
 	"github.com/openfaas/faas/gateway/requests"
 )
 
-func MakeSecretHandler(vaultClient *vapi.Client, log hclog.Logger, providerConfig types.ProviderConfig) http.HandlerFunc {
+func MakeSecretHandler(vs *vault.VaultService, log hclog.Logger, providerConfig types.ProviderConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		if r.Body != nil {
@@ -34,21 +36,21 @@ func MakeSecretHandler(vaultClient *vapi.Client, log hclog.Logger, providerConfi
 
 		switch r.Method {
 		case http.MethodGet:
-			responseStatus, responseBody, responseErr = getSecrets(vaultClient, providerConfig, body)
+			responseStatus, responseBody, responseErr = getSecrets(vs, providerConfig, body)
 			break
 		case http.MethodPost:
-			responseStatus, responseBody, responseErr = createNewSecret(http.MethodPost, vaultClient, providerConfig, body)
+			responseStatus, responseBody, responseErr = createNewSecret(http.MethodPost, vs, providerConfig, body)
 			break
 		case http.MethodPut:
-			responseStatus, responseBody, responseErr = createNewSecret(http.MethodPut, vaultClient, providerConfig, body)
+			responseStatus, responseBody, responseErr = createNewSecret(http.MethodPut, vs, providerConfig, body)
 			break
 		case http.MethodDelete:
-			responseStatus, responseBody, responseErr = deleteSecret(vaultClient, providerConfig, body)
+			responseStatus, responseBody, responseErr = deleteSecret(vs, providerConfig, body)
 			break
 		}
 
 		if responseErr != nil {
-			log.Error("Vault error response", responseErr)
+			log.Error(responseErr.Error())
 			w.WriteHeader(responseStatus)
 			return
 		}
@@ -68,9 +70,9 @@ func MakeSecretHandler(vaultClient *vapi.Client, log hclog.Logger, providerConfi
 	}
 }
 
-func getSecrets(vaultClient *vapi.Client, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
+func getSecrets(vs *vault.VaultService, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
 
-	response, respErr := getSecretResponse(vaultClient, "LIST",
+	response, respErr := vs.DoRequest("LIST",
 		fmt.Sprintf("/v1/secret/%s", providerConfig.Vault.DefaultPolicy), nil)
 
 	if respErr != nil {
@@ -79,8 +81,9 @@ func getSecrets(vaultClient *vapi.Client, providerConfig types.ProviderConfig, b
 			fmt.Errorf("Error in request to Vault: %s", respErr)
 	}
 
-	if response.StatusCode != http.StatusOK {
-		return http.StatusBadRequest, nil, fmt.Errorf("Vault returned unexpected response: %v", response.StatusCode)
+	// If Vault finds nothing, return StatusOK according to gateway API docs
+	if response.StatusCode == http.StatusNotFound {
+		return http.StatusOK, []byte(`[]`), nil
 	}
 
 	var secretList vapi.Secret
@@ -109,7 +112,7 @@ func getSecrets(vaultClient *vapi.Client, providerConfig types.ProviderConfig, b
 	return http.StatusOK, resultsJson, nil
 }
 
-func createNewSecret(method string, vaultClient *vapi.Client, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
+func createNewSecret(method string, vs *vault.VaultService, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
 
 	var secret requests.Secret
 	unmarshalErr := json.Unmarshal(body, &secret)
@@ -117,7 +120,7 @@ func createNewSecret(method string, vaultClient *vapi.Client, providerConfig typ
 		return http.StatusBadRequest, nil, fmt.Errorf("Error in request json deserialisation: %s", unmarshalErr)
 	}
 
-	response, respErr := getSecretResponse(vaultClient, method,
+	response, respErr := vs.DoRequest(method,
 		fmt.Sprintf("/v1/secret/%s/%s", providerConfig.Vault.DefaultPolicy, secret.Name),
 		map[string]interface{}{"value": secret.Value})
 
@@ -138,7 +141,7 @@ func createNewSecret(method string, vaultClient *vapi.Client, providerConfig typ
 	}
 }
 
-func deleteSecret(vaultClient *vapi.Client, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
+func deleteSecret(vs *vault.VaultService, providerConfig types.ProviderConfig, body []byte) (responseStatus int, responseBody []byte, err error) {
 
 	var secret requests.Secret
 	unmarshalErr := json.Unmarshal(body, &secret)
@@ -146,7 +149,7 @@ func deleteSecret(vaultClient *vapi.Client, providerConfig types.ProviderConfig,
 		return http.StatusBadRequest, nil, fmt.Errorf("Error in request json deserialisation: %s", unmarshalErr)
 	}
 
-	response, respErr := getSecretResponse(vaultClient, http.MethodDelete,
+	response, respErr := vs.DoRequest(http.MethodDelete,
 		fmt.Sprintf("/v1/secret/%s/%s", providerConfig.Vault.DefaultPolicy, secret.Name), nil)
 	if respErr != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("Error in request to Vault: %s", respErr)
@@ -158,14 +161,4 @@ func deleteSecret(vaultClient *vapi.Client, providerConfig types.ProviderConfig,
 
 	return http.StatusOK, nil, nil
 
-}
-
-func getSecretResponse(vaultClient *vapi.Client, method string, path string, body interface{}) (*http.Response, error) {
-
-	client := &http.Client{}
-	createRequest := vaultClient.NewRequest(method, path)
-	createRequest.SetJSONBody(body)
-
-	request, _ := createRequest.ToHTTP()
-	return client.Do(request)
 }
