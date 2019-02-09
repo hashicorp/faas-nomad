@@ -75,7 +75,7 @@ func MakeSecretHandler(vs *vault.VaultService, log hclog.Logger) http.HandlerFun
 func getSecrets(vs *vault.VaultService, body []byte) (resp SecretsResponse, err error) {
 
 	response, _ := vs.DoRequest("LIST",
-		fmt.Sprintf("/v1/secret/%s", vs.Config.DefaultPolicy), nil)
+		fmt.Sprintf("/v1/%s", vs.Config.SecretPathPrefix), nil)
 
 	// If Vault finds nothing, return StatusOK according to gateway API docs
 	if response.StatusCode == http.StatusNotFound {
@@ -117,7 +117,7 @@ func createNewSecret(vs *vault.VaultService, method string, body []byte) (resp S
 	}
 
 	response, respErr := vs.DoRequest(method,
-		fmt.Sprintf("/v1/secret/%s/%s", vs.Config.DefaultPolicy, secret.Name),
+		fmt.Sprintf("/v1/%s/%s", vs.Config.SecretPathPrefix, secret.Name),
 		map[string]interface{}{"value": secret.Value})
 
 	if respErr != nil {
@@ -141,7 +141,7 @@ func deleteSecret(vs *vault.VaultService, body []byte) (resp SecretsResponse, er
 	}
 
 	response, respErr := vs.DoRequest(http.MethodDelete,
-		fmt.Sprintf("/v1/secret/%s/%s", vs.Config.DefaultPolicy, secret.Name), nil)
+		fmt.Sprintf("/v1/%s/%s", vs.Config.SecretPathPrefix, secret.Name), nil)
 	if respErr != nil {
 		return SecretsResponse{StatusCode: http.StatusInternalServerError}, fmt.Errorf("Error in request to Vault: %s", respErr)
 	}
