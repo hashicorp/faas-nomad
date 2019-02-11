@@ -23,6 +23,7 @@ consul.hcl
 nomad.hcl
 
 .vagrant
+.vscode
 provisioning/saltstack/formulas*
 ubuntu*.log
 debug

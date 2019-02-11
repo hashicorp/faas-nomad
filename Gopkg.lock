@@ -38,6 +38,14 @@
   version = "v1.1.0"
 
 [[projects]]
+  digest = "1:af43bdaaf86655a2343f113e9b293bbc16b12099eaeb223982bbe4d4c22ba14d"
+  name = "github.com/fatih/structs"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "4966fc68f5b7593aafa6cbbba2d65ec6e1416047"
+  version = "v1.1.0"
+
+[[projects]]
   digest = "1:4c0989ca0bcd10799064318923b9bc2db6b4d6338dd75f3f2d86c3511aaaf5cf"
   name = "github.com/golang/protobuf"
   packages = [
@@ -144,27 +152,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:183f00c472fb9b2446659618eebf4899872fa267b92f926539411abdc8b941df"
-  name = "github.com/hashicorp/go-retryablehttp"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "e651d75abec6fbd4f2c09508f72ae7af8a8b7171"
-
-[[projects]]
-  branch = "master"
   digest = "1:45aad874d3c7d5e8610427c81870fb54970b981692930ec2a319ce4cb89d7a00"
   name = "github.com/hashicorp/go-rootcerts"
   packages = ["."]
   pruneopts = "UT"
   revision = "6bb64b370b90e7ef1fa532be9e591a81c3493e00"
-
-[[projects]]
-  branch = "master"
-  digest = "1:14f2005c31ddf99c4a0f36fc440f8d1ac43224194c7c4a904b3c8f4ba5654d0b"
-  name = "github.com/hashicorp/go-sockaddr"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "6d291a969b86c4b633730bfc6b8b9d64c3aafed9"
 
 [[projects]]
   digest = "1:ea40c24cdbacd054a6ae9de03e62c5f252479b96c716375aace5c120d68647c8"
@@ -206,20 +198,18 @@
   version = "v0.8.1"
 
 [[projects]]
-  digest = "1:dbef1dda9aa352f3e62bcaa87be4e33d5e1736416aec983a7868d219249e919d"
+  digest = "1:62acb0602e1fa54327d91ca4290e286b47216f316f1c35fa400a493a0e92af94"
   name = "github.com/hashicorp/vault"
   packages = [
     "api",
     "helper/compressutil",
-    "helper/consts",
-    "helper/hclutil",
     "helper/jsonutil",
     "helper/parseutil",
     "helper/strutil",
   ]
   pruneopts = "UT"
-  revision = "87492f9258e0227f3717e3883c6a8be5716bf564"
-  version = "v0.11.0"
+  revision = "7e1fbde40afee241f81ef08700e7987d86fc7242"
+  version = "v0.9.6"
 
 [[projects]]
   branch = "master"
@@ -246,12 +236,12 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:645110e089152bd0f4a011a2648fbb0e4df5977be73ca605781157ac297f50c4"
+  digest = "1:53bc4cd4914cd7cd52139990d5170d6dc99067ae31c56530621b18b35fc30318"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
   pruneopts = "UT"
-  revision = "fa473d140ef3c6adf42d6b391fe76707f1f243c8"
-  version = "v1.0.0"
+  revision = "3536a929edddb9a5b34bd6861dc4a9647cb459fe"
+  version = "v1.1.2"
 
 [[projects]]
   digest = "1:deadcfd2cb94b97f30ada9a6ef49d32e9678ba0c686cb1c4ff8d77bda7e2a636"
@@ -281,15 +271,15 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:cd4844d2c87206efa7faa9ea920f936e4f16512ac3fa342e7534dfb6d804a63b"
+  digest = "1:3f69624cb4ae8ab815a672f7d169d64786ee027a9d42eefab3c9d4e9debe0750"
   name = "github.com/openfaas/faas"
   packages = ["gateway/requests"]
   pruneopts = "UT"
-  revision = "91b6c244941c41b4750c9fcc90fc678d196d4619"
-  version = "0.8.12"
+  revision = "ec185bad6726ca44ef1780a320c0e2081933ee6c"
+  version = "0.10.1"
 
 [[projects]]
-  digest = "1:438c2f5a8daffdb8213ca5e062681a18b9505a7f9afc13266f17d873b5d53c66"
+  digest = "1:51ce680938533385fd69725839e0e419d6e100308897341ff93151571d73cd7f"
   name = "github.com/openfaas/faas-provider"
   packages = [
     ".",
@@ -297,8 +287,8 @@
     "types",
   ]
   pruneopts = "UT"
-  revision = "845bf7aa58cb08352c5b2501807837e464ab071d"
-  version = "0.7.1"
+  revision = "220324e98f5db5aa61f02d1ab13f03e91310796c"
+  version = "0.8.1"
 
 [[projects]]
   digest = "1:808cdddf087fb64baeae67b8dfaee2069034d9704923a3cb8bd96a995421a625"
@@ -331,6 +321,14 @@
   pruneopts = "UT"
   revision = "572520ed46dbddaed19ea3d9541bdd0494163693"
   version = "v0.1"
+
+[[projects]]
+  digest = "1:4ca145a665316d3c020a39c0741780fa3636b9152b824206796c4dce541f4a24"
+  name = "github.com/sethgrid/pester"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "03e26c9abbbf5accb8349790bf9f41bde09d72c3"
+  version = "1.0.0"
 
 [[projects]]
   digest = "1:ac83cf90d08b63ad5f7e020ef480d319ae890c208f8524622a2f3136e2686b02"
@@ -400,14 +398,6 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:c9e7a4b4d47c0ed205d257648b0e5b0440880cb728506e318f8ac7cd36270bc4"
-  name = "golang.org/x/time"
-  packages = ["rate"]
-  pruneopts = "UT"
-  revision = "fbb02b2291d28baffd63558aa44b4b56f178d650"
-
-[[projects]]
-  branch = "master"
   digest = "1:077c1c599507b3b3e9156d17d36e1e61928ee9b53a5b420f10f28ebd4a0b275c"
   name = "google.golang.org/genproto"
   packages = ["googleapis/rpc/status"]
@@ -462,6 +452,8 @@
     "github.com/hashicorp/consul/api",
     "github.com/hashicorp/go-hclog",
     "github.com/hashicorp/nomad/api",
+    "github.com/hashicorp/vault/api",
+    "github.com/mitchellh/mapstructure",
     "github.com/nicholasjackson/bench/plugin/shared",
     "github.com/nicholasjackson/ultraclient",
     "github.com/openfaas/faas-provider",

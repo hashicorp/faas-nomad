@@ -60,7 +60,7 @@ require (
 	github.com/hashicorp/nomad v0.7.1
 	github.com/hashicorp/raft v1.0.0 // indirect
 	github.com/hashicorp/serf v0.8.1 // indirect
-	github.com/hashicorp/vault v0.11.0 // indirect
+	github.com/hashicorp/vault v0.11.0
 	github.com/hashicorp/vault-plugin-secrets-kv v0.0.0-20181106190520-2236f141171e // indirect
 	github.com/hashicorp/yamux v0.0.0-20180826203732-cc6d2ea263b2 // indirect
 	github.com/jefferai/jsonx v0.0.0-20160721235117-9cc31c3135ee // indirect
@@ -78,15 +78,15 @@ require (
 	github.com/mitchellh/go-homedir v1.0.0 // indirect
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
 	github.com/mitchellh/hashstructure v1.0.0 // indirect
-	github.com/mitchellh/mapstructure v1.0.0 // indirect
+	github.com/mitchellh/mapstructure v1.1.2
 	github.com/nicholasjackson/bench v0.0.0-20170818135939-39c3cb80881e
 	github.com/nicholasjackson/ultraclient v0.0.0-20180121153149-bdc428fdc114
 	github.com/oklog/run v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opencontainers/runc v0.1.1 // indirect
-	github.com/openfaas/faas v0.0.0-20180822191204-91b6c244941c
-	github.com/openfaas/faas-provider v0.0.0-20181104131730-8b3147b013c6
+	github.com/openfaas/faas v0.0.0-20190124094614-ec185bad6726
+	github.com/openfaas/faas-provider v0.0.0-20181216160432-220324e98f5d
 	github.com/ory/dockertest v3.3.2+incompatible // indirect
 	github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible

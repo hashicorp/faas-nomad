@@ -16,8 +16,10 @@ import (
 	"github.com/hashicorp/faas-nomad/metrics"
 	"github.com/hashicorp/faas-nomad/nomad"
 	fntypes "github.com/hashicorp/faas-nomad/types"
+	"github.com/hashicorp/faas-nomad/vault"
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
+	"github.com/mitchellh/mapstructure"
 	bootstrap "github.com/openfaas/faas-provider"
 	"github.com/openfaas/faas-provider/types"
 )
@@ -29,14 +31,18 @@ var (
 	statsdServer          = flag.String("statsd_addr", "localhost:8125", "Location for the statsd collector")
 	nodeURI               = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
 	nomadAddr             = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
+	nomadACL              = flag.String("nomad_acl", "", "The ACL token for faas-nomad if Nomad ACLs are enabled")
 	consulAddr            = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
 	consulACL             = flag.String("consul_acl", "", "ACL token for Consul API, only required if ACL are enabled in Consul")
 	enableConsulDNS       = flag.Bool("enable_consul_dns", false, "Uses the consul_addr as a default DNS server. Assumes DNS interface is listening on port 53")
 	nomadRegion           = flag.String("nomad_region", "global", "Default region to schedule functions in")
 	enableBasicAuth       = flag.Bool("enable_basic_auth", false, "Flag for enabling basic authentication on gateway endpoints")
 	basicAuthSecretPath   = flag.String("basic_auth_secret_path", "/secrets", "The directory path to the basic auth secret file")
+	vaultAddrOverride     = flag.String("vault_addr", "", "Vault address override. Default Vault address is returned from the Nomad agent")
 	vaultDefaultPolicy    = flag.String("vault_default_policy", "openfaas", "The default policy used when secrets are deployed with a function")
 	vaultSecretPathPrefix = flag.String("vault_secret_path_prefix", "secret/openfaas", "The Vault k/v path prefix used when secrets are deployed with a function")
+	vaultAppRoleID        = flag.String("vault_app_role_id", "", "A valid Vault AppRole role_id")
+	vaultAppRoleSecretID  = flag.String("vault_app_secret_id", "", "A valid Vault AppRole secret_id derived from the role")
 )
 
 var functionTimeout = flag.Duration("function_timeout", 30*time.Second, "Timeout for function execution")
@@ -47,83 +53,14 @@ var (
 	loggerOutput = flag.String("logger_output", "", "Filepath to write log file, if omitted stdOut is used")
 )
 
-// parseDeprecatedEnvironment is used to merge the previous environment variable configuration to the new flag style
-// this will be removed in the next release
-func parseDeprecatedEnvironment() {
-	checkDeprecatedStatsD()
-	checkDeprecatedNomadHTTP()
-	checkDeprecatedNomadAddr()
-	checkDeprecatedConsulAddr()
-	checkDeprecatedNomadRegion()
-	checkDeprecatedLoggerLevel()
-	checkDeprecatedLoggerFormat()
-	checkDeprecatedLoggerOutput()
-}
-
-func checkDeprecatedStatsD() {
-	if env := os.Getenv("STATSD_ADDR"); env != "" {
-		*statsdServer = env
-		log.Println("The environment variable STATSD_ADDR is deprecated please use the command line flag stasd_server")
-	}
-}
-
-func checkDeprecatedNomadHTTP() {
-	if env := os.Getenv("NOMAD_ADDR_http"); env != "" {
-		*nodeURI = env
-		log.Println("The environment variable NOMAD_ADDR_http is deprecated please use the command line flag node_uri")
-	}
-}
-
-func checkDeprecatedNomadAddr() {
-	if env := os.Getenv("NOMAD_ADDR"); env != "" {
-		*nomadAddr = env
-		log.Println("The environment variable NOMAD_ADDR is deprecated please use the command line flag nomad_addr")
-	}
-}
-
-func checkDeprecatedConsulAddr() {
-	if env := os.Getenv("CONSUL_ADDR"); env != "" {
-		*consulAddr = env
-		log.Println("The environment variable CONSUL_ADDR is deprecated please use the command line flag consul_addr")
-	}
-}
-
-func checkDeprecatedNomadRegion() {
-	if env := os.Getenv("NOMAD_REGION"); env != "" {
-		*nomadRegion = env
-		log.Println("The environment variable NOMAD_REGION is deprecated please use the command line flag nomad_region")
-	}
-}
-
-func checkDeprecatedLoggerLevel() {
-	if env := os.Getenv("logger_level"); env != "" {
-		*loggerLevel = env
-		log.Println("The environment variable logger_level is deprecated please use the command line flag logger_level")
-	}
-}
-
-func checkDeprecatedLoggerFormat() {
-	if env := os.Getenv("logger_format"); env != "" {
-		*loggerFormat = env
-		log.Println("The environment variable logger_format is deprecated please use the command line flag logger_format")
-	}
-}
-
-func checkDeprecatedLoggerOutput() {
-	if env := os.Getenv("logger_output"); env != "" {
-		*loggerOutput = env
-		log.Println("The environment variable logger_output is deprecated please use the command line flag logger_output")
-	}
-}
-
 func main() {
 	flag.Parse()
-	parseDeprecatedEnvironment() // to be removed in 0.3.0
 
 	logger, stats, nomadClient, consulResolver := makeDependencies(
 		*statsdServer,
 		*nodeURI,
 		*nomadAddr,
+		*nomadACL,
 		*consulAddr,
 		*consulACL,
 		*nomadRegion,
@@ -157,12 +94,36 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 	}
 	logger.Info("Datacenter from agent: " + datacenter)
 
+	agentSelf, err := nomadClient.Agent().Self()
+	if err != nil {
+		logger.Error("/agent/self returned error. Unable to fetch Vault config.", err)
+	}
+	var vaultConfig fntypes.VaultConfig
+	mapstructure.Decode(agentSelf.Config["Vault"], &vaultConfig)
+	if len(*vaultAddrOverride) > 0 {
+		vaultConfig.Addr = *vaultAddrOverride
+	}
+
+	logger.Info("Vault address: " + vaultConfig.Addr)
+	vaultConfig.DefaultPolicy = *vaultDefaultPolicy
+	vaultConfig.SecretPathPrefix = *vaultSecretPathPrefix
+	vaultConfig.AppRoleID = *vaultAppRoleID
+	vaultConfig.AppSecretID = *vaultAppRoleSecretID
+
 	providerConfig := &fntypes.ProviderConfig{
-		VaultDefaultPolicy:    *vaultDefaultPolicy,
-		VaultSecretPathPrefix: *vaultSecretPathPrefix,
-		Datacenter:            datacenter,
-		ConsulAddress:         *consulAddr,
-		ConsulDNSEnabled:      *enableConsulDNS,
+		Vault:            vaultConfig,
+		Datacenter:       datacenter,
+		ConsulAddress:    *consulAddr,
+		ConsulDNSEnabled: *enableConsulDNS,
+	}
+
+	vs := vault.NewVaultService(&vaultConfig, logger)
+
+	_, loginErr := vs.Login()
+	if loginErr != nil {
+		logger.Error("Unable to login to Vault. Secrets will not work properly", loginErr.Error())
+	} else {
+		logger.Info("Vault authentication successful!")
 	}
 
 	return &types.FaaSHandlers{
@@ -175,10 +136,11 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 		UpdateHandler:  handlers.MakeDeploy(nomadClient.Jobs(), *providerConfig, logger, stats),
 		InfoHandler:    handlers.MakeInfo(logger, stats, version),
 		Health:         handlers.MakeHealthHandler(),
+		SecretHandler:  handlers.MakeSecretHandler(vs, logger.Named("secrets_handler")),
 	}
 }
 
-func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, consulACL, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
+func makeDependencies(statsDAddr, thisAddr, nomadAddr, nomadACL, consulAddr, consulACL, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
 	logger := setupLogging()
 
 	logger.Info("Using StatsD server:" + statsDAddr)
@@ -193,7 +155,9 @@ func makeDependencies(statsDAddr, thisAddr, nomadAddr, consulAddr, consulACL, re
 
 	c := api.DefaultConfig()
 	logger.Info("create nomad client", "addr", nomadAddr)
-	nomadClient, err := api.NewClient(c.ClientConfig(region, nomadAddr, false))
+	clientConfig := c.ClientConfig(region, nomadAddr, false)
+	clientConfig.SecretID = nomadACL
+	nomadClient, err := api.NewClient(clientConfig)
 	if err != nil {
 		logger.Error("Unable to create nomad client", err)
 	}
