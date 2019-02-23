@@ -2,7 +2,6 @@ VERSION=0.2.16
 NAMESPACE=quay.io/nicholasjackson
 
 deps:
-	go get -u github.com/goreleaser/goreleaser
 	go get -u github.com/wadey/gocovmerge
 
 test:
