@@ -27,7 +27,7 @@ The gateway provides a common API which is used by the command line of for deplo
 The Nomad provider is responsible for performing any actions on the Nomad server such as deploying new functions or scaling functions.  Also it also acts as a function proxy.  Metrics such as execution duration and other information are emitted by the proxy and captured by the StatsD server.  Prometheus regularly collects this information from the StatsD server and stores it as time series data.
 
 ### OpenFaaS Functions
-The functions performing the work on OpenFaaS are packaged as Docker images.  When running on the cluster these functions do not provide any external interface; instead, interactions are performed through the Nomad provider.  When a function is deployed, it is registered with Consul’s service catalog.  The provider uses this service catalog for service discovery to be able to locate and call the downstream function.
+The functions performing the work on OpenFaaS are packaged as Docker images.  When running on the cluster these functions do not provide any external interface; instead, interactions are performed through the Nomad provider.  When a function is deployed, it is registered with Consul's service catalog.  The provider uses this service catalog for service discovery to be able to locate and call the downstream function.
 
 ## Starting a local Nomad / Consul environment
 First, ensure that you have a recent version of Nomad and Consul installed, the latest versions can be found at:  
@@ -57,12 +57,10 @@ Vagrant is a tool for provisioning dev environments. The `Vagrantfile` governs t
 The provisioners install Docker, Nomad, Consul, and Vault (via Saltstack) then launch OpenFaaS components with Nomad. If successful, the following services will be available over the private network (192.168.50.2):
 - Nomad (v0.8.4) 192.168.50.2:4646
 - Consul (v1.2.0) 192.168.50.2:8500
-- Vault (v0.10.4) 192.168.50.2:8200
-- FaaS Gateway (0.8.1) 192.168.50.2:8080
+- Vault (v0.9.6) 192.168.50.2:8200
+- FaaS Gateway (0.9.14) 192.168.50.2:8080
 
-This setup is intended to streamline local development of the faas-nomad provider with a more complete setup of the hashicorp ecosystem. Therefore, it is assumed that the faas-nomad source code is located on your workstation, and or is configured to listen on 0.0.0.0:8080 when debugging/running the Go process. There's a convenient VSCode debug configuration located at: `.vscode/launch.json`. The OpenFaaS gateway env var ends up looking like this in Docker:
-```
-functions_provider_url="http://192.168.50.1:8080/"
+This setup is intended to streamline local development of the faas-nomad provider with a more complete setup of the hashicorp ecosystem. Therefore, it is assumed that the faas-nomad source code is located on your workstation, and or is configured to listen on 0.0.0.0:8080 when debugging/running the Go process.
 
 ## Starting a remote Nomad / Consul environment
 If you would like to test OpenFaaS running on a cluster in AWS, a Terraform module and instructions can be found here:
@@ -112,7 +110,7 @@ Once you have successfully logged in, the next step is to create a data source f
 
 ![](images/grafana_add_datasource.png)
 
-Configure the options as shown ensuring that the URL points to the location of your Prometheus server.  The next step is to add a dashboard to view the data from the OpenFaaS gateway and provider.  A simple dash can be found at  `grafana\faas-dashboard.json`, let’s add this to Grafana.  Clicking the `Import` button from the `Dashboards` menu will pop up a box like the one below.  Choose the file for the example dashboard and press import.
+Configure the options as shown ensuring that the URL points to the location of your Prometheus server.  The next step is to add a dashboard to view the data from the OpenFaaS gateway and provider.  A simple dash can be found at  `grafana\faas-dashboard.json`, let's add this to Grafana.  Clicking the `Import` button from the `Dashboards` menu will pop up a box like the one below.  Choose the file for the example dashboard and press import.
 
 ![](images/grafana_dashboard.png)
 
@@ -177,7 +175,7 @@ func Handle(req []byte) string {
 }
 ```
 
-The Handle method receives the payload sent by calling the function as a slice of bytes and expects any output to be returned as a string.  For now, let’s keep this function the same and run through the steps for building the function.  The first thing we need to do is to edit the `gofunction.yml.` file and change the image name so that we can push this to a Docker repo that our Nomad cluster will be able to pull.  Also, change the gateway address to the location of your OpenFaaS gateway.  Changing the gateway in this file saves us providing the location as an alternate parameter.
+The Handle method receives the payload sent by calling the function as a slice of bytes and expects any output to be returned as a string.  For now, let's keep this function the same and run through the steps for building the function.  The first thing we need to do is to edit the `gofunction.yml.` file and change the image name so that we can push this to a Docker repo that our Nomad cluster will be able to pull.  Also, change the gateway address to the location of your OpenFaaS gateway.  Changing the gateway in this file saves us providing the location as an alternate parameter.
 
 ```yaml
 provider:
@@ -302,39 +300,63 @@ functions:
       git: https://github.com/alexellis/super-pancake-fn.git
 ```
 
-### Secrets
+### Secrets API
 It is possible to integrate Vault secrets [https://docs.openfaas.com/reference/secrets/](https://docs.openfaas.com/reference/secrets/) with the Nomad provider. Follow these steps to have OpenFaaS integrate with Nomad + Vault:
 
-1) Ensure your Nomad agent(s) are connected to a Vault instance (https://www.nomadproject.io/guides/operations/vault-integration/index.html)
-2) Add a Vault policy with the name "openfaas" (default, configurable with `-vault_default_policy` cli param) using the example policy:
-    ```hcl
-    path "secret/openfaas/*" {
-      policy = "read"
-    }
+1) First, we need to enable the approle auth backend in Vault:
+
+   ```vault auth enable approle```
+
+2) We also need to create a policy for faas-nomad and OpenFaaS functions:
+
+   ```vault policy write openfaas policy.hcl```
+
+   Policy file example: https://raw.githubusercontent.com/hashicorp/faas-nomad/master/provisioning/scripts/policy.hcl
+
+   It is important that the policy contain: create, update, delete and list capabilities that match your secret backend prefix. In this case, path `secret/openfaas/*` will work with the default configuration.
+
+   Also, faas-nomad takes care of renewing it's own auth token, so we need to make sure the policy uses path "auth/token/renew-self" and has the "update" capability.
+
+
+3) Finally, let's setup the approle itself:
+    ```bash
+    curl -i \
+      --header "X-Vault-Token: ${VAULT_TOKEN}" \
+      --request POST \
+      --data '{"policies": ["openfaas"], "period": "24h"}' \
+      https://${VAULT_HOST}/v1/auth/approle/role/openfaas
     ```
-3) Add your secret with curl or the Vault UI:
+
+    This creates the role attached to the policy we just created. The "period" property and duration is important for renewing long-running service Vault tokens.
+
+    ```bash
+    curl -i \
+      --header "X-Vault-Token: ${VAULT_TOKEN}" \
+      https://${VAULT_HOST}/v1/auth/approle/role/openfaas/role-id
     ```
-    curl -H "X-Vault-Token: token" -H "Content-Type: application/json" \
-      -X POST -d '{"mysecret":"SECRET"}' \ 
-      http://localhost:8200/v1/secret/openfaas/func_facedetect
+
+    Produces the role_id needed for -vault_app_role_id cli argument.
+
+    ```bash
+    curl -i \
+      --header "X-Vault-Token: ${VAULT_TOKEN}" \
+      --request POST \
+      https://VAULT_HOST}/v1/auth/approle/role/openfaas/secret-id
     ```
 
-The convention for the Vault secret path is: `secret/${vault_secret_path_prefix}/${function_name}`.
+    Produces the secret_id needed for -vault_app_secret_id cli argument.
 
-Given you have a secret document stored at the path secret/openfaas/mysecret in Vault, to make this available to your function the following function yaml could be used.
+Let's assume the Vault parameters have been populated, and you're now running faas-nomad along with the other OpenFaaS components. Now, try out the new faas-cli secret commands:
 
-
-```yaml
-functions:
-  facedetect:
-    lang: go-opencv
-    handler: ./facedetect
-    image: nicholasjackson/func_facedetect
-    secrets:
-      - mysecret  
+```bash
+faas-cli secret create grafana_api_token --from-literal=foo --gateway ${FAAS_GATEWAY}
 ```
 
-This secret would be stored in a file and mounted at the path `/var/openfaas/secrets/mysecret` to access the secret you would read the contents of this file from your function.
+Now we can use our newly created secret "grafana_api_token" in a new function we want to deploy:
+
+```bash
+faas-cli deploy --image acornies/grafana-annotate --secret grafana_api_token --env grafana_url=http://grafana.service.consul:3000
+```
 
 ### Async functions
 OpenFaaS has the capability to immediately return when you call a function and add the work to a nats streaming queue.  To enable this feature in addition to the OpenFaaS gateway and Nomad provider you must run a nats streaming server.  
