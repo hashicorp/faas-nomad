@@ -7,10 +7,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/hashicorp/go-hclog"
-
-	"github.com/hashicorp/consul-template/dependency"
 	"github.com/hashicorp/faas-nomad/types"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/api"
 )
 
@@ -22,15 +20,11 @@ type VaultService struct {
 
 func NewVaultService(config *types.VaultConfig, log hclog.Logger) *VaultService {
 
-	vaultClient, _ := api.NewClient(api.DefaultConfig())
+	clientConfig := api.DefaultConfig()
+	clientConfig.ConfigureTLS(&api.TLSConfig{Insecure: config.TLSSkipVerify})
+	vaultClient, _ := api.NewClient(clientConfig)
 
 	vaultClient.SetAddress(config.Addr)
-
-	clientSet := dependency.NewClientSet()
-	clientSet.CreateVaultClient(&dependency.CreateVaultClientInput{
-		Address: config.Addr,
-		Token:   vaultClient.Token(),
-	})
 
 	vs := &VaultService{
 		Client: vaultClient,
