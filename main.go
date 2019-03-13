@@ -39,6 +39,7 @@ var (
 	enableBasicAuth       = flag.Bool("enable_basic_auth", false, "Flag for enabling basic authentication on gateway endpoints")
 	basicAuthSecretPath   = flag.String("basic_auth_secret_path", "/secrets", "The directory path to the basic auth secret file")
 	vaultAddrOverride     = flag.String("vault_addr", "", "Vault address override. Default Vault address is returned from the Nomad agent")
+	vaultTLSSkipVerify    = flag.Bool("vault_tls_skip_verify", false, "Skips TLS verification for calls to Vault. Not recommend for production")
 	vaultDefaultPolicy    = flag.String("vault_default_policy", "openfaas", "The default policy used when secrets are deployed with a function")
 	vaultSecretPathPrefix = flag.String("vault_secret_path_prefix", "secret/openfaas", "The Vault k/v path prefix used when secrets are deployed with a function")
 	vaultAppRoleID        = flag.String("vault_app_role_id", "", "A valid Vault AppRole role_id")
@@ -109,6 +110,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 	vaultConfig.SecretPathPrefix = *vaultSecretPathPrefix
 	vaultConfig.AppRoleID = *vaultAppRoleID
 	vaultConfig.AppSecretID = *vaultAppRoleSecretID
+	vaultConfig.TLSSkipVerify = *vaultTLSSkipVerify
 
 	providerConfig := &fntypes.ProviderConfig{
 		Vault:            vaultConfig,
