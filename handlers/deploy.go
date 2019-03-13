@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -156,6 +157,15 @@ func createTask(r requests.CreateFunctionRequest, providerConfig types.ProviderC
 		// TODO: check function annotations for vault policies
 		task.Vault = &api.Vault{
 			Policies: []string{providerConfig.Vault.DefaultPolicy},
+		}
+	}
+
+	if len(r.RegistryAuth) > 0 {
+		decoded, _ := base64.StdEncoding.DecodeString(r.RegistryAuth)
+		auth := strings.Split(string(decoded), ":")
+		task.Config["auth"] = map[string]interface{}{
+			"username": auth[0],
+			"password": auth[1],
 		}
 	}
 	return &task
