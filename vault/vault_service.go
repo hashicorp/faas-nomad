@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -81,9 +82,15 @@ func (vs *VaultService) Login() (api.Secret, error) {
 func (vs *VaultService) DoRequest(method string, path string, body interface{}) (*http.Response, error) {
 
 	client := &http.Client{}
+	trIgnore := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
 	createRequest := vs.Client.NewRequest(method, path)
 	createRequest.SetJSONBody(body)
 
 	request, _ := createRequest.ToHTTP()
+	if vs.Config.TLSSkipVerify {
+		client.Transport = trIgnore
+	}
 	return client.Do(request)
 }
