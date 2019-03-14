@@ -1,15 +1,14 @@
 package vault
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 
-	"github.com/hashicorp/go-hclog"
-
-	"github.com/hashicorp/consul-template/dependency"
 	"github.com/hashicorp/faas-nomad/types"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/api"
 )
 
@@ -21,15 +20,11 @@ type VaultService struct {
 
 func NewVaultService(config *types.VaultConfig, log hclog.Logger) *VaultService {
 
-	vaultClient, _ := api.NewClient(api.DefaultConfig())
+	clientConfig := api.DefaultConfig()
+	clientConfig.ConfigureTLS(&api.TLSConfig{Insecure: config.TLSSkipVerify})
+	vaultClient, _ := api.NewClient(clientConfig)
 
 	vaultClient.SetAddress(config.Addr)
-
-	clientSet := dependency.NewClientSet()
-	clientSet.CreateVaultClient(&dependency.CreateVaultClientInput{
-		Address: config.Addr,
-		Token:   vaultClient.Token(),
-	})
 
 	vs := &VaultService{
 		Client: vaultClient,
@@ -81,9 +76,15 @@ func (vs *VaultService) Login() (api.Secret, error) {
 func (vs *VaultService) DoRequest(method string, path string, body interface{}) (*http.Response, error) {
 
 	client := &http.Client{}
+	trIgnore := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
 	createRequest := vs.Client.NewRequest(method, path)
 	createRequest.SetJSONBody(body)
 
 	request, _ := createRequest.ToHTTP()
+	if vs.Config.TLSSkipVerify {
+		client.Transport = trIgnore
+	}
 	return client.Do(request)
 }
