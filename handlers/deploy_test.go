@@ -219,8 +219,8 @@ func TestHandleDeployWithRegistryAuth(t *testing.T) {
 
 	args := mockJob.Calls[0].Arguments
 	job := args.Get(0).(*api.Job)
-	auth := job.TaskGroups[0].Tasks[0].Config["auth"].(map[string]interface{})
+	auth := job.TaskGroups[0].Tasks[0].Config["auth"].([]map[string]interface{})
 
-	assert.Equal(t, "username", auth["username"])
-	assert.Equal(t, "password", auth["password"])
+	assert.Equal(t, "username", auth[0]["username"])
+	assert.Equal(t, "password", auth[0]["password"])
 }

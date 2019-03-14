@@ -163,9 +163,10 @@ func createTask(r requests.CreateFunctionRequest, providerConfig types.ProviderC
 	if len(r.RegistryAuth) > 0 {
 		decoded, _ := base64.StdEncoding.DecodeString(r.RegistryAuth)
 		auth := strings.Split(string(decoded), ":")
-		task.Config["auth"] = map[string]interface{}{
-			"username": auth[0],
-			"password": auth[1],
+		task.Config["auth"] = []map[string]interface{}{
+			map[string]interface{}{
+				"username": auth[0],
+				"password": auth[1]},
 		}
 	}
 	return &task
