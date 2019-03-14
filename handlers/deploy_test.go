@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -205,4 +206,21 @@ func TestHandlesRequestUsingConsulAddress(t *testing.T) {
 	dnsServers := job.TaskGroups[0].Tasks[0].Config["dns_servers"].([]string)
 
 	assert.Equal(t, expectedServers, dnsServers)
+}
+
+func TestHandleDeployWithRegistryAuth(t *testing.T) {
+	fr := createRequest()
+	encoded := base64.StdEncoding.EncodeToString([]byte("username:password"))
+	fr.RegistryAuth = encoded
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	auth := job.TaskGroups[0].Tasks[0].Config["auth"].([]map[string]interface{})
+
+	assert.Equal(t, "username", auth[0]["username"])
+	assert.Equal(t, "password", auth[0]["password"])
 }
