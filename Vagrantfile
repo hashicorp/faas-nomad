@@ -118,9 +118,9 @@ Vagrant.configure("2") do |config|
     rm -r /vagrant/provisioning/saltstack/formulas
     mkdir -p /vagrant/provisioning/saltstack/formulas
     cd /vagrant/provisioning/saltstack/formulas
-    git clone https://github.com/tucows/nomad-formula.git
-    git clone https://github.com/tucows/consul-formula.git
-    git clone https://github.com/tucows/vault-formula.git
+    git clone https://github.com/saltstack-formulas/nomad-formula.git
+    git clone https://github.com/saltstack-formulas/consul-formula.git
+    git clone https://github.com/saltstack-formulas/vault-formula.git
   SHELL
   
   # salt
