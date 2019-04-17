@@ -34,7 +34,7 @@ var (
 	nomadTLSCA            = flag.String("nomad_tls_ca", "", "The TLS ca certificate file location")
 	nomadTLSCert          = flag.String("nomad_tls_cert", "", "The TLS client certifcate file location")
 	nomadTLSKey           = flag.String("nomad_tls_key", "", "The TLS private key file location")
-	nomadTLSSkipVerify    = flag.Bool("noamd_tls_skip_verify", false, "Skips TLS verification for Nomad API. Not recommend for production")
+	nomadTLSSkipVerify    = flag.Bool("nomad_tls_skip_verify", false, "Skips TLS verification for Nomad API. Not recommend for production")
 	nomadACL              = flag.String("nomad_acl", "", "The ACL token for faas-nomad if Nomad ACLs are enabled")
 	consulAddr            = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
 	consulACL             = flag.String("consul_acl", "", "ACL token for Consul API, only required if ACL are enabled in Consul")
