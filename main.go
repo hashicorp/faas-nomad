@@ -31,6 +31,10 @@ var (
 	statsdServer          = flag.String("statsd_addr", "localhost:8125", "Location for the statsd collector")
 	nodeURI               = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
 	nomadAddr             = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
+	nomadTLSCA            = flag.String("nomad_tls_ca", "", "The TLS ca certificate file location")
+	nomadTLSCert          = flag.String("nomad_tls_cert", "", "The TLS client certifcate file location")
+	nomadTLSKey           = flag.String("nomad_tls_key", "", "The TLS private key file location")
+	nomadTLSSkipVerify    = flag.Bool("noamd_tls_skip_verify", false, "Skips TLS verification for Nomad API. Not recommend for production")
 	nomadACL              = flag.String("nomad_acl", "", "The ACL token for faas-nomad if Nomad ACLs are enabled")
 	consulAddr            = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
 	consulACL             = flag.String("consul_acl", "", "ACL token for Consul API, only required if ACL are enabled in Consul")
@@ -57,11 +61,18 @@ var (
 func main() {
 	flag.Parse()
 
+	nomadConfig := &fntypes.NomadConfig{
+		Address:       *nomadAddr,
+		ACLToken:      *nomadACL,
+		TLSCA:         *nomadTLSCA,
+		TLSCert:       *nomadTLSCert,
+		TLSPrivateKey: *nomadTLSKey,
+		TLSSkipVerify: *nomadTLSSkipVerify,
+	}
 	logger, stats, nomadClient, consulResolver := makeDependencies(
 		*statsdServer,
 		*nodeURI,
-		*nomadAddr,
-		*nomadACL,
+		*nomadConfig,
 		*consulAddr,
 		*consulACL,
 		*nomadRegion,
@@ -142,7 +153,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 	}
 }
 
-func makeDependencies(statsDAddr, thisAddr, nomadAddr, nomadACL, consulAddr, consulACL, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
+func makeDependencies(statsDAddr string, thisAddr string, nomadConfig fntypes.NomadConfig, consulAddr string, consulACL string, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
 	logger := setupLogging()
 
 	logger.Info("Using StatsD server:" + statsDAddr)
@@ -157,8 +168,18 @@ func makeDependencies(statsDAddr, thisAddr, nomadAddr, nomadACL, consulAddr, con
 
 	c := api.DefaultConfig()
 	logger.Info("create nomad client", "addr", nomadAddr)
-	clientConfig := c.ClientConfig(region, nomadAddr, false)
-	clientConfig.SecretID = nomadACL
+	clientConfig := c.ClientConfig(region, nomadConfig.Address, false)
+	clientConfig.SecretID = nomadConfig.ACLToken
+	if strings.Contains(nomadConfig.Address, "https") {
+		clientConfig.TLSConfig = &api.TLSConfig{
+			CACert:     nomadConfig.TLSCA,
+			ClientCert: nomadConfig.TLSCert,
+			ClientKey:  nomadConfig.TLSPrivateKey,
+			Insecure:   nomadConfig.TLSSkipVerify,
+		}
+		clientConfig.ConfigureTLS()
+	}
+
 	nomadClient, err := api.NewClient(clientConfig)
 	if err != nil {
 		logger.Error("Unable to create nomad client", err)
