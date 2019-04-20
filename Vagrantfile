@@ -82,7 +82,6 @@ Vagrant.configure("2") do |config|
       salt.verbose = true
       salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
     end
-    override.vm.provision "shell", path: "provisioning/scripts/vault_populate.sh"
     override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
   end
 
@@ -97,7 +96,6 @@ Vagrant.configure("2") do |config|
       salt.verbose = true
       salt.salt_call_args = ["saltenv=dev", "pillarenv=dev"]
     end
-    override.vm.provision "shell", path: "provisioning/scripts/vault_populate.sh"
     override.vm.provision "shell", path: "provisioning/scripts/nomad_run.sh"
   end
 
@@ -105,6 +103,8 @@ Vagrant.configure("2") do |config|
     d.run 'dev-vault', image: 'vault:0.9.6', 
       args: '-p 8200:8200 -e "VAULT_DEV_ROOT_TOKEN_ID=vagrant" -v /vagrant:/vagrant'
   end
+
+  config.vm.provision "shell", path: "provisioning/scripts/vault_populate.sh"
   #
   # View the documentation for the provider you are using for more
   # information on available options.
@@ -120,7 +120,7 @@ Vagrant.configure("2") do |config|
     cd /vagrant/provisioning/saltstack/formulas
     git clone https://github.com/saltstack-formulas/nomad-formula.git
     git clone https://github.com/saltstack-formulas/consul-formula.git
-    git clone https://github.com/saltstack-formulas/vault-formula.git
+    # git clone https://github.com/saltstack-formulas/vault-formula.git
   SHELL
   
   # salt

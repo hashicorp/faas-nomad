@@ -5,6 +5,11 @@ include:
 nomad:
   config:
     datacenter: dc1
+    tls:
+      http: True
+      ca_file: /home/vagrant/placeholder-ca.crt
+      cert_file: /home/vagrant/placeholder.crt
+      key_file: /home/vagrant/placeholder.key
     advertise:
       http: {{ interface_address }}
     server:
@@ -38,6 +43,14 @@ nomad:
     - dc1
 consul:
   config:
+    connect:
+      enabled: True
+      ca_provider: vault
+      ca_config:
+        address: "http://127.0.0.1:8200"
+        token: vagrant
+        root_pki_path: pki
+        intermediate_pki_path: pki_int
     server: True
     advertise_addr: {{ interface_address }}
     addresses:
@@ -50,15 +63,3 @@ consul:
     datacenter: dc1
     encrypt: "RIxqpNlOXqtr/j4BgvIMEw=="
     bootstrap: true
-vault:
-  listen_protocol: tcp
-  listen_port: 8200
-  listen_address: 0.0.0.0
-  tls_disable: 0
-  default_lease_ttl: 24h
-  max_lease_ttl: 24h
-  self_signed_cert:
-    enabled: false
-  backend: {}
-  dev_mode: true
-  dev_root_token: vagrant
