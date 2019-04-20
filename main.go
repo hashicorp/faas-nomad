@@ -31,6 +31,11 @@ var (
 	statsdServer          = flag.String("statsd_addr", "localhost:8125", "Location for the statsd collector")
 	nodeURI               = flag.String("node_addr", "localhost", "URI of the current Nomad node, this address is used for reporting and logging")
 	nomadAddr             = flag.String("nomad_addr", "localhost:4646", "Address for Nomad API endpoint")
+	nomadTLSCA            = flag.String("nomad_tls_ca", "", "The TLS ca certificate file location")
+	nomadTLSCert          = flag.String("nomad_tls_cert", "", "The TLS client certifcate file location")
+	nomadTLSKey           = flag.String("nomad_tls_key", "", "The TLS private key file location")
+	nomadTLSSkipVerify    = flag.Bool("nomad_tls_skip_verify", false, "Skips TLS verification for Nomad API. Not recommend for production")
+	enableNomadTLS        = flag.Bool("enable_nomad_tls", false, "Toggles tls on Nomad endpoint/client")
 	nomadACL              = flag.String("nomad_acl", "", "The ACL token for faas-nomad if Nomad ACLs are enabled")
 	consulAddr            = flag.String("consul_addr", "http://localhost:8500", "Address for Consul API endpoint")
 	consulACL             = flag.String("consul_acl", "", "ACL token for Consul API, only required if ACL are enabled in Consul")
@@ -57,11 +62,19 @@ var (
 func main() {
 	flag.Parse()
 
+	nomadConfig := &fntypes.NomadConfig{
+		TLSEnabled:    *enableNomadTLS,
+		Address:       *nomadAddr,
+		ACLToken:      *nomadACL,
+		TLSCA:         *nomadTLSCA,
+		TLSCert:       *nomadTLSCert,
+		TLSPrivateKey: *nomadTLSKey,
+		TLSSkipVerify: *nomadTLSSkipVerify,
+	}
 	logger, stats, nomadClient, consulResolver := makeDependencies(
 		*statsdServer,
 		*nodeURI,
-		*nomadAddr,
-		*nomadACL,
+		*nomadConfig,
 		*consulAddr,
 		*consulACL,
 		*nomadRegion,
@@ -90,19 +103,20 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 
 	datacenter, err := nomadClient.Agent().Datacenter()
 	if err != nil {
-		logger.Error("Error returning the agent's datacenter", err)
+		logger.Error("Error returning the agent's datacenter", err.Error())
 		datacenter = "dc1"
 	}
 	logger.Info("Datacenter from agent: " + datacenter)
 
 	agentSelf, err := nomadClient.Agent().Self()
-	if err != nil {
-		logger.Error("/agent/self returned error. Unable to fetch Vault config.", err)
-	}
 	var vaultConfig fntypes.VaultConfig
-	mapstructure.Decode(agentSelf.Config["Vault"], &vaultConfig)
-	if len(*vaultAddrOverride) > 0 {
-		vaultConfig.Addr = *vaultAddrOverride
+	if err != nil {
+		logger.Error("/agent/self returned error. Unable to fetch Vault config.", err.Error())
+	} else {
+		mapstructure.Decode(agentSelf.Config["Vault"], &vaultConfig)
+		if len(*vaultAddrOverride) > 0 {
+			vaultConfig.Addr = *vaultAddrOverride
+		}
 	}
 
 	logger.Info("Vault address: " + vaultConfig.Addr)
@@ -142,7 +156,7 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 	}
 }
 
-func makeDependencies(statsDAddr, thisAddr, nomadAddr, nomadACL, consulAddr, consulACL, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
+func makeDependencies(statsDAddr string, thisAddr string, nomadConfig fntypes.NomadConfig, consulAddr string, consulACL string, region string) (hclog.Logger, *statsd.Client, *api.Client, *consul.Resolver) {
 	logger := setupLogging()
 
 	logger.Info("Using StatsD server:" + statsDAddr)
@@ -156,9 +170,19 @@ func makeDependencies(statsDAddr, thisAddr, nomadAddr, nomadACL, consulAddr, con
 	stats.Tags = append(stats.Tags, "instance:"+strings.Replace(thisAddr, ":", "_", -1))
 
 	c := api.DefaultConfig()
-	logger.Info("create nomad client", "addr", nomadAddr)
-	clientConfig := c.ClientConfig(region, nomadAddr, false)
-	clientConfig.SecretID = nomadACL
+	logger.Info("create nomad client", "addr", nomadConfig.Address)
+	clientConfig := c.ClientConfig(region, nomadConfig.Address, nomadConfig.TLSEnabled)
+	clientConfig.SecretID = nomadConfig.ACLToken
+	if nomadConfig.TLSEnabled {
+		clientConfig.TLSConfig = &api.TLSConfig{
+			CACert:     nomadConfig.TLSCA,
+			ClientCert: nomadConfig.TLSCert,
+			ClientKey:  nomadConfig.TLSPrivateKey,
+			Insecure:   nomadConfig.TLSSkipVerify,
+		}
+		clientConfig.ConfigureTLS()
+	}
+
 	nomadClient, err := api.NewClient(clientConfig)
 	if err != nil {
 		logger.Error("Unable to create nomad client", err)

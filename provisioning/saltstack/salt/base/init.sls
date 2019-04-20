@@ -1,4 +1,3 @@
 include:
   - consul
-  - vault
   - nomad
