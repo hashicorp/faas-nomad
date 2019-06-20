@@ -27,7 +27,7 @@ func setupDeploy(body string) (http.HandlerFunc, *httptest.ResponseRecorder, *ht
 
 	logger := hclog.Default()
 
-	return MakeDeploy(mockJob, fntypes.ProviderConfig{Vault: fntypes.VaultConfig{DefaultPolicy: "openfaas", SecretPathPrefix: "secret/openfaas"}, Datacenter: "dc1", ConsulAddress: "http://localhost:8500", ConsulDNSEnabled: true}, logger, mockStats),
+	return MakeDeploy(mockJob, fntypes.ProviderConfig{Vault: fntypes.VaultConfig{DefaultPolicy: "openfaas", SecretPathPrefix: "secret/openfaas"}, Datacenter: "dc1", ConsulAddress: "http://localhost:8500", ConsulDNSEnabled: true, CPUArchConstraint: "amd64"}, logger, mockStats),
 		httptest.NewRecorder(),
 		httptest.NewRequest("GET", "/system/functions", bytes.NewReader([]byte(body)))
 }
@@ -223,4 +223,135 @@ func TestHandleDeployWithRegistryAuth(t *testing.T) {
 
 	assert.Equal(t, "username", auth[0]["username"])
 	assert.Equal(t, "password", auth[0]["password"])
+}
+
+func TestHandlesRequestUsingDefaultCPUArchConstraint(t *testing.T) {
+	fr := createRequest()
+	expectedCpuArchConstraint := api.Constraint{
+		LTarget: "${attr.cpu.arch}",
+		Operand: "=",
+		RTarget: "amd64",
+	}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	constraints := job.Constraints
+
+	assert.Equal(t, expectedCpuArchConstraint, *constraints[0])
+}
+
+func TestHandlesCpuArchConstraintFromRequest(t *testing.T) {
+	fr := createRequest()
+	fr.Constraints = []string{"${attr.cpu.arch} = arm"}
+	expectedCpuArchConstraint := api.Constraint{
+		LTarget: "${attr.cpu.arch}",
+		Operand: "=",
+		RTarget: "arm",
+	}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	constraints := job.Constraints
+
+	assert.Equal(t, expectedCpuArchConstraint, *constraints[0])
+}
+
+func TestHandlesConstraintsWithSpaces(t *testing.T) {
+	fr := createRequest()
+	fr.Constraints = []string{"${attr.cpu.arch} = not a real architecture"}
+	expectedCpuArchConstraint := api.Constraint{
+		LTarget: "${attr.cpu.arch}",
+		Operand: "=",
+		RTarget: "not a real architecture",
+	}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	constraints := job.Constraints
+
+	assert.Equal(t, expectedCpuArchConstraint, *constraints[0])
+}
+
+func TestHandlesConstraintsWithoutInterpolationNotation(t *testing.T) {
+	fr := createRequest()
+	fr.Constraints = []string{"attr.cpu.arch = arm"}
+	expectedCpuArchConstraint := api.Constraint{
+		LTarget: "${attr.cpu.arch}",
+		Operand: "=",
+		RTarget: "arm",
+	}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	constraints := job.Constraints
+
+	assert.Equal(t, expectedCpuArchConstraint, *constraints[0])
+}
+
+func TestHandlesConstraintsWithTwoEqualSigns(t *testing.T) {
+	fr := createRequest()
+	fr.Constraints = []string{"attr.cpu.arch == arm"}
+	expectedCpuArchConstraint := api.Constraint{
+		LTarget: "${attr.cpu.arch}",
+		Operand: "=",
+		RTarget: "arm",
+	}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	constraints := job.Constraints
+
+	assert.Equal(t, expectedCpuArchConstraint, *constraints[0])
+}
+
+func TestConstraintsForDataCenterDoNotCreateAJobConstraint(t *testing.T) {
+	fr := createRequest()
+	fr.Constraints = []string{"something.datacenter == dc1"}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	constraints := job.Constraints
+
+	assert.Equal(t, 1, len(constraints))
+	assert.NotContains(t, "datacenter", constraints[0].RTarget)
+}
+
+func TestIncompleteConstraintsAreIgnored(t *testing.T) {
+	fr := createRequest()
+	fr.Constraints = []string{"something", "something ="}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+	constraints := job.Constraints
+
+	assert.Equal(t, 1, len(constraints))
+	assert.NotContains(t, "something", constraints[0].RTarget)
 }

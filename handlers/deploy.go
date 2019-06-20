@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -29,8 +30,7 @@ var (
 	ephemeralDiskSize = 20
 
 	// Constraints
-	constraintCPUArch = "amd64"
-	taskMemory        = 128
+	taskMemory = 128
 
 	// Update Strategy
 	updateAutoRevert      = true
@@ -84,13 +84,12 @@ func createJob(r requests.CreateFunctionRequest, providerConfig types.ProviderCo
 	job.Update = createUpdateStrategy()
 
 	// add constraints
-	job.Constraints = append(job.Constraints,
-		&api.Constraint{
-			LTarget: "${attr.cpu.arch}",
-			Operand: "=",
-			RTarget: constraintCPUArch,
-		},
-	)
+	job.Constraints = append(job.Constraints, createConstraints(r)...)
+
+	cpuArchConstraint := createMissingCPUArchConstraint(job.Constraints, providerConfig.CPUArchConstraint)
+	if cpuArchConstraint != nil {
+		job.Constraints = append(job.Constraints, cpuArchConstraint)
+	}
 
 	job.TaskGroups = createTaskGroup(r, providerConfig)
 
@@ -241,9 +240,13 @@ func createDataCenters(r requests.CreateFunctionRequest, defaultDC string) []str
 		dcs := []string{}
 
 		for _, constr := range r.Constraints {
-			if strings.Contains(constr, "datacenter") {
-				dcs = append(dcs, strings.Trim(strings.Split(constr, "==")[1], " "))
+			fields := strings.Fields(constr)
+
+			if len(fields) != 3 || !strings.Contains(fields[0], "datacenter") || fields[1] != "==" {
+				continue
 			}
+
+			dcs = append(dcs, fields[2])
 		}
 
 		return dcs
@@ -251,6 +254,57 @@ func createDataCenters(r requests.CreateFunctionRequest, defaultDC string) []str
 
 	// default datacenter
 	return []string{defaultDC}
+}
+
+func createConstraints(r requests.CreateFunctionRequest) []*api.Constraint {
+	constraints := make([]*api.Constraint, 0, len(r.Constraints))
+
+	if r.Constraints == nil {
+		return constraints
+	}
+
+	for _, requestConstraint := range r.Constraints {
+		fields := strings.Fields(requestConstraint)
+
+		if len(fields) < 3 || strings.Contains(fields[0], "datacenter") {
+			continue
+		}
+
+		attribute := fields[0]
+		operator := fields[1]
+		value := strings.Join(fields[2:], " ")
+
+		match, _ := regexp.MatchString("^\\${.*}$", attribute)
+		if !match {
+			attribute = fmt.Sprintf("${%v}", attribute)
+		}
+
+		if operator == "==" {
+			operator = "="
+		}
+
+		constraints = append(constraints, &api.Constraint{
+			LTarget: attribute,
+			Operand: operator,
+			RTarget: value,
+		})
+	}
+
+	return constraints
+}
+
+func createMissingCPUArchConstraint(constraints []*api.Constraint, defaultCPUArch string) *api.Constraint {
+	for _, constraint := range constraints {
+		if constraint.LTarget == "${attr.cpu.arch}" {
+			return nil
+		}
+	}
+
+	return &api.Constraint{
+		LTarget: "${attr.cpu.arch}",
+		Operand: "=",
+		RTarget: defaultCPUArch,
+	}
 }
 
 func createEnvVars(r requests.CreateFunctionRequest) map[string]string {
