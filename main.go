@@ -49,6 +49,7 @@ var (
 	vaultSecretPathPrefix = flag.String("vault_secret_path_prefix", "secret/openfaas", "The Vault k/v path prefix used when secrets are deployed with a function")
 	vaultAppRoleID        = flag.String("vault_app_role_id", "", "A valid Vault AppRole role_id")
 	vaultAppRoleSecretID  = flag.String("vault_app_secret_id", "", "A valid Vault AppRole secret_id derived from the role")
+	cpuArchConstraint     = flag.String("cpu_arch_constraint", "amd64", "CPU architecture to constraint deployed functions to")
 )
 
 var functionTimeout = flag.Duration("function_timeout", 30*time.Second, "Timeout for function execution")
@@ -127,10 +128,11 @@ func createFaaSHandlers(nomadClient *api.Client, consulResolver *consul.Resolver
 	vaultConfig.TLSSkipVerify = *vaultTLSSkipVerify
 
 	providerConfig := &fntypes.ProviderConfig{
-		Vault:            vaultConfig,
-		Datacenter:       datacenter,
-		ConsulAddress:    *consulAddr,
-		ConsulDNSEnabled: *enableConsulDNS,
+		Vault:             vaultConfig,
+		Datacenter:        datacenter,
+		ConsulAddress:     *consulAddr,
+		ConsulDNSEnabled:  *enableConsulDNS,
+		CPUArchConstraint: *cpuArchConstraint,
 	}
 
 	vs := vault.NewVaultService(&vaultConfig, logger)

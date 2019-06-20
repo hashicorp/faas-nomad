@@ -265,8 +265,8 @@ $ echo "Nic" | faas-cli --gateway http://192.168.1.113:8080/ invoke gofunction
 That is all there is to it, checkout the OpenFaaS community page for some inspiration and other demos.
 [faas/community.md at master · openfaas/faas · GitHub](https://github.com/openfaas/faas/blob/master/community.md)
 
-### Datacenters and Constraints
-By default, the Nomad provider will use the datacenter of the Nomad agent or `dc1`. This can be overridden by setting one or more constraints `datacenter == value`.  Constraints for limiting CPU and memory can also be set `memory` is an integer representing Megabytes, `cpu` is an integer representing MHz of CPU where 1024 equals one core.
+### Datacenters and Limits
+By default, the Nomad provider will use the datacenter of the Nomad agent or `dc1`. This can be overridden by setting one or more constraints `datacenter == value`.  Limits for CPU and memory can also be set `memory` is an integer representing Megabytes, `cpu` is an integer representing MHz of CPU where 1024 equals one core.
 
 i.e.
 ```bash
@@ -286,6 +286,19 @@ functions:
     constraints:
       "datacenter == test1"
 ```
+
+### Nomad Job Constraints
+Additionally to the `datacenter` constraint [Nomad job constraints](https://www.nomadproject.io/docs/job-specification/constraint.html) are supported.
+
+i.e.
+```bash
+$ faas-cli deploy --constraint '${attr.cpu.arch} = arm'
+```
+
+For compatibility and convenience the interpolation notation (`${}`) can be left out and `==` instead of `=` is supported.
+
+All provided constraints are applied to the job (not the group or the task).
+Leaving out the a field (.e.g. `${meta.foo} is_set`) or using more than one operator (e.g. `${meta.foo} is_set = bar`) is currently __not supported__.
 
 ### Annotations
 Metadata can be added to the Nomad job definition through the use of the OpenFaaS annotation config.  The below example would add the key `git` to the `Meta` section of nomad job definition which can be accessed through the API.
