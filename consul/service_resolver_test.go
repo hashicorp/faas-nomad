@@ -15,9 +15,10 @@ import (
 func setup(t *testing.T, queryError error) (*Resolver, *MockWatcher, *cache.Cache, *MockServiceQuery) {
 
 	dep := &dependency.CatalogService{
-		ServiceName: "test",
-		Address:     "myaddress",
-		ServicePort: 8080,
+		ServiceName:    "test",
+		Address:        "myaddress",
+		ServiceAddress: "myaddress",
+		ServicePort:    8080,
 	}
 	cs := []*dependency.CatalogService{dep}
 
@@ -128,9 +129,10 @@ func TestWatchWithNewServicesUpdatesCatalog(t *testing.T) {
 
 	w.data <- []*dependency.CatalogService{
 		&dependency.CatalogService{
-			ServiceName: "test",
-			Address:     "mynewaddress",
-			ServicePort: 8081,
+			ServiceName:    "test",
+			Address:        "mynewaddress",
+			ServiceAddress: "mynewaddress",
+			ServicePort:    8081,
 		},
 	}
 

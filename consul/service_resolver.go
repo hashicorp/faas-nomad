@@ -159,7 +159,7 @@ func (sr *Resolver) updateCatalog(dep dependency.Dependency, cs []*dependency.Ca
 	for _, addr := range cs {
 		addresses = append(
 			addresses,
-			fmt.Sprintf("http://%v:%v", addr.Address, addr.ServicePort),
+			fmt.Sprintf("http://%v:%v", addr.ServiceAddress, addr.ServicePort),
 		)
 	}
 
