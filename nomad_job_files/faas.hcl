@@ -23,7 +23,7 @@ job "faas-nomadd" {
       driver = "docker"
 
       config {
-        image = "quay.io/nicholasjackson/faas-nomad:v0.3.6"
+        image = "quay.io/nicholasjackson/faas-nomad:v0.4.3-rc2"
 
         args = [
           "-nomad_region", "${NOMAD_REGION}",
@@ -32,7 +32,9 @@ job "faas-nomadd" {
           "-statsd_addr", "${NOMAD_ADDR_statsd_statsd}",
           "-node_addr", "${NOMAD_IP_http}",
           "-basic_auth_secret_path", "/secrets",
-          "-enable_basic_auth=false"
+          "-enable_basic_auth=false",
+          "-enable_nomad_tls=true",
+          "-nomad_tls_skip_verify"
         ]
 
         port_map {
