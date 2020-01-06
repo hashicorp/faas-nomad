@@ -139,6 +139,7 @@ func createTask(r requests.CreateFunctionRequest, providerConfig types.ProviderC
 			&api.Service{
 				Name:      r.Service,
 				PortLabel: "http",
+				Tags:      parseTags(envVars),
 			},
 		},
 		LogConfig: &api.LogConfig{
@@ -364,4 +365,13 @@ func parseDNSServers(envVars map[string]string, providerConfig types.ProviderCon
 		servers = []string{"8.8.8.8", "8.8.4.4"}
 	}
 	return servers
+}
+
+func parseTags(envVars map[string]string) []string {
+
+	tags := []string{}
+	if val, ok := envVars["tags"]; ok {
+		tags = strings.Split(val, ",")
+	}
+	return tags
 }

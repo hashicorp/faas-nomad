@@ -192,6 +192,39 @@ func TestHandlesRequestWithDNSServers(t *testing.T) {
 	assert.Equal(t, expectedServers, dnsServers)
 }
 
+func TestHandlesRequestWithoutTags(t *testing.T) {
+	fr := createRequest()
+	expectedTags := []string{}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+
+	Tags := job.TaskGroups[0].Tasks[0].Services[0].Tags
+
+	assert.Equal(t, expectedTags, Tags)
+}
+
+func TestHandlesRequestWithTags(t *testing.T) {
+	fr := createRequest()
+	expectedTags := []string{"foo", "bar"}
+	fr.EnvVars = map[string]string{"tags": "foo,bar"}
+
+	h, rw, r := setupDeploy(fr.String())
+
+	h(rw, r)
+
+	args := mockJob.Calls[0].Arguments
+	job := args.Get(0).(*api.Job)
+
+	Tags := job.TaskGroups[0].Tasks[0].Services[0].Tags
+
+	assert.Equal(t, expectedTags, Tags)
+}
+
 func TestHandlesRequestUsingConsulAddress(t *testing.T) {
 	fr := createRequest()
 	expectedServers := []string{"localhost"}
