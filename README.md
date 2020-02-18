@@ -64,7 +64,7 @@ This setup is intended to streamline local development of the faas-nomad provide
 
 ## Starting a remote Nomad / Consul environment
 If you would like to test OpenFaaS running on a cluster in AWS, a Terraform module and instructions can be found here:
-[faas-nomad/terraform at master · hashicorp/faas-nomad · GitHub](https://github.com/hashicorp/faas-nomad/tree/master/terraform)
+[faas-nomad/terraform at master · hashicorp/faas-nomad · GitHub](https://github.com/hashicorp/faas-nomad/tree/master/provisioning/terraform)
 
 Regardless of which method you use interacting with OpenFaaS is the same.
 
