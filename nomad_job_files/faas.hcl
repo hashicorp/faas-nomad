@@ -187,7 +187,7 @@ EOH
         ]
 
         port_map {
-          client = 4222,
+          client = 4222
           monitoring = 8222
           routing = 6222
         }
